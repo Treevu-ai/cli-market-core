@@ -49,6 +49,11 @@ class _DB:
             if "sslmode" in qs:
                 kwargs["sslmode"] = qs["sslmode"][0]
             else:
+                # 'prefer' (not 'require') so it works on Railway private
+                # networking (postgres.railway.internal offers no SSL) AND on
+                # public URLs (which do). 'require' broke the private path,
+                # silently falling back to an empty SQLite and serving 0 data.
+                # Override via PG_SSL_MODE env var if a stricter mode is needed.
                 import os
                 kwargs["sslmode"] = os.getenv("PG_SSL_MODE", "prefer")
             self._conn = psycopg2.connect(**kwargs)
@@ -63,7 +68,16 @@ class _DB:
             self._skip_lock_errors = False
 
     def begin_resilient_init(self):
-        """Switch the (PG) connection into best-effort DDL mode."""
+        """Switch the (PG) connection into best-effort DDL mode.
+
+        Used only during schema init/migration. Each statement runs in its own
+        autocommit transaction so a single failure can't poison the rest, and
+        lock-timeout failures are swallowed instead of raised. A lock timeout
+        only occurs when the object already exists and another process holds a
+        lock (i.e. an existing deployment) — so skipping that statement is safe.
+        On a genuinely fresh DB there is no contention, so real schema errors
+        still surface. No-op on SQLite.
+        """
         if self._pg:
             self._conn.autocommit = True
             self._skip_lock_errors = True
@@ -72,12 +86,17 @@ class _DB:
         if self._pg:
             import psycopg2.extras
             sql = sql.replace("?", "%s")
+            # Replace longer datetime patterns FIRST so the generic datetime('now')
+            # doesn't swallow the interval variants.
             sql = sql.replace("datetime('now', '-14 days')", "NOW() - INTERVAL '14 days'")
             sql = sql.replace("datetime('now', '-7 days')", "NOW() - INTERVAL '7 days'")
             sql = sql.replace("datetime('now', '-24 hours')", "NOW() - INTERVAL '24 hours'")
             sql = sql.replace("datetime('now', '-30 days')", "NOW() - INTERVAL '30 days'")
             sql = sql.replace("datetime('now', '-1 day')", "NOW() - INTERVAL '1 day'")
             sql = sql.replace("datetime('now')", "NOW()")
+            # INSERT OR IGNORE must keep its conflict guard on PG: a bare INSERT
+            # raises UniqueViolation and aborts the txn instead of skipping. Append
+            # ON CONFLICT DO NOTHING unless the statement already has its own clause.
             if "INSERT OR IGNORE" in sql:
                 sql = sql.replace("INSERT OR IGNORE", "INSERT")
                 if "ON CONFLICT" not in sql.upper():
@@ -88,11 +107,15 @@ class _DB:
             try:
                 cur.execute(sql, params)
             except psycopg2.Error as e:
+                # During resilient init, a lock timeout (55P03) means the object
+                # already exists and is in use — skip it instead of aborting the
+                # whole startup. Autocommit keeps prior statements committed.
                 if self._skip_lock_errors and getattr(e, "pgcode", "") == "55P03":
                     logger.warning("DDL skipped (lock timeout): %s", sql.split("(")[0].strip()[:80])
                     return _PgCursor(cur)
                 raise
             wrapper = _PgCursor(cur)
+            # Capture lastrowid from RETURNING clause
             if "RETURNING" in sql.upper():
                 row = cur.fetchone()
                 if row:
@@ -131,7 +154,11 @@ def get_db() -> _DB:
 
 
 def _migrate_price_snapshots_pg(db: _DB) -> None:
-    """Ensure upsert target exists on legacy Postgres deployments."""
+    """Ensure upsert target exists on legacy Postgres deployments.
+
+    Older price_snapshots tables were created without UNIQUE(product_id, store).
+    Inserts using ON CONFLICT(product_id, store) then fail silently in callers.
+    """
     try:
         row = db.execute(
             """
@@ -211,6 +238,9 @@ def price_snapshots_has_confidence(db: _DB) -> bool:
 
 def init_db_pg(db: _DB) -> None:
     """PostgreSQL schema."""
+    # Fail fast on lock contention instead of blocking the deployment indefinitely.
+    # Migrations are non-fatal (wrapped in try/except by callers), so a 5s timeout
+    # lets the app start even if a table already has an exclusive lock held.
     db.execute("SET lock_timeout = '5s'")
     db.execute("""
         CREATE TABLE IF NOT EXISTS contacts (

@@ -12,6 +12,7 @@ from market_spread import CANASTA_ITEMS, _CANASTA_ITEM_PATTERNS
 
 logger = logging.getLogger(__name__)
 
+# Full canasta básica — same buckets as market_spread.CANASTA_ITEMS
 ENRICH_SUBCATEGORIES: tuple[str, ...] = tuple(CANASTA_ITEMS)
 
 SUBCATEGORY_INDICATOR_KEYS: tuple[str, ...] = (
@@ -21,30 +22,64 @@ SUBCATEGORY_INDICATOR_KEYS: tuple[str, ...] = (
 )
 
 COUNTRY_WIKI_LANG: dict[str, str] = {
-    "PE": "es", "AR": "es", "MX": "es", "CO": "es", "CL": "es",
-    "BR": "pt", "IT": "it", "FR": "fr",
+    "PE": "es",
+    "AR": "es",
+    "MX": "es",
+    "CO": "es",
+    "CL": "es",
+    "BR": "pt",
+    "IT": "it",
+    "FR": "fr",
 }
 
 SUBCAT_WIKI_TITLE: dict[str, dict[str, str]] = {
     "es": {
-        "leche": "Leche", "arroz": "Arroz", "aceite": "Aceite de cocina",
-        "pollo": "Pollo", "azucar": "Azúcar", "huevos": "Huevo (alimento)",
-        "pan": "Pan", "cafe": "Café", "queso": "Queso", "jabon": "Jabón",
+        "leche": "Leche",
+        "arroz": "Arroz",
+        "aceite": "Aceite de cocina",
+        "pollo": "Pollo",
+        "azucar": "Azúcar",
+        "huevos": "Huevo (alimento)",
+        "pan": "Pan",
+        "cafe": "Café",
+        "queso": "Queso",
+        "jabon": "Jabón",
     },
     "pt": {
-        "leche": "Leite", "arroz": "Arroz", "aceite": "Óleo de cozinha",
-        "pollo": "Frango", "azucar": "Açúcar", "huevos": "Ovo (alimento)",
-        "pan": "Pão", "cafe": "Café", "queso": "Queijo", "jabon": "Sabão",
+        "leche": "Leite",
+        "arroz": "Arroz",
+        "aceite": "Óleo de cozinha",
+        "pollo": "Frango",
+        "azucar": "Açúcar",
+        "huevos": "Ovo (alimento)",
+        "pan": "Pão",
+        "cafe": "Café",
+        "queso": "Queijo",
+        "jabon": "Sabão",
     },
     "it": {
-        "leche": "Latte", "arroz": "Riso", "aceite": "Olio di semi",
-        "pollo": "Pollo", "azucar": "Zucchero", "huevos": "Uovo (alimento)",
-        "pan": "Pane", "cafe": "Caffè", "queso": "Formaggio", "jabon": "Sapone",
+        "leche": "Latte",
+        "arroz": "Riso",
+        "aceite": "Olio di semi",
+        "pollo": "Pollo",
+        "azucar": "Zucchero",
+        "huevos": "Uovo (alimento)",
+        "pan": "Pane",
+        "cafe": "Caffè",
+        "queso": "Formaggio",
+        "jabon": "Sapone",
     },
     "fr": {
-        "leche": "Lait", "arroz": "Riz", "aceite": "Huile alimentaire",
-        "pollo": "Poulet", "azucar": "Sucre", "huevos": "Œuf (aliment)",
-        "pan": "Pain", "cafe": "Café", "queso": "Fromage", "jabon": "Savon",
+        "leche": "Lait",
+        "arroz": "Riz",
+        "aceite": "Huile alimentaire",
+        "pollo": "Poulet",
+        "azucar": "Sucre",
+        "huevos": "Œuf (aliment)",
+        "pan": "Pain",
+        "cafe": "Café",
+        "queso": "Fromage",
+        "jabon": "Savon",
     },
 }
 
@@ -128,27 +163,54 @@ def fetch_subcat_wiki_momentum(country: str, subcategory: str) -> float | None:
 
 
 def refresh_subcategory_enrichment(db, country: str, upsert_fn) -> int:
+    """Write scoped subcategory indicators. upsert_fn matches market_indicators._upsert_indicator_value."""
     cc = country.upper()
     n = 0
     for subcat in ENRICH_SUBCATEGORIES:
         scope = _subcat_scope(cc, subcat)
         meta_base = {"subcategory": subcat}
+
         price_mom = compute_subcat_price_momentum(db, cc, subcat)
         if price_mom is not None:
-            upsert_fn(db, indicator_key="subcat_price_momentum", scope=scope, value=price_mom, country=cc, metadata={**meta_base, "window_days": 7})
+            upsert_fn(
+                db,
+                indicator_key="subcat_price_momentum",
+                scope=scope,
+                value=price_mom,
+                country=cc,
+                metadata={**meta_base, "window_days": 7},
+            )
             n += 1
+
         wiki_mom = fetch_subcat_wiki_momentum(cc, subcat)
         if wiki_mom is not None:
-            upsert_fn(db, indicator_key="subcat_wiki_momentum", scope=scope, value=wiki_mom, country=cc, metadata=meta_base)
+            upsert_fn(
+                db,
+                indicator_key="subcat_wiki_momentum",
+                scope=scope,
+                value=wiki_mom,
+                country=cc,
+                metadata=meta_base,
+            )
             n += 1
+
         min_p = compute_subcat_min_price(db, cc, subcat)
         if min_p is not None:
-            upsert_fn(db, indicator_key="subcat_min_price", scope=scope, value=min_p, country=cc, metadata=meta_base)
+            upsert_fn(
+                db,
+                indicator_key="subcat_min_price",
+                scope=scope,
+                value=min_p,
+                country=cc,
+                metadata=meta_base,
+            )
             n += 1
+
     return n
 
 
 def get_subcategory_enrichment(db, country: str, limit: int = 100) -> list[dict[str, Any]]:
+    """Latest subcategory signals grouped by staple."""
     cc = country.upper()
     prefix = f"{cc}:subcat:"
     rows = db.execute(
@@ -171,6 +233,13 @@ def get_subcategory_enrichment(db, country: str, limit: int = 100) -> list[dict[
         if dedupe in seen:
             continue
         seen.add(dedupe)
-        bucket = by_subcat.setdefault(subcat, {"subcategory": subcat, "country": cc, "signals": {}})
-        bucket["signals"][r["indicator_key"]] = {"value": r["value"], "unit": r["unit"], "recorded_at": r["recorded_at"]}
+        bucket = by_subcat.setdefault(
+            subcat,
+            {"subcategory": subcat, "country": cc, "signals": {}},
+        )
+        bucket["signals"][r["indicator_key"]] = {
+            "value": r["value"],
+            "unit": r["unit"],
+            "recorded_at": r["recorded_at"],
+        }
     return sorted(by_subcat.values(), key=lambda x: ENRICH_SUBCATEGORIES.index(x["subcategory"]) if x["subcategory"] in ENRICH_SUBCATEGORIES else 99)

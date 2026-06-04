@@ -23,7 +23,7 @@ def parse_pack_size(name: str) -> tuple[float, str] | None:
         return 12.0, "unit"
 
     patterns: list[tuple[re.Pattern[str], str, float]] = [
-        (re.compile(rf"{_NUM}\s*(?:kg|kilo|kilos|kilogramo?s?)?\.?\b", re.I), "kg", 1.0),
+        (re.compile(rf"{_NUM}\s*(?:kg|kilo|kilos|kilogramo?s?)\.?\b", re.I), "kg", 1.0),
         (re.compile(rf"{_NUM}\s*(?:g(?:ramos?)?|grs?)\.?\b", re.I), "kg", 0.001),
         (re.compile(rf"{_NUM}\s*(?:l|lt|lts|litro?s?)\.?\b", re.I), "L", 1.0),
         (re.compile(rf"{_NUM}\s*ml\.?\b", re.I), "L", 0.001),

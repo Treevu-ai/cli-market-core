@@ -2,12 +2,48 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 from market_core import get_default_stores, STORES
 
+logger = logging.getLogger(__name__)
+
+
+def _age_hours(timestamp_str: str | datetime | None) -> float | None:
+    """Parse a SQLite/Postgres timestamp and return hours since.
+
+    Accepts ISO strings, SQLite naive strings, or datetime objects from asyncpg/psycopg.
+    Returns None if parsing fails. UTC is assumed for naive values.
+    """
+    if timestamp_str is None:
+        return None
+    if isinstance(timestamp_str, datetime):
+        dt = timestamp_str
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+    if not timestamp_str:
+        return None
+    try:
+        s = timestamp_str.replace("Z", "+00:00")
+        # SQLite's datetime('now') uses space as separator; ISO uses T.
+        # datetime.fromisoformat handles both since Python 3.11; for 3.10
+        # we replace space → T defensively.
+        if " " in s and "T" not in s:
+            s = s.replace(" ", "T", 1)
+        dt = datetime.fromisoformat(s)
+        # Naive timestamps from SQLite are UTC by convention here.
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+    except Exception as e:
+        logger.warning("Could not parse timestamp %r: %s", timestamp_str, e)
+        return None
+
 
 def store_health_state(success_pct: float) -> str:
+    """Map lifetime success rate to ok / partial / dead (dashboard semantics)."""
     pct = float(success_pct or 0)
     if pct < 30:
         return "dead"
@@ -30,8 +66,7 @@ def build_sources_health(
     store: str | None = None,
     now: datetime | None = None,
 ) -> dict:
-    from routers.health import _age_hours
-
+    """Build sources health payload from store_health + price_snapshots freshness."""
     now = now or datetime.now(timezone.utc)
 
     health_rows = db.execute(
@@ -47,10 +82,17 @@ def build_sources_health(
     ).fetchall()
 
     last_seen_rows = db.execute(
-        "SELECT store, MAX(queried_at) as last_seen FROM price_snapshots WHERE price > 0 GROUP BY store"
+        """
+        SELECT store, MAX(queried_at) as last_seen
+        FROM price_snapshots
+        WHERE price > 0
+        GROUP BY store
+        """
     ).fetchall()
     last_seen_map = {r["store"]: r["last_seen"] for r in last_seen_rows}
 
+    # coverage_7d_pct: share of a store's snapshots refreshed in the last 7 days.
+    # Representativeness signal (issue #72, P1) — cross-DB parameterized.
     cutoff_7d = (now - timedelta(days=7)).isoformat()
     coverage_rows = db.execute(
         """SELECT store,
@@ -73,10 +115,12 @@ def build_sources_health(
             continue
         if store is not None and sid != store:
             continue
+
         success_pct = float(row["success_pct"] or 0)
         state = store_health_state(success_pct)
         meta = STORES.get(sid, {})
         last_seen = last_seen_map.get(sid)
+
         stores_out.append({
             "store": sid,
             "store_name": meta.get("name", sid),
@@ -95,4 +139,8 @@ def build_sources_health(
     for item in stores_out:
         summary[item["state"]] += 1
 
-    return {"generated_at": now.isoformat(), "summary": summary, "stores": stores_out}
+    return {
+        "generated_at": now.isoformat(),
+        "summary": summary,
+        "stores": stores_out,
+    }

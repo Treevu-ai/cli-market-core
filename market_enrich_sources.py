@@ -30,6 +30,7 @@ COUNTRY_WIKI: dict[str, tuple[str, list[str]]] = {
     "FR": ("fr", ["Lait", "Riz", "Supermarché", "Inflation"]),
 }
 
+# Staple-specific Wikipedia articles for category demand signal
 COUNTRY_WIKI_STAPLES: dict[str, tuple[str, list[str]]] = {
     "PE": ("es", ["Leche", "Arroz", "Aceite de cocina"]),
     "AR": ("es", ["Leche", "Arroz", "Aceite de cocina"]),
@@ -42,9 +43,14 @@ COUNTRY_WIKI_STAPLES: dict[str, tuple[str, list[str]]] = {
 }
 
 COUNTRY_WEATHER: dict[str, tuple[float, float]] = {
-    "PE": (-12.046, -77.042), "AR": (-34.603, -58.382), "MX": (19.433, -99.133),
-    "CO": (4.711, -74.072), "CL": (-33.449, -70.669), "BR": (-23.550, -46.633),
-    "IT": (41.902, 12.496), "FR": (48.857, 2.352),
+    "PE": (-12.046, -77.042),
+    "AR": (-34.603, -58.382),
+    "MX": (19.433, -99.133),
+    "CO": (4.711, -74.072),
+    "CL": (-33.449, -70.669),
+    "BR": (-23.550, -46.633),
+    "IT": (41.902, 12.496),
+    "FR": (48.857, 2.352),
 }
 
 _EAN_RE = re.compile(r"^\d{8,14}$")
@@ -153,23 +159,28 @@ def resolve_off_for_product(db, product_id: str, name: str) -> dict[str, Any] | 
     cached = cache_get(db, cache_key)
     if cached:
         return cached
+
     result = None
     if _looks_like_ean(product_id):
         result = fetch_off_by_barcode(product_id)
     if not result and name:
         result = fetch_off_by_search(_off_search_term(name))
         time.sleep(OFF_REQUEST_DELAY)
+
     if result:
         cache_set(db, cache_key, "openfoodfacts", result)
     return result
 
 
 def sample_off_coverage(db, country: str, limit: int | None = None) -> dict[str, Any]:
+    """Sample supermercados SKUs and measure Open Food Facts match rate."""
     from market_core import STORES
+
     limit = limit or ENRICH_SAMPLE_SIZE
     stores = [k for k, v in STORES.items() if v.get("country") == country.upper() and not v.get("disabled")]
     if not stores:
         return {"sampled": 0, "matched": 0, "match_rate_pct": None}
+
     placeholders = ",".join("?" * len(stores))
     rows = db.execute(
         f"""
@@ -179,13 +190,16 @@ def sample_off_coverage(db, country: str, limit: int | None = None) -> dict[str,
         """,
         [*stores, limit],
     ).fetchall()
+
     matched = 0
     nutriscore_good = 0
     nova_vals: list[int] = []
     ultra_processed = 0
     ecoscore_vals: list[int] = []
     samples: list[dict] = []
+
     _ECO_SCORE = {"A": 5, "B": 4, "C": 3, "D": 2, "E": 1}
+
     for r in rows:
         off = resolve_off_for_product(db, r["product_id"], r["name"])
         if off:
@@ -201,12 +215,22 @@ def sample_off_coverage(db, country: str, limit: int | None = None) -> dict[str,
                 nova_vals.append(nova)
                 if nova >= 4:
                     ultra_processed += 1
-            samples.append({"product_id": r["product_id"], "name": r["name"][:60], "store": r["store"], "price": r["price"], "off": off})
+            samples.append(
+                {
+                    "product_id": r["product_id"],
+                    "name": r["name"][:60],
+                    "store": r["store"],
+                    "price": r["price"],
+                    "off": off,
+                }
+            )
         if _looks_like_ean(r["product_id"]):
             time.sleep(OFF_REQUEST_DELAY)
+
     n = len(rows)
     return {
-        "sampled": n, "matched": matched,
+        "sampled": n,
+        "matched": matched,
         "match_rate_pct": round(matched / n * 100, 1) if n else None,
         "nutriscore_ab_pct": round(nutriscore_good / matched * 100, 1) if matched else None,
         "nova_avg": round(sum(nova_vals) / len(nova_vals), 2) if nova_vals else None,
@@ -217,7 +241,6 @@ def sample_off_coverage(db, country: str, limit: int | None = None) -> dict[str,
 
 
 def _wiki_momentum_for_articles(wiki_lang: str, articles: list[str]) -> float | None:
-    from datetime import date
     end = datetime.now(timezone.utc).date()
     start_recent = end - timedelta(days=7)
     start_prev = end - timedelta(days=14)
@@ -247,6 +270,7 @@ def _wiki_momentum_for_articles(wiki_lang: str, articles: list[str]) -> float | 
         if recent > 0 or prev > 0:
             ratios.append(recent / max(prev, 1))
         time.sleep(0.2)
+
     if not ratios:
         return None
     return round(sum(ratios) / len(ratios), 3)
@@ -261,6 +285,7 @@ def fetch_wiki_demand_momentum(country: str) -> float | None:
 
 
 def fetch_wiki_staple_momentum(country: str) -> float | None:
+    """Pageview momentum for staple articles (leche, arroz, aceite)."""
     cfg = COUNTRY_WIKI_STAPLES.get(country.upper())
     if not cfg:
         return None
@@ -277,7 +302,13 @@ def fetch_weather_logistics_stress(country: str) -> float | None:
         with httpx.Client(timeout=10.0) as client:
             r = client.get(
                 "https://api.open-meteo.com/v1/forecast",
-                params={"latitude": lat, "longitude": lon, "daily": "precipitation_sum,temperature_2m_max", "forecast_days": 7, "timezone": "auto"},
+                params={
+                    "latitude": lat,
+                    "longitude": lon,
+                    "daily": "precipitation_sum,temperature_2m_max",
+                    "forecast_days": 7,
+                    "timezone": "auto",
+                },
             )
             r.raise_for_status()
             daily = r.json().get("daily") or {}
@@ -287,6 +318,7 @@ def fetch_weather_logistics_stress(country: str) -> float | None:
                 return None
             rain_mm = sum(float(x or 0) for x in precip)
             heat_days = sum(1 for t in temps if t is not None and float(t) >= 32)
+            # 0–100 stress proxy: rain + heat disruption for fresh logistics
             stress = min(100.0, rain_mm * 2.5 + heat_days * 8)
             return round(stress, 1)
     except Exception as e:
@@ -316,11 +348,22 @@ def fetch_food_cpi_yoy(country: str) -> float | None:
     return None
 
 
+# ── Tier 2 public sources (IMF, Eurostat, BCB, World Bank labor) ─────────────
+
 IMF_COUNTRY: dict[str, str] = {
-    "PE": "PER", "AR": "ARG", "MX": "MEX", "CO": "COL", "CL": "CHL",
-    "BR": "BRA", "IT": "ITA", "FR": "FRA", "US": "USA",
+    "PE": "PER",
+    "AR": "ARG",
+    "MX": "MEX",
+    "CO": "COL",
+    "CL": "CHL",
+    "BR": "BRA",
+    "IT": "ITA",
+    "FR": "FRA",
+    "US": "USA",
 }
+
 EUROSTAT_GEO: dict[str, str] = {"IT": "IT", "FR": "FR"}
+
 _imf_cache: dict[str, dict[str, float]] = {}
 
 
@@ -360,24 +403,31 @@ def _imf_for_country(indicator: str, country: str) -> float | None:
 def fetch_imf_inflation_yoy(country: str) -> float | None:
     return _imf_for_country("PCPIPCH", country)
 
+
 def fetch_imf_gdp_growth_yoy(country: str) -> float | None:
     return _imf_for_country("NGDP_RPCH", country)
 
+
 def fetch_imf_epi_inflation_yoy(country: str) -> float | None:
+    """End-of-period CPI inflation (IMF PCPIEPCH)."""
     return _imf_for_country("PCPIEPCH", country)
+
 
 def fetch_eurostat_food_hicp_yoy(country: str) -> float | None:
     return _fetch_eurostat_hicp_yoy(country, coicop="CP01")
 
+
 def fetch_eurostat_headline_hicp_yoy(country: str) -> float | None:
+    """All-items HICP annual rate (IT, FR)."""
     return _fetch_eurostat_hicp_yoy(country, coicop="CP00")
+
 
 def _fetch_eurostat_hicp_yoy(country: str, coicop: str) -> float | None:
     geo = EUROSTAT_GEO.get(country.upper())
     if not geo:
         return None
     url = (
-        f"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/PRC_HICP_MANR"
+        "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/PRC_HICP_MANR"
         f"?geo={geo}&coicop={coicop}&format=JSON&lastTimePeriod=1"
     )
     try:
@@ -393,15 +443,18 @@ def _fetch_eurostat_hicp_yoy(country: str, coicop: str) -> float | None:
         logger.debug("Eurostat HICP %s %s: %s", country, coicop, e)
         return None
 
+
 def fetch_bcb_food_inflation_mom(country: str) -> float | None:
     if country.upper() != "BR":
         return None
     return _fetch_bcb_series("1635")
 
+
 def fetch_bcb_headline_inflation_mom(country: str) -> float | None:
     if country.upper() != "BR":
         return None
     return _fetch_bcb_series("433")
+
 
 def _fetch_bcb_series(series_id: str) -> float | None:
     url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{series_id}/dados/ultimos/1?formato=json"
@@ -415,6 +468,7 @@ def _fetch_bcb_series(series_id: str) -> float | None:
     except Exception as e:
         logger.debug("BCB series %s: %s", series_id, e)
     return None
+
 
 def fetch_wb_unemployment_rate(country: str) -> float | None:
     wb_map = {"PE": "PE", "AR": "AR", "MX": "MX", "CO": "CO", "CL": "CL", "BR": "BR", "IT": "IT", "FR": "FR", "US": "US"}
@@ -437,6 +491,7 @@ def fetch_wb_unemployment_rate(country: str) -> float | None:
         logger.debug("WB unemployment %s: %s", country, e)
     return None
 
+
 def fetch_wb_gdp_growth_yoy(country: str) -> float | None:
     wb_map = {"PE": "PE", "AR": "AR", "MX": "MX", "CO": "CO", "CL": "CL", "BR": "BR", "IT": "IT", "FR": "FR", "US": "US"}
     wb = wb_map.get(country.upper())
@@ -457,6 +512,7 @@ def fetch_wb_gdp_growth_yoy(country: str) -> float | None:
     except Exception as e:
         logger.debug("WB GDP growth %s: %s", country, e)
     return None
+
 
 def clear_tier2_cache() -> None:
     _imf_cache.clear()

@@ -7,7 +7,7 @@ import re
 from collections import defaultdict
 
 from market_units import is_standard_canasta_pack, price_per_base_unit
-from backend_interface import spread_public_ok
+from price_confidence import spread_public_ok
 
 CANASTA_ITEMS = [
     "leche", "arroz", "aceite", "azucar", "huevos", "pan", "cafe", "pollo", "queso", "jabon",
@@ -419,7 +419,7 @@ def _fuzzy_clusters(rows: list[dict]) -> list[list[dict]]:
 
 
 def compute_marketing_spreads(products: list[dict]) -> list[dict]:
-    """Spreads safe for copy: standard canasta packs (>=2.5x) or farmacia fuzzy (>=10x)."""
+    """Spreads safe for copy: standard canasta packs (≥2.5x) or farmacia fuzzy (≥10x)."""
     out: list[dict] = []
 
     for item in CANASTA_ITEMS:

@@ -90,30 +90,48 @@ def _platform_credential_fields(platform: str, creds: dict[str, str]) -> dict[st
 def db_list_retailer_applications(status: str | None = None) -> list[dict]:
     db = get_db()
     if status:
-        rows = db.execute("SELECT * FROM retailer_applications WHERE status=? ORDER BY created_at DESC", (status,)).fetchall()
+        rows = db.execute(
+            "SELECT * FROM retailer_applications WHERE status=? ORDER BY created_at DESC",
+            (status,),
+        ).fetchall()
     else:
-        rows = db.execute("SELECT * FROM retailer_applications ORDER BY created_at DESC").fetchall()
+        rows = db.execute(
+            "SELECT * FROM retailer_applications ORDER BY created_at DESC"
+        ).fetchall()
     db.close()
     return [dict(r) for r in rows]
 
 
 def db_get_retailer_application(app_id: str) -> dict | None:
     db = get_db()
-    row = db.execute("SELECT * FROM retailer_applications WHERE id=?", (app_id,)).fetchone()
+    row = db.execute(
+        "SELECT * FROM retailer_applications WHERE id=?",
+        (app_id,),
+    ).fetchone()
     db.close()
     return dict(row) if row else None
 
 
 def db_public_application(row: dict) -> dict:
-    return {k: v for k, v in row.items() if k != "api_token"}
+    """Strip secret fields before admin/API list responses."""
+    public = {k: v for k, v in row.items() if k != "api_token"}
+    return public
 
 
 def db_upsert_store_credentials(
     *,
-    store_id: str, platform: str, application_id: str = "", store_name: str = "",
-    base: str = "", country: str = "", line: str = "supermercados", currency: str = "",
-    magento_token: str = "", storefront_token: str = "",
-    vtex_app_key: str = "", vtex_app_token: str = "",
+    store_id: str,
+    platform: str,
+    application_id: str = "",
+    store_name: str = "",
+    base: str = "",
+    country: str = "",
+    line: str = "supermercados",
+    currency: str = "",
+    magento_token: str = "",
+    storefront_token: str = "",
+    vtex_app_key: str = "",
+    vtex_app_token: str = "",
 ) -> None:
     if not currency and country:
         currency = _COUNTRY_CURRENCY.get(country.upper(), "USD")
@@ -140,18 +158,35 @@ def db_upsert_store_credentials(
             active=1,
             updated_at=datetime('now')
         """,
-        (store_id, platform, store_name, base, country.upper() if country else "", currency, line,
-         magento_token, storefront_token, vtex_app_key, vtex_app_token, application_id),
+        (
+            store_id,
+            platform,
+            store_name,
+            base,
+            country.upper() if country else "",
+            currency,
+            line,
+            magento_token,
+            storefront_token,
+            vtex_app_key,
+            vtex_app_token,
+            application_id,
+        ),
     )
     db.commit()
     db.close()
 
 
 def approve_retailer_application(
-    app_id: str, *, store_id: str | None = None,
-    magento_token: str = "", storefront_token: str = "",
-    vtex_app_key: str = "", vtex_app_token: str = "",
-    line: str = "supermercados", review_notes: str = "",
+    app_id: str,
+    *,
+    store_id: str | None = None,
+    magento_token: str = "",
+    storefront_token: str = "",
+    vtex_app_key: str = "",
+    vtex_app_token: str = "",
+    line: str = "supermercados",
+    review_notes: str = "",
 ) -> dict[str, Any]:
     from store_credentials import invalidate_credential_cache
 
@@ -196,22 +231,36 @@ def approve_retailer_application(
     db_upsert_store_credentials(
         store_id=resolved_id,
         platform=platform if platform in ("vtex", "shopify", "magento") else "vtex",
-        application_id=app_id, store_name=store_name, base=base,
-        country=country, line=store_line, currency=currency, **fields,
+        application_id=app_id,
+        store_name=store_name,
+        base=base,
+        country=country,
+        line=store_line,
+        currency=currency,
+        **fields,
     )
 
     db = get_db()
     db.execute(
-        "UPDATE retailer_applications SET status='approved', store_id=?, reviewed_at=datetime('now'), review_notes=? WHERE id=?",
+        """
+        UPDATE retailer_applications
+        SET status='approved', store_id=?, reviewed_at=datetime('now'), review_notes=?
+        WHERE id=?
+        """,
         (resolved_id, review_notes.strip(), app_id),
     )
     db.commit()
     db.close()
+
     invalidate_credential_cache()
 
     return {
-        "ok": True, "application_id": app_id, "store_id": resolved_id, "platform": platform,
-        "catalog_match": resolved_id in STORE_CATALOG, "credentials_fields": sorted(fields.keys()),
+        "ok": True,
+        "application_id": app_id,
+        "store_id": resolved_id,
+        "platform": platform,
+        "catalog_match": resolved_id in STORE_CATALOG,
+        "credentials_fields": sorted(fields.keys()),
     }
 
 
@@ -221,9 +270,14 @@ def reject_retailer_application(app_id: str, review_notes: str = "") -> dict[str
         raise ValueError("application_not_found")
     if app.get("status") != "pending":
         raise ValueError(f"application_not_pending:{app.get('status')}")
+
     db = get_db()
     db.execute(
-        "UPDATE retailer_applications SET status='rejected', reviewed_at=datetime('now'), review_notes=? WHERE id=?",
+        """
+        UPDATE retailer_applications
+        SET status='rejected', reviewed_at=datetime('now'), review_notes=?
+        WHERE id=?
+        """,
         (review_notes.strip(), app_id),
     )
     db.commit()

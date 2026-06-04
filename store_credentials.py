@@ -1,4 +1,15 @@
-"""Per-store API credentials from environment and approved retailer applications."""
+"""Per-store API credentials from environment and approved retailer applications.
+
+Env pattern (store id uppercased, e.g. falabella_pe → FALABELLA_PE):
+
+  STORE_FALABELLA_PE_MAGENTO_TOKEN       Magento / Adobe Commerce integration token
+  STORE_GYMSHARK_STOREFRONT_TOKEN        Shopify Storefront API token
+  STORE_WONG_VTEX_APP_KEY                VTEX app key (optional — higher rate limits)
+  STORE_WONG_VTEX_APP_TOKEN              VTEX app token
+
+Approved applications are persisted in ``store_credentials`` (see retailer_onboarding.py).
+Env vars override DB values for the same field.
+"""
 
 from __future__ import annotations
 
@@ -52,6 +63,7 @@ _ENV_CREDENTIALS: dict[str, dict[str, str]] = load_credentials_from_env()
 
 
 def reload_credentials() -> None:
+    """Re-read env (tests)."""
     global _ENV_CREDENTIALS
     _ENV_CREDENTIALS = load_credentials_from_env()
     invalidate_credential_cache()
@@ -67,31 +79,43 @@ def _load_credentials_from_db() -> tuple[dict[str, dict[str, str]], dict[str, di
         from market_core import get_db
     except Exception:
         return {}, {}
+
     try:
         db = get_db()
     except Exception:
         return {}, {}
+
     try:
         rows = db.execute(
-            "SELECT store_id, platform, store_name, base, country, currency, line, "
-            "magento_token, storefront_token, vtex_app_key, vtex_app_token, active "
-            "FROM store_credentials WHERE active=1"
+            """
+            SELECT store_id, platform, store_name, base, country, currency, line,
+                   magento_token, storefront_token, vtex_app_key, vtex_app_token, active
+            FROM store_credentials
+            WHERE active=1
+            """
         ).fetchall()
     except Exception:
         db.close()
         return {}, {}
+
     creds: dict[str, dict[str, str]] = {}
     profiles: dict[str, dict[str, Any]] = {}
     for row in rows:
         r = dict(row)
         store_id = r["store_id"]
         bucket: dict[str, str] = {}
-        for field in ("magento_token", "storefront_token", "vtex_app_key", "vtex_app_token"):
+        for field in (
+            "magento_token",
+            "storefront_token",
+            "vtex_app_key",
+            "vtex_app_token",
+        ):
             val = (r.get(field) or "").strip()
             if val:
                 bucket[field] = val
         if bucket:
             creds[store_id] = bucket
+
         profiles[store_id] = {
             "name": r.get("store_name") or store_id,
             "base": r.get("base") or "",
@@ -153,22 +177,27 @@ def resolve_store_config(store_id: str) -> dict[str, Any]:
         cfg["platform"] = "vtex"
     if not creds:
         return cfg
+
     platform = cfg.get("platform", "vtex")
     generic = creds.get("api_token", "")
+
     if creds.get("magento_token"):
         cfg["magento_token"] = creds["magento_token"]
     elif platform == "magento" and generic:
         cfg["magento_token"] = generic
+
     if creds.get("storefront_token"):
         cfg["storefront_token"] = creds["storefront_token"]
     elif platform == "shopify" and generic:
         cfg["storefront_token"] = generic
+
     if creds.get("vtex_app_key"):
         cfg["vtex_app_key"] = creds["vtex_app_key"]
     if creds.get("vtex_app_token"):
         cfg["vtex_app_token"] = creds["vtex_app_token"]
     elif platform == "vtex" and generic and not cfg.get("vtex_app_token"):
         cfg["vtex_app_token"] = generic
+
     return cfg
 
 
@@ -190,13 +219,18 @@ def has_store_credentials(store_id: str) -> bool:
         return False
     platform = profile.get("platform", "vtex")
     creds = get_store_credentials(store_id)
-    public_vtex = (platform == "vtex" and bool(profile.get("base")) and profile.get("source") == "approved_application")
+    public_vtex = (
+        platform == "vtex"
+        and bool(profile.get("base"))
+        and profile.get("source") == "approved_application"
+    )
     return _credentials_sufficient(platform, creds, public_vtex=public_vtex)
 
 
 def compute_default_stores() -> list[str]:
     active: list[str] = []
     seen: set[str] = set()
+
     for store_id, cfg in STORES.items():
         if not cfg.get("disabled"):
             active.append(store_id)
@@ -204,16 +238,19 @@ def compute_default_stores() -> list[str]:
         elif cfg.get("enable_with_credentials") and has_store_credentials(store_id):
             active.append(store_id)
             seen.add(store_id)
+
     for store_id in get_custom_store_ids():
         if store_id in seen:
             continue
         if has_store_credentials(store_id):
             active.append(store_id)
             seen.add(store_id)
+
     return active
 
 
 def get_default_stores() -> list[str]:
+    """Active catalog (recomputed — includes freshly approved DB credentials)."""
     return compute_default_stores()
 
 
@@ -221,6 +258,7 @@ def credential_summary() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     default = set(get_default_stores())
     checked: set[str] = set()
+
     for store_id in list(STORES.keys()) + get_custom_store_ids():
         if store_id in checked:
             continue

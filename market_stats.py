@@ -1,12 +1,20 @@
-"""Canonical marketing stats — single source of truth."""
+"""Canonical marketing stats — single source of truth for README, PyPI, landing.
+
+Always phrase retailers as: "60 retailers, 30 verified active" (defined vs live).
+Auto-derived from market_stores.py, market_mcp.py, store_credentials.py.
+Run: python3 ops/sync_market_stats.py
+"""
+
 from __future__ import annotations
+
+# ── Derived from codebase (never stale) ──────────────────────────────────────
 
 def _stores():
     from market_stores import STORES
     return STORES
 
 def _default_store_keys():
-    from backend_interface import get_default_stores
+    from store_credentials import get_default_stores
     return get_default_stores()
 
 def _mcp_tools_count():
@@ -14,14 +22,17 @@ def _mcp_tools_count():
     return len(TOOLS)
 
 def _indicators_count():
-    from backend_interface import INDICATOR_DEFINITIONS
+    from market_indicators import INDICATOR_DEFINITIONS
     return len(INDICATOR_DEFINITIONS)
+
+
+# ── Canonical figures (computed at import time) ─────────────────────────────
 
 _stores = _stores()
 _defaults = frozenset(_default_store_keys())
 
 RETAILERS_DEFINED = len(_stores)
-RETAILERS_VERIFIED = len(_defaults)
+RETAILERS_VERIFIED = len(_defaults)  # active = stores with credentials configured
 PLATFORMS = 3
 PLATFORM_VTEX = sum(1 for s in _stores.values() if s.get("platform") == "vtex")
 PLATFORM_SHOPIFY = sum(1 for s in _stores.values() if s.get("platform") == "shopify")
@@ -32,6 +43,23 @@ MCP_TOOLS = _mcp_tools_count()
 INDICATORS_COUNT = _indicators_count()
 ENRICHMENT_SOURCES_LABEL = "OFF · Wikimedia · Open-Meteo · World Bank · IMF · Eurostat · BCB"
 PRICES_REFRESH_HOURS = 4
+
+def _live_price_label(fallback: str = "45,000+") -> str:
+    """Fetch total snapshots from health/db endpoint and round to nearest thousand."""
+    import os
+    try:
+        import httpx
+        api = os.getenv("MARKET_API_URL", "https://cli-market-production.up.railway.app")
+        r = httpx.get(f"{api}/health/db", timeout=10)
+        r.raise_for_status()
+        n = r.json().get("snapshots", 0)
+        if n and n > 0:
+            return f"{round(n / 1000) * 1000:,}+"
+    except Exception:
+        pass
+    return fallback
+
+PRICES_VERIFIED_LABEL = _live_price_label()
 PACKAGE_VERSION = "1.7.0"
 LICENSE = "MIT"
 PAYMENTS_LABEL = "PayPal + QR (Yape/Plin)"
@@ -46,23 +74,6 @@ RETAILERS_PHRASE_EN = f"{RETAILERS_DEFINED} retailers, {RETAILERS_VERIFIED} veri
 RETAILERS_PHRASE_ES = f"{RETAILERS_DEFINED} retailers, {RETAILERS_VERIFIED} verificados activos"
 PLATFORMS_PHRASE_EN = f"{PLATFORMS} platforms (VTEX · Shopify · Magento)"
 PLATFORMS_PHRASE_ES = f"{PLATFORMS} plataformas (VTEX · Shopify · Magento)"
-
-
-def _live_price_label(fallback: str = "45,000+") -> str:
-    import os
-    try:
-        import httpx
-        api_url = os.getenv("MARKET_API_URL", "https://cli-market-production.up.railway.app")
-        r = httpx.get(f"{api_url}/health/db", timeout=10)
-        r.raise_for_status()
-        n = r.json().get("snapshots", 0)
-        if n and n > 0:
-            return f"{round(n / 1000) * 1000:,}+"
-    except Exception:
-        pass
-    return fallback
-
-PRICES_VERIFIED_LABEL = _live_price_label()
 
 
 def header_en() -> str:

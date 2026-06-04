@@ -10,7 +10,11 @@ CANASTA_PARTIAL_THRESHOLD = 6
 
 
 def _canasta_name_sql(prod: str) -> tuple[str, tuple]:
-    """Build WHERE fragment for canasta seed (handles accents + huevo/huevos)."""
+    """Build WHERE fragment for canasta seed (handles accents + huevo/huevos).
+
+    Uses LOWER() so PostgreSQL LIKE matches title-case product names (Azúcar, Café).
+    SQLite LIKE is ASCII case-insensitive; LOWER() is harmless there.
+    """
     patterns = CANASTA_SQL_LIKE.get(prod, (f"%{prod}%",))
     if len(patterns) == 1:
         return "LOWER(name) LIKE LOWER(?)", (patterns[0],)

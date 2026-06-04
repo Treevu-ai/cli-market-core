@@ -92,3 +92,4 @@ STORES = {
     "liverpool_mx": {"name":"Liverpool MX","base":"https://www.liverpool.com.mx","country":"MX","currency":"MXN","emoji":"🇲🇽","line":"departamentales","platform":"magento","disabled":True,"disabled_reason":"Magento REST blocked (403)"},
     "elpalacio_mx": {"name":"El Palacio MX","base":"https://www.elpalaciodehierro.com","country":"MX","currency":"MXN","emoji":"🇲🇽","line":"departamentales","platform":"magento","disabled":True,"disabled_reason":"Magento REST 410 Gone"},
 }
+
