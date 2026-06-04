@@ -28,8 +28,9 @@ TIERS = {
         "checkout": False,
         "agent_queries_month": 50,
         "history_days": 30,
-        "alerts": 0,
+        "alerts": 3,
         "export": True,        # CSV básico hasta 10k filas
+        "white_label": False,
     },
     "pro": {
         "req_min": 300,
@@ -40,6 +41,18 @@ TIERS = {
         "history_days": 365,
         "alerts": 10,
         "export": True,
+        "white_label": False,
+    },
+    "builder": {
+        "req_min": 600,
+        "req_day": 50_000,
+        "api_keys": 25,
+        "checkout": True,
+        "agent_queries_month": -1,
+        "history_days": -1,          # historial completo
+        "alerts": -1,                # sin límite
+        "export": True,
+        "white_label": True,         # branding propio permitido
     },
     "enterprise": {
         "req_min": -1,               # -1 = sin límite
