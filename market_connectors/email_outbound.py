@@ -106,6 +106,30 @@ def send_pro_request_notify(
     return _send(NOTIFY_EMAIL, subject, text, f"<pre>{text}</pre>")
 
 
+def send_contact_notify(
+    *,
+    email: str,
+    plan: str,
+    profile: str = "",
+    name: str = "",
+    company: str = "",
+    use_case: str = "",
+) -> dict:
+    """Notify hello@cli-market.dev of a new contact form submission."""
+    label = f"[{plan}/{profile}]" if profile else f"[{plan}]"
+    subject = f"{label} {name or email}"
+    text = f"New contact submission\n\nPlan: {plan}\nEmail: {email}\n"
+    if profile:
+        text += f"Profile: {profile}\n"
+    if name:
+        text += f"Name: {name}\n"
+    if company:
+        text += f"Company: {company}\n"
+    if use_case.strip():
+        text += f"\nMessage:\n{use_case.strip()}\n"
+    return _send(NOTIFY_EMAIL, subject, text, f"<pre>{text}</pre>")
+
+
 def _send(to_email: str, subject: str, text: str, html: str) -> dict:
     if not _smtp_configured():
         logger.warning("SMTP not configured — email not sent to %s", to_email)

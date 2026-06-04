@@ -37,8 +37,9 @@ PLATFORMS = 3
 PLATFORM_VTEX = sum(1 for s in _stores.values() if s.get("platform") == "vtex")
 PLATFORM_SHOPIFY = sum(1 for s in _stores.values() if s.get("platform") == "shopify")
 PLATFORM_MAGENTO = sum(1 for s in _stores.values() if s.get("platform") == "magento")
-COUNTRIES = len({s["country"] for s in _stores.values()})
-COUNTRY_CODES = tuple(sorted({s["country"] for s in _stores.values()}))
+COUNTRIES = len({s["country"] for s in _stores.values() if not s.get("disabled")})
+COUNTRY_CODES = tuple(sorted({s["country"] for s in _stores.values() if not s.get("disabled")}))
+COUNTRIES_CATALOG = len({s["country"] for s in _stores.values()})
 MCP_TOOLS = _mcp_tools_count()
 INDICATORS_COUNT = _indicators_count()
 ENRICHMENT_SOURCES_LABEL = "OFF · Wikimedia · Open-Meteo · World Bank · IMF · Eurostat · BCB"
