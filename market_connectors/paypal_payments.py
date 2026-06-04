@@ -139,7 +139,7 @@ async def _ensure_billing_plan(token: str, client: httpx.AsyncClient, amount: fl
         json={
             "product_id": product_id,
             "name": "CLI Market Pro Monthly",
-            "description": "$49/month",
+            "description": "$79/month",
             "status": "ACTIVE",
             "billing_cycles": [{
                 "frequency": {"interval_unit": "MONTH", "interval_count": 1},
@@ -166,7 +166,7 @@ async def create_subscription(
     return_url: str = "https://cli-market.dev?sub=success",
     cancel_url: str = "https://cli-market.dev?sub=cancelled",
 ) -> dict:
-    """Create a PayPal subscription (Pro plan $49/mo)."""
+    """Create a PayPal subscription (Pro plan $79/mo)."""
     token = await _get_access_token()
     async with httpx.AsyncClient(timeout=15.0) as client:
         h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
