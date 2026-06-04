@@ -318,6 +318,7 @@ from market_billing import (  # noqa: E402, F401
     db_find_subscription_request,
     db_get_billing_pending,
     db_get_subscription,
+    db_get_user_email,
     db_mark_subscription_request_activated,
     db_mark_subscription_request_emailed,
     db_recent_subscription_request,
