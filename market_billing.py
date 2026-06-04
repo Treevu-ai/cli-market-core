@@ -256,6 +256,17 @@ def user_can_checkout(username: str) -> bool:
     return bool(TIERS.get(sub.get("tier", "free"), TIERS["free"]).get("checkout"))
 
 
+def db_get_user_email(username: str) -> str | None:
+    """Return the email associated with a username from subscription_requests, or None."""
+    db = market_core.get_db()
+    row = db.execute(
+        "SELECT email FROM subscription_requests WHERE username=? ORDER BY created_at DESC LIMIT 1",
+        (username,),
+    ).fetchone()
+    db.close()
+    return row["email"] if row else None
+
+
 def db_create_subscription_request(username: str, email: str, payment_link: str) -> dict:
     req_id = f"PRO-{uuid.uuid4().hex[:8].upper()}"
     db = market_core.get_db()

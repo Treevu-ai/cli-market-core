@@ -191,6 +191,173 @@ hello@cli-market.dev
     return _send(to_email, subject, text, html)
 
 
+def send_credentials_email(
+    *,
+    to_email: str,
+    username: str,
+    api_key: str,
+    plan: str = "pro",
+    lang: str = "en",
+) -> dict:
+    """Send API key + credentials to the user after account activation.
+
+    Used for both Pro (after payment confirmed) and Starter (trial start).
+    The raw key is shown once — it is the caller's responsibility to only
+    call this immediately after key generation.
+    """
+    is_pro = plan == "pro"
+    if lang == "es":
+        subject = (
+            "Tu API key Pro de CLI Market — guárdala ahora"
+            if is_pro else
+            "Tu prueba gratuita de CLI Market — API key lista"
+        )
+        plan_label = "Pro — $49/mes" if is_pro else "Starter — 14 días gratis"
+        limits = (
+            "• 10,000 consultas / día\n"
+            "• 10 claves API (lectura + escritura)\n"
+            "• Exportación JSON/CSV\n"
+            "• Checkout con PayPal + Yape/Plin"
+            if is_pro else
+            "• 5,000 consultas / día\n"
+            "• 3 claves API (solo lectura)\n"
+            "• Exportación CSV básica\n"
+            "• Soporte email 48 h"
+        )
+        text = f"""Hola {username},
+
+{'Tu cuenta Pro está activa.' if is_pro else 'Tu periodo de prueba de 14 días ha comenzado.'}
+
+API KEY (¡guárdala ahora — no se vuelve a mostrar!):
+{api_key}
+
+──────────────────────────────
+{plan_label}:
+{limits}
+──────────────────────────────
+
+Cómo usarla:
+
+  pip install cli-market
+  market login --key {api_key}
+
+O exporta la variable de entorno:
+  export MARKET_API_KEY={api_key}
+
+Docs y ejemplos: https://pypi.org/project/cli-market/
+
+¿Preguntas? Responde este correo — contestamos el mismo día.
+
+— Ricardo · CLI Market
+hello@cli-market.dev
+"""
+        html_title = "Tu API key Pro está lista" if is_pro else "Tu trial de CLI Market ha comenzado"
+        html_badge = "CLI MARKET PRO" if is_pro else "CLI MARKET STARTER"
+        html_intro = (
+            f"Hola <strong style=\"color:#fff\">{username}</strong>,<br><br>"
+            f"{'Tu cuenta Pro está activa.' if is_pro else 'Tu periodo de prueba de 14 días ha comenzado.'} "
+            f"Aquí está tu API key — <strong style=\"color:#fff\">muéstrala solo ahora</strong>."
+        )
+        html_footer_note = "14 días gratis · Sin tarjeta · Cancela cuando quieras" if not is_pro else ""
+    else:
+        subject = (
+            "Your CLI Market Pro API key — save it now"
+            if is_pro else
+            "Your CLI Market Starter trial — API key ready"
+        )
+        plan_label = "Pro — $49/month" if is_pro else "Starter — 14-day free trial"
+        limits = (
+            "• 10,000 requests / day\n"
+            "• 10 API keys (read + write)\n"
+            "• JSON/CSV export\n"
+            "• Checkout with PayPal + Yape/Plin"
+            if is_pro else
+            "• 5,000 requests / day\n"
+            "• 3 API keys (read-only)\n"
+            "• Basic CSV export\n"
+            "• Email support 48 h"
+        )
+        text = f"""Hi {username},
+
+{'Your Pro account is now active.' if is_pro else 'Your 14-day free trial has started.'}
+
+API KEY (save it now — won't be shown again!):
+{api_key}
+
+──────────────────────────────
+{plan_label}:
+{limits}
+──────────────────────────────
+
+How to use it:
+
+  pip install cli-market
+  market login --key {api_key}
+
+Or set the environment variable:
+  export MARKET_API_KEY={api_key}
+
+Docs and examples: https://pypi.org/project/cli-market/
+
+Questions? Reply to this email — we respond same day.
+
+— Ricardo · CLI Market
+hello@cli-market.dev
+"""
+        html_title = "Your Pro API key is ready" if is_pro else "Your CLI Market trial has started"
+        html_badge = "CLI MARKET PRO" if is_pro else "CLI MARKET STARTER"
+        html_intro = (
+            f"Hi <strong style=\"color:#fff\">{username}</strong>,<br><br>"
+            f"{'Your Pro account is active.' if is_pro else 'Your 14-day free trial has started.'} "
+            f"Here's your API key — <strong style=\"color:#fff\">this is the only time it'll be shown</strong>."
+        )
+        html_footer_note = "14-day free trial · No credit card · Cancel anytime" if not is_pro else ""
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0a0a0b;font-family:ui-sans-serif,system-ui,sans-serif;color:#e5e2e3;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0b;padding:40px 0;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="background:#131314;border:1px solid #3b4a44;border-radius:12px;overflow:hidden;max-width:560px;width:100%;">
+      <tr><td style="padding:32px 36px 0;">
+        <p style="margin:0 0 4px;font-family:monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#3afecf;">{html_badge}</p>
+        <h1 style="margin:0 0 24px;font-size:22px;font-weight:700;color:#fff;line-height:1.3;">{html_title}</h1>
+        <p style="margin:0 0 20px;font-size:14px;color:#b9cac2;line-height:1.6;">{html_intro}</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0b;border:2px solid #3afecf;border-radius:8px;margin-bottom:24px;">
+          <tr><td style="padding:16px 20px;">
+            <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#3afecf;">API KEY</p>
+            <code style="display:block;font-family:monospace;font-size:13px;color:#fff;word-break:break-all;line-height:1.5;">{api_key}</code>
+          </td></tr>
+        </table>
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1c1b1c;border:1px solid #3b4a44;border-radius:8px;margin-bottom:24px;">
+          <tr><td style="padding:20px 24px;">
+            <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#fff;">{plan_label}</p>
+            <p style="margin:0;font-size:13px;color:#b9cac2;line-height:1.8;">{limits.replace(chr(10), '<br>')}</p>
+          </td></tr>
+        </table>
+      </td></tr>
+      <tr><td style="padding:0 36px 32px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#fff;">{"Cómo usarla:" if lang == "es" else "How to use it:"}</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:6px;margin-bottom:16px;">
+          <tr><td style="padding:12px 16px;font-family:monospace;font-size:12px;color:#b9cac2;line-height:1.8;">
+            pip install cli-market<br>
+            market login --key {api_key[:20]}...
+          </td></tr>
+        </table>
+        {f'<p style="margin:0 0 0;font-size:12px;color:#b9cac2;text-align:center;">{html_footer_note}</p>' if html_footer_note else ''}
+      </td></tr>
+      <tr><td style="padding:20px 36px;border-top:1px solid #3b4a44;">
+        <p style="margin:0;font-size:12px;color:#b9cac2;">— Ricardo · CLI Market · <a href="mailto:hello@cli-market.dev" style="color:#3afecf;text-decoration:none;">hello@cli-market.dev</a></p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>"""
+    return _send(to_email, subject, text, html)
+
+
 def send_pro_request_notify(
     *,
     subscriber_email: str,
