@@ -1,5 +1,7 @@
 # cli-market-core
 
+[![CI](https://github.com/Treevu-ai/cli-market-core/actions/workflows/ci.yml/badge.svg)](https://github.com/Treevu-ai/cli-market-core/actions/workflows/ci.yml)
+
 > **Intelligence Layer** — Indicators, billing, connectors, and MCP tools for CLI Market
 
 ---
