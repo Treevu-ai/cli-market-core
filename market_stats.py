@@ -61,7 +61,7 @@ def _live_price_label(fallback: str = "45,000+") -> str:
     return fallback
 
 PRICES_VERIFIED_LABEL = _live_price_label()
-PACKAGE_VERSION = "1.7.0"
+PACKAGE_VERSION = "1.8.0"
 LICENSE = "MIT"
 PAYMENTS_LABEL = "PayPal + QR (Yape/Plin)"
 BUSINESS_LINES = 6
