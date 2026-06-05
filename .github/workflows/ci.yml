@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Smoke test (import modules)
+        run: |
+          python -c "
+          import market_core
+          import market_stats
+          import market_indicators
+          import market_mcp
+          import market_basket
+          import market_billing
+          import market_db
+          import market_alerts
+          import market_security
+          import market_spread
+          import market_stores
+          import market_units
+          import market_enrich_sources
+          import market_enrich_subcategory
+          import market_intel_agent
+          import price_confidence
+          import source_health
+          import store_credentials
+          import data_v1_service
+          print('All modules imported successfully')
+          "
