@@ -17,6 +17,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install dependencies
+        run: pip install -e .
+
       - name: Smoke test (import modules)
         run: |
           python -c "
@@ -39,5 +42,5 @@ jobs:
           import source_health
           import store_credentials
           import data_v1_service
-          print('All modules imported successfully')
+          print('All 20 modules imported successfully')
           "
