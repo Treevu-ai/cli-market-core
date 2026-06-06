@@ -23,24 +23,31 @@ jobs:
       - name: Smoke test (import modules)
         run: |
           python -c "
-          import market_core
-          import market_stats
-          import market_indicators
-          import market_mcp
-          import market_basket
-          import market_billing
-          import market_db
-          import market_alerts
-          import market_security
-          import market_spread
-          import market_stores
-          import market_units
-          import market_enrich_sources
-          import market_enrich_subcategory
-          import market_intel_agent
-          import price_confidence
-          import source_health
-          import store_credentials
-          import data_v1_service
-          print('All 20 modules imported successfully')
+          from market_core import market_core
+          from market_core import market_stats
+          from market_core import market_indicators
+          from market_core import market_mcp
+          from market_core import market_basket
+          from market_core import market_billing
+          from market_core import market_db
+          from market_core import market_alerts
+          from market_core import market_security
+          from market_core import market_spread
+          from market_core import market_stores
+          from market_core import market_units
+          from market_core import market_enrich_sources
+          from market_core import market_enrich_subcategory
+          from market_core import market_intel_agent
+          from market_core import price_confidence
+          from market_core import source_health
+          from market_core import store_credentials
+          from market_core import data_v1_service
+          from market_core import dashboard_glossary
+          from market_core import dashboard_quality
+          from market_core import dashboard_renderer
+          from market_core import dashboard_view_model
+          from market_core import market_health_alert
+          from market_core import retailer_onboarding
+          from market_connectors import vtex, shopify, magento
+          print('All 26 modules imported successfully')
           "
