@@ -52,13 +52,14 @@ cli-market-world    ->  Exposure (landing, docs, MCP registry)
 | `dashboard_renderer.py` | Dashboard HTML renderer |
 | `dashboard_view_model.py` | Dashboard data model |
 | `data_v1_service.py` | Core data API endpoints |
-| `market_connectors/` | Third-party integrations (PayPal, Shopify, VTEX, SUNAT, etc.) |
+| `market_connectors/` | PayPal, Mercado Pago, WooCommerce, VTEX, Shopify, SUNAT, etc. |
+| `market_stats.py` | Canonical figures for README, PyPI, landing (run `sync_market_stats.py` in world) |
 
 ---
 
 ## Version
 
-Current: **1.8.0** (bumped from 1.7.0 on 2026-06-05)
+Current: **1.8.9** — 68 retailers, 4 platforms (incl. WooCommerce FMCG pilot `nunaorganica_pe`)
 
 ---
 

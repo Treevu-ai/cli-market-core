@@ -62,27 +62,33 @@ def _live_price_label(fallback: str = "45,000+") -> str:
     return fallback
 
 PRICES_VERIFIED_LABEL = _live_price_label()
-PACKAGE_VERSION = "1.8.0"
+PACKAGE_VERSION = "1.8.9"
 LICENSE = "MIT"
-PAYMENTS_LABEL = "PayPal + QR (Yape/Plin)"
+PAYMENTS_LABEL = "PayPal · Mercado Pago · QR (Yape/Plin)"
 BUSINESS_LINES = 6
+PLATFORM_LIST_EN = "VTEX · Shopify · Magento · WooCommerce"
+PLATFORM_LIST_ES = "VTEX · Shopify · Magento · WooCommerce"
 
 SHOPIFY_BRANDS = tuple(
     _stores[k]["name"] for k in sorted(_stores)
     if _stores[k].get("platform") == "shopify"
 )
+WOOCOMMERCE_STORES = tuple(
+    _stores[k]["name"] for k in sorted(_stores)
+    if _stores[k].get("platform") == "woocommerce"
+)
 
 RETAILERS_PHRASE_EN = f"{RETAILERS_DEFINED} retailers, {RETAILERS_VERIFIED} verified active"
 RETAILERS_PHRASE_ES = f"{RETAILERS_DEFINED} retailers, {RETAILERS_VERIFIED} verificados activos"
-PLATFORMS_PHRASE_EN = f"{PLATFORMS} platforms (VTEX · Shopify · Magento)"
-PLATFORMS_PHRASE_ES = f"{PLATFORMS} plataformas (VTEX · Shopify · Magento)"
+PLATFORMS_PHRASE_EN = f"{PLATFORMS} platforms ({PLATFORM_LIST_EN})"
+PLATFORMS_PHRASE_ES = f"{PLATFORMS} plataformas ({PLATFORM_LIST_ES})"
 
 
 def header_en() -> str:
     return (
         "CLI Market — Commerce infrastructure for AI agents.\n"
         f"{RETAILERS_DEFINED} retailers across {PLATFORMS} platforms "
-        f"(VTEX · Shopify · Magento), {RETAILERS_VERIFIED} verified live.\n"
+        f"({PLATFORM_LIST_EN}), {RETAILERS_VERIFIED} verified live.\n"
         f"{COUNTRIES} countries. {MCP_TOOLS} MCP tools. {PRICES_VERIFIED_LABEL} verified shelf prices, "
         f"normalized per kg/L, refreshed every {PRICES_REFRESH_HOURS}h.\n"
         "One pip install. One API. Zero scraping. MIT."
@@ -93,7 +99,7 @@ def header_es() -> str:
     return (
         "CLI Market — Infraestructura de comercio para agentes de IA.\n"
         f"{RETAILERS_DEFINED} retailers en {PLATFORMS} plataformas "
-        f"(VTEX · Shopify · Magento), {RETAILERS_VERIFIED} verificados y activos.\n"
+        f"({PLATFORM_LIST_ES}), {RETAILERS_VERIFIED} verificados y activos.\n"
         f"{COUNTRIES} países. {MCP_TOOLS} herramientas MCP. {PRICES_VERIFIED_LABEL} precios reales de góndola, "
         f"normalizados por kg/L, actualizados cada {PRICES_REFRESH_HOURS}h.\n"
         "Un pip install. Una API. Cero scraping. MIT."
