@@ -21,6 +21,9 @@ dependencies = [
     "playwright>=1.45.0",
 ]
 
+[tool.setuptools]
+py-modules = ["store_credentials", "market_stats", "retailer_onboarding"]
+
 [tool.setuptools.packages.find]
 include = ["market_core*", "market_connectors*"]
 
