@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from .core import get_default_stores, STORES
+from .market_core import get_default_stores, STORES
 
 logger = logging.getLogger(__name__)
 

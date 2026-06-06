@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from .core import STORES, get_db
+from .market_core import STORES, get_db
 from .market_spread import CANASTA_ITEMS
 
 logger = logging.getLogger(__name__)

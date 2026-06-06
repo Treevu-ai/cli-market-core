@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from .core import STORES
+from .market_core import STORES
 from .enrich_sources import _wiki_momentum_for_articles
 from .market_spread import CANASTA_ITEMS, _CANASTA_ITEM_PATTERNS
 

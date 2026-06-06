@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from .core import get_db
+from .market_core import get_db
 
 logger = logging.getLogger("market.alerts")
 
