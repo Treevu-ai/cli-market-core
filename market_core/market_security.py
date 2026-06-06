@@ -1,6 +1,6 @@
 """Shared security helpers for payment webhooks and outbound URL fetches."""
 
-from .__future__ import annotations
+from __future__ import annotations
 
 import ipaddress
 import os

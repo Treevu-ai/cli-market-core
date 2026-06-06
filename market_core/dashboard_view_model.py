@@ -4,7 +4,7 @@ Maps raw /dashboard/data fields to the six-block content spec. Consumers (HTML,
 React, agents) should prefer `dashboard_view` over re-deriving copy.
 """
 
-from .__future__ import annotations
+from __future__ import annotations
 
 from .datetime import datetime, timedelta, timezone
 

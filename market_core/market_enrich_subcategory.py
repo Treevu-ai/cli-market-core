@@ -1,6 +1,6 @@
 """Per-subcategory enrichment — canasta staples with scoped indicator values."""
 
-from .__future__ import annotations
+from __future__ import annotations
 
 import logging
 from .datetime import datetime, timedelta, timezone

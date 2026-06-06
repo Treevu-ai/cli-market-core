@@ -1,6 +1,6 @@
 """Public enrichment APIs for the data moat — Open Food Facts, Wikimedia, Open-Meteo."""
 
-from .__future__ import annotations
+from __future__ import annotations
 
 import json
 import logging

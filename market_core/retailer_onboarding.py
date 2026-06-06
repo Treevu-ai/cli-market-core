@@ -1,6 +1,6 @@
 """Retailer self-serve applications → approved store credentials."""
 
-from .__future__ import annotations
+from __future__ import annotations
 
 import re
 import unicodedata

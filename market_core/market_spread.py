@@ -1,6 +1,6 @@
 """Moat spread analytics: subcategory buckets, unit prices, marketing-ready spreads."""
 
-from .__future__ import annotations
+from __future__ import annotations
 
 import difflib
 import re

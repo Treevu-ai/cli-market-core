@@ -14,7 +14,7 @@ Design notes:
     only expose aggregate read queries, never writes or arbitrary SQL.
 """
 
-from .__future__ import annotations
+from __future__ import annotations
 
 import json
 import os
