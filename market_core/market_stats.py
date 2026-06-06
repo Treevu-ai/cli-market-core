@@ -14,7 +14,7 @@ def _stores():
     return STORES
 
 def _default_store_keys():
-    from store_credentials import get_default_stores
+    from .store_credentials import get_default_stores
     return get_default_stores()
 
 def _mcp_tools_count():

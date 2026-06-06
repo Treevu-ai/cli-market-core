@@ -188,7 +188,7 @@ def approve_retailer_application(
     line: str = "supermercados",
     review_notes: str = "",
 ) -> dict[str, Any]:
-    from store_credentials import invalidate_credential_cache
+    from .store_credentials import invalidate_credential_cache
 
     app = db_get_retailer_application(app_id)
     if not app:

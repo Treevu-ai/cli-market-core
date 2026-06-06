@@ -712,7 +712,7 @@ def save_price_snapshot(p: dict, db: "_DB | None" = None) -> None:
     price = float(p.get("price", 0) or 0)
     list_price_raw = p.get("list_price", 0)
     list_price = float(list_price_raw) if list_price_raw else None
-    from price_confidence import compute_snapshot_confidence
+    from .price_confidence import compute_snapshot_confidence
 
     confidence = p.get("confidence") or compute_snapshot_confidence(price, list_price)
     params = (

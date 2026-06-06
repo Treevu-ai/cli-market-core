@@ -83,7 +83,7 @@ def check_moat_health(db=None) -> dict:
         row = db.execute("SELECT MAX(queried_at) AS t FROM price_snapshots").fetchone()
         last_collected = row["t"] if row else None
         if last_collected is not None:
-            from source_health import _age_hours
+            from .source_health import _age_hours
             moat_age_h = _age_hours(last_collected)
             if moat_age_h is not None and moat_age_h >= MOAT_STALE_HOURS:
                 problems.append("moat_stale")
