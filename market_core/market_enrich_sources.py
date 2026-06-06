@@ -174,7 +174,7 @@ def resolve_off_for_product(db, product_id: str, name: str) -> dict[str, Any] | 
 
 def sample_off_coverage(db, country: str, limit: int | None = None) -> dict[str, Any]:
     """Sample supermercados SKUs and measure Open Food Facts match rate."""
-    from market_core import STORES
+    from .market_core import STORES
 
     limit = limit or ENRICH_SAMPLE_SIZE
     stores = [k for k, v in STORES.items() if v.get("country") == country.upper() and not v.get("disabled")]

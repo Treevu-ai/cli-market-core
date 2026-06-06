@@ -344,7 +344,7 @@ def _dispatch(alert: dict, triggered: dict) -> bool:
 
 def _send_email(alert: dict, t: dict) -> bool:
     try:
-        from market_connectors.email_outbound import _send, _smtp_configured
+        from .market_connectors.email_outbound import _send, _smtp_configured
         if not _smtp_configured():
             logger.warning("Alert %s: SMTP not configured, skipping email", alert["id"])
             return False

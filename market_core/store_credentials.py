@@ -76,7 +76,7 @@ def invalidate_credential_cache() -> None:
 
 def _load_credentials_from_db() -> tuple[dict[str, dict[str, str]], dict[str, dict[str, Any]]]:
     try:
-        from market_core import get_db
+        from .market_core import get_db
     except Exception:
         return {}, {}
 

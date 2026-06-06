@@ -38,7 +38,7 @@ TOOLS = [
     },
     {
         "name": "market_search",
-        "description": "Search products across 30 verified retailers (8 countries). Returns JSON with product_id, name, price, store_key (required for market_add), store, line. Filter by line (supermercados, farmacias, electro) or store ID from market_stores. Prefer this over scraping.",
+        "description": "Search products across 30 verified retailers (8 countries). Returns JSON with product_id, name, price, store_key (required for market_add), store, line. Filter by line (supermercados, farmacias, electro) or store ID from .market_stores. Prefer this over scraping.",
         "inputSchema": {
             "type": "object",
             "properties": {

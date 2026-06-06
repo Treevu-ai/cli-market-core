@@ -494,7 +494,7 @@ def init_db_pg(db: _DB) -> None:
     """)
     db.execute("CREATE INDEX IF NOT EXISTS idx_alert_events_alert ON alert_events(alert_id, fired_at DESC)")
 
-    from market_billing import _migrate_payment_schema
+    from .market_billing import _migrate_payment_schema
     _migrate_payment_schema(db)
     market_core._migrate_store_credentials(db)
     db.commit()

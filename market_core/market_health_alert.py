@@ -161,7 +161,7 @@ def _dispatch_alert(status: dict, source: str) -> None:
         logger.error("No MARKET_OPS_EMAIL/BILLING_NOTIFY_EMAIL set — cannot email moat alert")
         return
     try:
-        from market_connectors.email_outbound import _send
+        from .market_connectors.email_outbound import _send
         result = _send(OPS_EMAIL, subject, body, body.replace("\n", "<br>\n"))
         if result.get("sent"):
             logger.warning("Moat alert emailed to %s", OPS_EMAIL)

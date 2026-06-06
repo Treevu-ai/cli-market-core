@@ -1,7 +1,7 @@
 """Canonical marketing stats — single source of truth for README, PyPI, landing.
 
 Always phrase retailers as: "60 retailers, 30 verified active" (defined vs live).
-Auto-derived from market_stores.py, market_mcp.py, store_credentials.py.
+Auto-derived from .market_stores.py, market_mcp.py, store_credentials.py.
 Run: python3 ops/sync_market_stats.py
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 # ── Derived from codebase (never stale) ──────────────────────────────────────
 
 def _stores():
-    from market_stores import STORES
+    from .market_stores import STORES
     return STORES
 
 def _default_store_keys():
@@ -18,11 +18,11 @@ def _default_store_keys():
     return get_default_stores()
 
 def _mcp_tools_count():
-    from market_mcp import TOOLS
+    from .market_mcp import TOOLS
     return len(TOOLS)
 
 def _indicators_count():
-    from market_indicators import INDICATOR_DEFINITIONS
+    from .market_indicators import INDICATOR_DEFINITIONS
     return len(INDICATOR_DEFINITIONS)
 
 

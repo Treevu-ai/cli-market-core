@@ -841,7 +841,7 @@ def refresh_enrichment_indicators(db, country: str | None = None) -> int:
     if os.getenv("ENRICHMENT_AUTO_REFRESH", "1").strip() in ("0", "false", "no"):
         return 0
 
-    from market_enrich_sources import (
+    from .market_enrich_sources import (
         fetch_food_cpi_yoy,
         fetch_weather_logistics_stress,
         fetch_wiki_demand_momentum,
@@ -993,7 +993,7 @@ def refresh_enrichment_indicators(db, country: str | None = None) -> int:
     n += _refresh_tier2_indicators(db, cc, scope, defs)
 
     if os.getenv("SUBCATEGORY_AUTO_REFRESH", "1").strip() not in ("0", "false", "no"):
-        from market_enrich_subcategory import refresh_subcategory_enrichment
+        from .market_enrich_subcategory import refresh_subcategory_enrichment
 
         n += refresh_subcategory_enrichment(db, cc, _upsert_indicator_value)
 
@@ -1004,7 +1004,7 @@ def _refresh_tier2_indicators(db, cc: str, scope: str, defs: dict) -> int:
     if os.getenv("TIER2_AUTO_REFRESH", "1").strip() in ("0", "false", "no"):
         return 0
 
-    from market_enrich_sources import (
+    from .market_enrich_sources import (
         fetch_bcb_food_inflation_mom,
         fetch_bcb_headline_inflation_mom,
         fetch_eurostat_food_hicp_yoy,
