@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dashboard_quality import QUALITY_FILTERS
+from .dashboard_quality import QUALITY_FILTERS
 from .core import STORES
 from .db import price_snapshots_has_confidence
 from .spread import build_spread_analytics, find_median_outliers
-from price_confidence import discount_is_scrape_error, spread_confidence
+from .price_confidence import discount_is_scrape_error, spread_confidence
 
 MAX_LIMIT = 500
 DEFAULT_LIMIT = 50

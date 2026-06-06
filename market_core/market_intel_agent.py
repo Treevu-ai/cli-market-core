@@ -14,7 +14,7 @@ Design notes:
     only expose aggregate read queries, never writes or arbitrary SQL.
 """
 
-from __future__ import annotations
+from .__future__ import annotations
 
 import json
 import os
@@ -26,7 +26,7 @@ from .indicators import (
     compute_staple_price_momentum,
     get_latest_values,
 )
-from data_v1_service import (
+from .data_v1_service import (
     query_dispersion,
     query_prices,
 )

@@ -71,7 +71,7 @@ DB_FILE = DATA_DIR / "market.db"
 
 # ── Stores (VTEX retailers) ───────────────────────────────────────────────────
 
-from .stores import STORES
+from .market_stores import STORES
 
 LINES = {
     "supermercados":   {"name": "Supermercados",          "emoji": "🛒", "description": "Alimentos, bebidas y consumo diario"},
@@ -111,7 +111,7 @@ _country_names: dict[str, str] = {
 for _cc in COUNTRIES:
     COUNTRIES[_cc]["name"] = _country_names.get(_cc, _cc)
 
-from store_credentials import get_default_stores, resolve_store_config  # noqa: F401  (re-exported)
+from .store_credentials import get_default_stores, resolve_store_config  # noqa: F401  (re-exported)
 PAGE_SIZE = 20
 
 # ── Currency ──────────────────────────────────────────────────────────────────

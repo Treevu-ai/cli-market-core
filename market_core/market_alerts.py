@@ -13,11 +13,11 @@ Channels:
 evaluate_alerts(db) is called post-collection and fires any triggered alerts.
 """
 
-from __future__ import annotations
+from .__future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from .datetime import datetime, timedelta, timezone
 
 import httpx
 

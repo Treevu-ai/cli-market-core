@@ -1,15 +1,15 @@
 """Public enrichment APIs for the data moat — Open Food Facts, Wikimedia, Open-Meteo."""
 
-from __future__ import annotations
+from .__future__ import annotations
 
 import json
 import logging
 import os
 import re
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Any
-from urllib.parse import quote
+from .datetime import datetime, timedelta, timezone
+from .typing import Any
+from .urllib.parse import quote
 
 import httpx
 

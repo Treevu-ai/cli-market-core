@@ -5,14 +5,14 @@ Computed signals derive from ``price_snapshots``, ``price_history``, and
 ``search_queries``. External macro signals use public APIs with graceful fallback.
 """
 
-from __future__ import annotations
+from .__future__ import annotations
 
 import json
 import logging
 import math
 import os
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from .datetime import datetime, timedelta, timezone
+from .typing import Any
 
 import httpx
 

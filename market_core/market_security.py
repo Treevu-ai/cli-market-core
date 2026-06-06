@@ -1,11 +1,11 @@
 """Shared security helpers for payment webhooks and outbound URL fetches."""
 
-from __future__ import annotations
+from .__future__ import annotations
 
 import ipaddress
 import os
 import socket
-from urllib.parse import urlparse
+from .urllib.parse import urlparse
 
 _BLOCKED_HOSTNAMES = frozenset(
     {

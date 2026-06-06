@@ -1,9 +1,9 @@
 """Unified store scraping health — shared by dashboard and GET /v1/sources/health."""
 
-from __future__ import annotations
+from .__future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from .datetime import datetime, timedelta, timezone
 
 from .core import get_default_stores, STORES
 

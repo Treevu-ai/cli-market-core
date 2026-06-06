@@ -1,11 +1,11 @@
 """Retailer self-serve applications → approved store credentials."""
 
-from __future__ import annotations
+from .__future__ import annotations
 
 import re
 import unicodedata
-from typing import Any
-from urllib.parse import urlparse
+from .typing import Any
+from .urllib.parse import urlparse
 
 from .core import get_db
 from .stores import STORES as STORE_CATALOG
