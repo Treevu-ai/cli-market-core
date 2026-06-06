@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-market-core"
-version = "0.1.0"
+version = "1.8.0"
 description = "Shared core library for CLI Market services"
 requires-python = ">=3.10"
 license = "MIT"
@@ -21,18 +21,13 @@ dependencies = [
     "playwright>=1.45.0",
 ]
 
-[tool.setuptools]
-py-modules = [
-    "dashboard_glossary", "dashboard_quality", "dashboard_renderer",
-    "dashboard_view_model", "data_v1_service", "market_alerts",
-    "market_basket", "market_billing", "market_core", "market_db",
-    "market_enrich_sources", "market_enrich_subcategory",
-    "market_health_alert", "market_indicators", "market_intel_agent",
-    "market_mcp", "market_security", "market_spread", "market_stats",
-    "market_stores", "market_units", "price_confidence",
-    "retailer_onboarding", "source_health", "store_credentials",
-]
-packages = ["market_connectors"]
+[tool.setuptools.packages.find]
+include = ["market_core*", "market_connectors*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--cov=market_core --cov=market_connectors --cov-report=term-missing --cov-fail-under=60"
 
 [tool.ruff]
 line-length = 120
@@ -44,3 +39,10 @@ ignore = ["B008", "B904"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E402", "F401"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_ignores = true
