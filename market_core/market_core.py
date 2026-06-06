@@ -242,7 +242,7 @@ async def fetch_store(store: str, term: str, page: int = 1, limit: int = PAGE_SI
     store_config = resolve_store_config(store)
     platform = store_config.get("platform", "vtex")
     try:
-        from .market_connectors import get_connector
+        from market_connectors import get_connector
         connector = get_connector(platform)
         return await connector.search(store_config, term, page, limit)
     except ImportError:
@@ -255,7 +255,7 @@ def product_from_json(p: dict, store: str) -> dict:
     store_config = resolve_store_config(store)
     platform = store_config.get("platform", "vtex")
     try:
-        from .market_connectors import get_connector
+        from market_connectors import get_connector
         connector = get_connector(platform)
         return connector.normalize(p, store, store_config)
     except ImportError:
