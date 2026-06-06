@@ -7,8 +7,10 @@ Supports separate sandbox/production tokens or a single token + MERCADOPAGO_SAND
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
-from typing import Any
+from typing import Any, Mapping
 
 import httpx
 
@@ -97,8 +99,71 @@ def _api_base_url() -> str:
     return "https://cli-market-production.up.railway.app"
 
 
+def webhook_secret() -> str:
+    return _first_env(
+        "MERCADOPAGO_WEBHOOK_SECRET",
+        "MERCADOPAGO_SECRET_SIGNATURE",
+        "MP_WEBHOOK_SECRET",
+    )
+
+
 def notification_url() -> str:
-    return _api_base_url() + "/checkout/mercadopago-webhook"
+    base = _api_base_url() + "/checkout/mercadopago-webhook"
+    return base + "?source_news=webhooks"
+
+
+def validate_webhook_signature(
+    *,
+    x_signature: str,
+    x_request_id: str,
+    data_id: str,
+    secret: str = "",
+) -> bool:
+    """Validate Mercado Pago x-signature per official webhook docs."""
+    secret = (secret or webhook_secret()).strip()
+    if not secret or not x_signature:
+        return not secret
+    ts = ""
+    v1 = ""
+    for part in x_signature.split(","):
+        key, _, value = part.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if key == "ts":
+            ts = value
+        elif key == "v1":
+            v1 = value
+    if not ts or not v1:
+        return False
+    event_id = (data_id or "").strip()
+    if event_id.isalnum():
+        event_id = event_id.lower()
+    parts = []
+    if event_id:
+        parts.append(f"id:{event_id}")
+    if x_request_id:
+        parts.append(f"request-id:{x_request_id}")
+    if ts:
+        parts.append(f"ts:{ts}")
+    manifest = ";".join(parts) + (";" if parts else "")
+    computed = hmac.new(secret.encode(), manifest.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(computed, v1)
+
+
+def parse_webhook_payment_id(
+    *,
+    query_params: Mapping[str, str],
+    body: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    """Return (payment_id, notification_type). Prefers body.type=payment."""
+    body = body or {}
+    ntype = str(body.get("type") or query_params.get("type") or "")
+    data_id = str(query_params.get("data.id") or query_params.get("data_id") or "")
+    if not data_id and isinstance(body.get("data"), dict):
+        data_id = str(body["data"].get("id") or "")
+    if not data_id:
+        data_id = str(query_params.get("id") or "")
+    return data_id, ntype
 
 
 def _auth_headers() -> dict[str, str]:
