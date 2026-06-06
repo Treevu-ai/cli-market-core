@@ -1,7 +1,3 @@
-# CLI Market Core - Intelligence Layer
-"""
-Intelligence engine for CLI Market ecosystem.
-Provides market indicators, spread analysis, billing, connectors, and MCP tools.
-"""
+"""CLI Market core package — re-exports the public API from ``market_core.market_core``."""
 
-__version__ = "1.8.0"
+from .market_core import *  # noqa: F403
