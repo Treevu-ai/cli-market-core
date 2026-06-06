@@ -22,7 +22,24 @@ dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["store_credentials", "market_stats", "retailer_onboarding", "market_security"]
+py-modules = [
+    "store_credentials",
+    "market_stats",
+    "retailer_onboarding",
+    "market_security",
+    "market_alerts",
+    "market_basket",
+    "market_spread",
+    "market_units",
+    "market_db",
+    "market_indicators",
+    "market_enrich_subcategory",
+    "market_billing",
+    "market_mcp",
+    "market_intel_agent",
+    "market_health_alert",
+    "market_enrich_sources",
+]
 
 [tool.setuptools.packages.find]
 include = ["market_core*", "market_connectors*"]
