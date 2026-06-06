@@ -5,7 +5,7 @@ from __future__ import annotations
 import ipaddress
 import os
 import socket
-from .urllib.parse import urlparse
+from urllib.parse import urlparse
 
 _BLOCKED_HOSTNAMES = frozenset(
     {

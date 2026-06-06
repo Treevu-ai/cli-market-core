@@ -9,7 +9,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from .urllib.parse import quote
+from urllib.parse import quote
 
 import httpx
 
