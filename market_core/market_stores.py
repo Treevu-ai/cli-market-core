@@ -1,4 +1,4 @@
-# 66 verified retailers — 44 VTEX + 15 Shopify + 7 Magento
+# 67 verified retailers — 44 VTEX + 15 Shopify + 7 Magento + 1 WooCommerce
 STORES = {
 
     # ── SUPERMERCADOS ──
@@ -91,5 +91,8 @@ STORES = {
     "ripley_cl": {"name":"Ripley CL","base":"https://www.ripley.cl","country":"CL","currency":"CLP","emoji":"🇨🇱","line":"departamentales","platform":"magento","disabled":True,"enable_with_credentials":True,"disabled_reason":"Magento REST requires token"},
     "liverpool_mx": {"name":"Liverpool MX","base":"https://www.liverpool.com.mx","country":"MX","currency":"MXN","emoji":"🇲🇽","line":"departamentales","platform":"magento","disabled":True,"disabled_reason":"Magento REST blocked (403)"},
     "elpalacio_mx": {"name":"El Palacio MX","base":"https://www.elpalaciodehierro.com","country":"MX","currency":"MXN","emoji":"🇲🇽","line":"departamentales","platform":"magento","disabled":True,"disabled_reason":"Magento REST 410 Gone"},
+
+    # ── WOOCOMMERCE (Store API public read) ──
+    "xray_pe": {"name":"Xray Chipped PE","base":"https://tienda.xraychipped.com.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"automotriz","platform":"woocommerce"},
 }
 

@@ -84,6 +84,13 @@ def _platform_credential_fields(platform: str, creds: dict[str, str]) -> dict[st
             out["vtex_app_key"] = key
         if tok:
             out["vtex_app_token"] = tok
+    elif platform == "woocommerce":
+        key = creds.get("wc_consumer_key") or creds.get("api_token", "")
+        secret = creds.get("wc_consumer_secret", "")
+        if key:
+            out["wc_consumer_key"] = key
+        if secret:
+            out["wc_consumer_secret"] = secret
     return out
 
 
@@ -132,6 +139,8 @@ def db_upsert_store_credentials(
     storefront_token: str = "",
     vtex_app_key: str = "",
     vtex_app_token: str = "",
+    wc_consumer_key: str = "",
+    wc_consumer_secret: str = "",
 ) -> None:
     if not currency and country:
         currency = _COUNTRY_CURRENCY.get(country.upper(), "USD")
@@ -141,8 +150,8 @@ def db_upsert_store_credentials(
         INSERT INTO store_credentials
             (store_id, platform, store_name, base, country, currency, line,
              magento_token, storefront_token, vtex_app_key, vtex_app_token,
-             application_id, active, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
+             wc_consumer_key, wc_consumer_secret, application_id, active, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))
         ON CONFLICT(store_id) DO UPDATE SET
             platform=excluded.platform,
             store_name=COALESCE(NULLIF(excluded.store_name, ''), store_credentials.store_name),
@@ -154,6 +163,8 @@ def db_upsert_store_credentials(
             storefront_token=COALESCE(NULLIF(excluded.storefront_token, ''), store_credentials.storefront_token),
             vtex_app_key=COALESCE(NULLIF(excluded.vtex_app_key, ''), store_credentials.vtex_app_key),
             vtex_app_token=COALESCE(NULLIF(excluded.vtex_app_token, ''), store_credentials.vtex_app_token),
+            wc_consumer_key=COALESCE(NULLIF(excluded.wc_consumer_key, ''), store_credentials.wc_consumer_key),
+            wc_consumer_secret=COALESCE(NULLIF(excluded.wc_consumer_secret, ''), store_credentials.wc_consumer_secret),
             application_id=COALESCE(NULLIF(excluded.application_id, ''), store_credentials.application_id),
             active=1,
             updated_at=datetime('now')
@@ -170,6 +181,8 @@ def db_upsert_store_credentials(
             storefront_token,
             vtex_app_key,
             vtex_app_token,
+            wc_consumer_key,
+            wc_consumer_secret,
             application_id,
         ),
     )
@@ -185,6 +198,8 @@ def approve_retailer_application(
     storefront_token: str = "",
     vtex_app_key: str = "",
     vtex_app_token: str = "",
+    wc_consumer_key: str = "",
+    wc_consumer_secret: str = "",
     line: str = "supermercados",
     review_notes: str = "",
 ) -> dict[str, Any]:
@@ -212,6 +227,8 @@ def approve_retailer_application(
         "storefront_token": storefront_token or app_token,
         "vtex_app_key": vtex_app_key,
         "vtex_app_token": vtex_app_token or app_token,
+        "wc_consumer_key": wc_consumer_key or app_token,
+        "wc_consumer_secret": wc_consumer_secret,
         "api_token": app_token,
     }
     fields = _platform_credential_fields(platform, creds)
@@ -227,10 +244,12 @@ def approve_retailer_application(
         raise ValueError("credentials_required_for_platform")
     if platform == "vtex" and not fields and not base:
         raise ValueError("website_or_credentials_required")
+    if platform == "woocommerce" and not base:
+        raise ValueError("website_or_credentials_required")
 
     db_upsert_store_credentials(
         store_id=resolved_id,
-        platform=platform if platform in ("vtex", "shopify", "magento") else "vtex",
+        platform=platform if platform in ("vtex", "shopify", "magento", "woocommerce") else "vtex",
         application_id=app_id,
         store_name=store_name,
         base=base,

@@ -6,6 +6,8 @@ Env pattern (store id uppercased, e.g. falabella_pe → FALABELLA_PE):
   STORE_GYMSHARK_STOREFRONT_TOKEN        Shopify Storefront API token
   STORE_WONG_VTEX_APP_KEY                VTEX app key (optional — higher rate limits)
   STORE_WONG_VTEX_APP_TOKEN              VTEX app token
+  STORE_DEMO_PE_WC_CONSUMER_KEY          WooCommerce REST consumer key
+  STORE_DEMO_PE_WC_CONSUMER_SECRET       WooCommerce REST consumer secret
 
 Approved applications are persisted in ``store_credentials`` (see retailer_onboarding.py).
 Env vars override DB values for the same field.
@@ -22,7 +24,7 @@ from .market_stores import STORES
 
 _ENV_PREFIX = "STORE_"
 _ENV_KEY = re.compile(
-    r"^STORE_([A-Z0-9_]+)_(MAGENTO_TOKEN|STOREFRONT_TOKEN|VTEX_APP_KEY|VTEX_APP_TOKEN|API_TOKEN)$"
+    r"^STORE_([A-Z0-9_]+)_(MAGENTO_TOKEN|STOREFRONT_TOKEN|VTEX_APP_KEY|VTEX_APP_TOKEN|WC_CONSUMER_KEY|WC_CONSUMER_SECRET|API_TOKEN)$"
 )
 
 _DB_CACHE_TTL = float(os.getenv("STORE_CREDENTIALS_CACHE_SEC", "30"))
@@ -54,6 +56,10 @@ def load_credentials_from_env() -> dict[str, dict[str, str]]:
             bucket["vtex_app_key"] = value.strip()
         elif kind == "VTEX_APP_TOKEN":
             bucket["vtex_app_token"] = value.strip()
+        elif kind == "WC_CONSUMER_KEY":
+            bucket["wc_consumer_key"] = value.strip()
+        elif kind == "WC_CONSUMER_SECRET":
+            bucket["wc_consumer_secret"] = value.strip()
         elif kind == "API_TOKEN":
             bucket["api_token"] = value.strip()
     return out
@@ -89,7 +95,8 @@ def _load_credentials_from_db() -> tuple[dict[str, dict[str, str]], dict[str, di
         rows = db.execute(
             """
             SELECT store_id, platform, store_name, base, country, currency, line,
-                   magento_token, storefront_token, vtex_app_key, vtex_app_token, active
+                   magento_token, storefront_token, vtex_app_key, vtex_app_token,
+                   wc_consumer_key, wc_consumer_secret, active
             FROM store_credentials
             WHERE active=1
             """
@@ -109,6 +116,8 @@ def _load_credentials_from_db() -> tuple[dict[str, dict[str, str]], dict[str, di
             "storefront_token",
             "vtex_app_key",
             "vtex_app_token",
+            "wc_consumer_key",
+            "wc_consumer_secret",
         ):
             val = (r.get(field) or "").strip()
             if val:
@@ -198,10 +207,23 @@ def resolve_store_config(store_id: str) -> dict[str, Any]:
     elif platform == "vtex" and generic and not cfg.get("vtex_app_token"):
         cfg["vtex_app_token"] = generic
 
+    if creds.get("wc_consumer_key"):
+        cfg["wc_consumer_key"] = creds["wc_consumer_key"]
+    elif platform == "woocommerce" and generic:
+        cfg["wc_consumer_key"] = generic
+    if creds.get("wc_consumer_secret"):
+        cfg["wc_consumer_secret"] = creds["wc_consumer_secret"]
+
     return cfg
 
 
-def _credentials_sufficient(platform: str, creds: dict[str, str], *, public_vtex: bool = False) -> bool:
+def _credentials_sufficient(
+    platform: str,
+    creds: dict[str, str],
+    *,
+    public_vtex: bool = False,
+    public_woo: bool = False,
+) -> bool:
     if platform == "magento":
         return bool(creds.get("magento_token") or creds.get("api_token"))
     if platform == "shopify":
@@ -210,6 +232,10 @@ def _credentials_sufficient(platform: str, creds: dict[str, str], *, public_vtex
         if creds.get("vtex_app_key") and creds.get("vtex_app_token"):
             return True
         return public_vtex
+    if platform == "woocommerce":
+        if creds.get("wc_consumer_key") and creds.get("wc_consumer_secret"):
+            return True
+        return public_woo
     return bool(creds.get("api_token"))
 
 
@@ -224,7 +250,8 @@ def has_store_credentials(store_id: str) -> bool:
         and bool(profile.get("base"))
         and profile.get("source") == "approved_application"
     )
-    return _credentials_sufficient(platform, creds, public_vtex=public_vtex)
+    public_woo = platform == "woocommerce" and bool(profile.get("base"))
+    return _credentials_sufficient(platform, creds, public_vtex=public_vtex, public_woo=public_woo)
 
 
 def compute_default_stores() -> list[str]:

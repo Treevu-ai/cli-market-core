@@ -364,6 +364,14 @@ def _migrate_store_credentials(db) -> None:
             db.execute(f"ALTER TABLE retailer_applications ADD COLUMN {col} {typedef}")
         except Exception:
             pass
+    for col, typedef in (
+        ("wc_consumer_key", "TEXT DEFAULT ''"),
+        ("wc_consumer_secret", "TEXT DEFAULT ''"),
+    ):
+        try:
+            db.execute(f"ALTER TABLE store_credentials ADD COLUMN {col} {typedef}")
+        except Exception:
+            pass
 
 
 def _migrate_indicator_schema(db) -> None:

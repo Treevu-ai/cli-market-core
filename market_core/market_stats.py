@@ -33,10 +33,11 @@ _defaults = frozenset(_default_store_keys())
 
 RETAILERS_DEFINED = len(_stores)
 RETAILERS_VERIFIED = len(_defaults)  # active = stores with credentials configured
-PLATFORMS = 3
+PLATFORMS = 4
 PLATFORM_VTEX = sum(1 for s in _stores.values() if s.get("platform") == "vtex")
 PLATFORM_SHOPIFY = sum(1 for s in _stores.values() if s.get("platform") == "shopify")
 PLATFORM_MAGENTO = sum(1 for s in _stores.values() if s.get("platform") == "magento")
+PLATFORM_WOOCOMMERCE = sum(1 for s in _stores.values() if s.get("platform") == "woocommerce")
 COUNTRIES = len({s["country"] for s in _stores.values() if not s.get("disabled")})
 COUNTRY_CODES = tuple(sorted({s["country"] for s in _stores.values() if not s.get("disabled")}))
 COUNTRIES_CATALOG = len({s["country"] for s in _stores.values()})
