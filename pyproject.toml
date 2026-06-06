@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-market-core"
-version = "1.8.9"
-description = "Shared core library for CLI Market services"
+version = "1.9.0"
+description = "CLI Market core — VTEX/Shopify/Magento/WooCommerce connectors, 68 retailers, collector, MCP primitives. MIT."
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{name = "CLI Market", email = "hello@cli-market.dev"}]
