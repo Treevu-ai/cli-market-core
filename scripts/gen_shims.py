@@ -17,6 +17,13 @@ MODULES = [
     "market_intel_agent",
     "market_health_alert",
     "market_enrich_sources",
+    "data_v1_service",
+    "dashboard_glossary",
+    "dashboard_quality",
+    "dashboard_renderer",
+    "dashboard_view_model",
+    "source_health",
+    "price_confidence",
 ]
 
 TEMPLATE = '''"""Compatibility shim — prefer ``market_core.{name}`` in new code."""

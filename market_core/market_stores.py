@@ -1,4 +1,4 @@
-# 67 verified retailers — 44 VTEX + 15 Shopify + 7 Magento + 1 WooCommerce
+# 68 verified retailers — 44 VTEX + 15 Shopify + 7 Magento + 2 WooCommerce
 STORES = {
 
     # ── SUPERMERCADOS ──
@@ -94,5 +94,5 @@ STORES = {
 
     # ── WOOCOMMERCE (Store API public read) ──
     "xray_pe": {"name":"Xray Chipped PE","base":"https://tienda.xraychipped.com.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"automotriz","platform":"woocommerce"},
+    "nunaorganica_pe": {"name":"Nuna Orgánica","base":"https://nunaorganica.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"supermercados","platform":"woocommerce"},
 }
-
