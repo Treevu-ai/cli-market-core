@@ -34,6 +34,25 @@ def production_payment_config_warnings() -> list[str]:
         warnings.append("PAYPAL_WEBHOOK_ID unset — PayPal webhooks will be rejected")
     if not os.getenv("CHECKOUT_WEBHOOK_SECRET", "").strip():
         warnings.append("CHECKOUT_WEBHOOK_SECRET unset — POST /checkout/webhook disabled")
+    mp_sandbox = os.getenv("MERCADOPAGO_SANDBOX", os.getenv("MP_SANDBOX", "true")).lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if mp_sandbox and is_production_deploy():
+        warnings.append("MERCADOPAGO_SANDBOX=true on production — switch to production token when live")
+    elif not mp_sandbox:
+        prod = (
+            os.getenv("MERCADOPAGO_ACCESS_TOKEN_PRODUCTION", "").strip()
+            or os.getenv("MERCADOPAGO_ACCESS_TOKEN_PROD", "").strip()
+            or (
+                os.getenv("MERCADOPAGO_ACCESS_TOKEN", "").strip()
+                if os.getenv("MERCADOPAGO_SANDBOX", "").lower() in ("0", "false", "no")
+                else ""
+            )
+        )
+        if not prod:
+            warnings.append("Mercado Pago production token unset — /checkout/mercadopago disabled")
     return warnings
 
 
