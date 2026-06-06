@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from .datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from .core import get_default_stores, STORES
 

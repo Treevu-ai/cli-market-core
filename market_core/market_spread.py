@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import difflib
 import re
-from .collections import defaultdict
+from collections import defaultdict
 
 from .units import is_standard_canasta_pack, price_per_base_unit
 from .price_confidence import spread_public_ok

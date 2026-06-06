@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 import re
 import time
-from .typing import Any
+from typing import Any
 
 from .stores import STORES
 

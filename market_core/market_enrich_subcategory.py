@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from .datetime import datetime, timedelta, timezone
-from .typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from .core import STORES
 from .enrich_sources import _wiki_momentum_for_articles

@@ -6,7 +6,7 @@ React, agents) should prefer `dashboard_view` over re-deriving copy.
 
 from __future__ import annotations
 
-from .datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from .data_v1_service import intelligence_acceso_examples
 

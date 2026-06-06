@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from .typing import Any
+from typing import Any
 from .urllib.parse import urlparse
 
 from .core import get_db

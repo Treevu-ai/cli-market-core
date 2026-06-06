@@ -11,8 +11,8 @@ import json
 import logging
 import math
 import os
-from .datetime import datetime, timedelta, timezone
-from .typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import httpx
 

@@ -7,8 +7,8 @@ import logging
 import os
 import re
 import time
-from .datetime import datetime, timedelta, timezone
-from .typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any
 from .urllib.parse import quote
 
 import httpx
