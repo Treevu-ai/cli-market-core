@@ -6,7 +6,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
-import market_core
+from . import market_core
 
 logger = market_core.logger
 

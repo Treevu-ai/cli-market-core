@@ -7,8 +7,8 @@ import unicodedata
 from typing import Any
 from urllib.parse import urlparse
 
-from market_core import get_db
-from market_stores import STORES as STORE_CATALOG
+from .core import get_db
+from .stores import STORES as STORE_CATALOG
 
 _COUNTRY_CURRENCY = {
     "PE": "PEN", "AR": "ARS", "BR": "BRL", "MX": "MXN", "CO": "COP", "CL": "CLP",

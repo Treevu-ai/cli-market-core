@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 
-import market_core
+from . import market_core
 
 logger = logging.getLogger("market").getChild("db")
 
