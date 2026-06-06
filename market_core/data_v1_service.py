@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from .dashboard_quality import QUALITY_FILTERS
 from .core import STORES
-from .db import price_snapshots_has_confidence
-from .spread import build_spread_analytics, find_median_outliers
+from .market_db import price_snapshots_has_confidence
+from .market_spread import build_spread_analytics, find_median_outliers
 from .price_confidence import discount_is_scrape_error, spread_confidence
 
 MAX_LIMIT = 500

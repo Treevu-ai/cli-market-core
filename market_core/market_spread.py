@@ -6,7 +6,7 @@ import difflib
 import re
 from collections import defaultdict
 
-from .units import is_standard_canasta_pack, price_per_base_unit
+from .market_units import is_standard_canasta_pack, price_per_base_unit
 from .price_confidence import spread_public_ok
 
 CANASTA_ITEMS = [

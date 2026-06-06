@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from .spread import CANASTA_ITEMS, CANASTA_SQL_LIKE, matches_canasta_item
-from .units import is_standard_canasta_pack
+from .market_spread import CANASTA_ITEMS, CANASTA_SQL_LIKE, matches_canasta_item
+from .market_units import is_standard_canasta_pack
 
 CANASTA_TOTAL_ITEMS = 10
 CANASTA_PARTIAL_THRESHOLD = 6

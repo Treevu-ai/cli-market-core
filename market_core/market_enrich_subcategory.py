@@ -8,7 +8,7 @@ from typing import Any
 
 from .core import STORES
 from .enrich_sources import _wiki_momentum_for_articles
-from .spread import CANASTA_ITEMS, _CANASTA_ITEM_PATTERNS
+from .market_spread import CANASTA_ITEMS, _CANASTA_ITEM_PATTERNS
 
 logger = logging.getLogger(__name__)
 

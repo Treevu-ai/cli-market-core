@@ -18,7 +18,7 @@ import re
 import time
 from typing import Any
 
-from .stores import STORES
+from .market_stores import STORES
 
 _ENV_PREFIX = "STORE_"
 _ENV_KEY = re.compile(

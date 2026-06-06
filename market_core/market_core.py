@@ -296,7 +296,7 @@ def load_last_search() -> list[dict]:
 # State (USE_PG, DATABASE_URL, DB_FILE) and lifecycle (init_db,
 # ensure_db_initialized) stay here; the connection abstraction and schema
 # definitions are imported from market_db and re-exported for compatibility.
-from .db import (  # noqa: E402, F401
+from .market_db import (  # noqa: E402, F401
     _DB,
     _PgCursor,
     _migrate_price_snapshots_pg,
@@ -308,7 +308,7 @@ from .db import (  # noqa: E402, F401
 )
 
 
-from .billing import (  # noqa: E402, F401
+from .market_billing import (  # noqa: E402, F401
     TIERS,
     _migrate_payment_schema,
     db_create_subscription_request,
