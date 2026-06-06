@@ -21,7 +21,7 @@ import os
 
 import httpx
 
-from .indicators import (
+from .market_indicators import (
     compute_internal_inflation_avg,
     compute_staple_price_momentum,
     get_latest_values,
