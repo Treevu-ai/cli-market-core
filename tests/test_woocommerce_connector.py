@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from market_connectors.woocommerce import WooCommerceConnector, _minor_unit_price
+from market_connectors.woocommerce import (
+    WooCommerceConnector,
+    _brand_from_name,
+    _minor_unit_price,
+)
 
 
 def test_minor_unit_price_conversion():
@@ -57,6 +61,33 @@ def test_minor_unit_zero_keeps_whole_currency():
     price, list_price = _minor_unit_price(prices)
     assert price == 108.0
     assert list_price == 108.0
+
+
+def test_brand_from_name_fmcg_titles():
+    assert _brand_from_name("Galleta de Arroz Y Multicereales 60gr AndeanRice") == "AndeanRice"
+    assert _brand_from_name("Pan de arroz GF 710gr LaPurita") == "LaPurita"
+    assert _brand_from_name("Aceite Primor 1L") == ""
+
+
+def test_normalize_store_api_infers_brand_from_title():
+    connector = WooCommerceConnector()
+    raw = {
+        "id": 15552,
+        "name": "Pan de arroz GF 710gr LaPurita",
+        "permalink": "https://nunaorganica.pe/producto/pan-de-arroz/",
+        "is_in_stock": True,
+        "prices": {
+            "price": "1253",
+            "regular_price": "1790",
+            "sale_price": "1253",
+            "currency_code": "PEN",
+            "currency_minor_unit": 2,
+        },
+        "categories": [{"name": "PANADERIA Y TOSTADAS"}],
+    }
+    cfg = {"name": "Nuna Orgánica", "base": "https://nunaorganica.pe", "currency": "PEN"}
+    out = connector.normalize(raw, "nunaorganica_pe", cfg)
+    assert out["brand"] == "LaPurita"
 
 
 def test_normalize_rest_v3_shape():

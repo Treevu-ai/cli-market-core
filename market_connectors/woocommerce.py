@@ -16,6 +16,7 @@ Store config:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -62,6 +63,28 @@ def _minor_unit_price(prices: dict[str, Any]) -> tuple[float, float]:
     return price, list_price
 
 
+_BRAND_AFTER_WEIGHT = re.compile(
+    r"\d+(?:[.,]\d+)?\s*(?:gr|g|kg|ml|lt|l|und|u)\s+([A-Za-zÀ-ÿ][\w\-]+)\s*$",
+    re.IGNORECASE,
+)
+_BRAND_AFTER_VOLUME = re.compile(
+    r"\d+(?:[.,]\d+)?\s*(?:l|lt|ml)\s+([A-Za-zÀ-ÿ][\w\-]+)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _brand_from_name(name: str) -> str:
+    """Infer brand from FMCG title when Woo omits brand metadata (common in PE organic shops)."""
+    text = (name or "").strip()
+    if not text:
+        return ""
+    for pattern in (_BRAND_AFTER_WEIGHT, _BRAND_AFTER_VOLUME):
+        m = pattern.search(text)
+        if m:
+            return m.group(1).strip()
+    return ""
+
+
 def _brand_from_raw(raw: dict) -> str:
     brands = raw.get("brands") or []
     if brands and isinstance(brands, list):
@@ -77,7 +100,11 @@ def _brand_from_raw(raw: dict) -> str:
             if terms:
                 t0 = terms[0]
                 return t0.get("name", t0) if isinstance(t0, dict) else str(t0)
-    return str(raw.get("brand") or "—")
+    explicit = str(raw.get("brand") or "").strip()
+    if explicit and explicit != "—":
+        return explicit
+    inferred = _brand_from_name(str(raw.get("name") or ""))
+    return inferred or "—"
 
 
 def _category_from_raw(raw: dict) -> str:
@@ -122,25 +149,47 @@ class WooCommerceConnector(BaseConnector):
             return []
 
     async def fetch_all_products(self, store_config: dict, max_pages: int = 20) -> list[dict]:
-        """Full catalog — requires REST v3 credentials."""
+        """Full catalog via REST v3 (keys) or public Store API pagination."""
         auth = _wc_auth(store_config)
-        if not auth:
-            logger.warning("woocommerce fetch_all_products skipped: no REST credentials")
-            return []
-
         base = _store_base(store_config)
+        if auth:
+            all_items: list[dict] = []
+            for page in range(1, max_pages + 1):
+                batch = await self._rest_get(
+                    base,
+                    auth,
+                    params={"page": page, "per_page": 100, "status": "publish"},
+                )
+                if not batch:
+                    break
+                all_items.extend(batch)
+                if len(batch) < 100:
+                    break
+            if all_items:
+                return all_items
+
+        return await self._store_api_fetch_all(base, max_pages=max_pages)
+
+    async def _store_api_fetch_all(self, base: str, *, max_pages: int) -> list[dict]:
+        """Paginate wc/store/v1/products (no merchant keys; works for Nuna Orgánica pilot)."""
+        url = f"{base}{_STORE_API}"
         all_items: list[dict] = []
-        for page in range(1, max_pages + 1):
-            batch = await self._rest_get(
-                base,
-                auth,
-                params={"page": page, "per_page": 100, "status": "publish"},
-            )
-            if not batch:
-                break
-            all_items.extend(batch)
-            if len(batch) < 100:
-                break
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            for page in range(1, max_pages + 1):
+                resp = await client.get(url, params={"page": page, "per_page": 100})
+                if resp.status_code != 200:
+                    logger.debug("woocommerce store catalog %s page %s -> %s", base, page, resp.status_code)
+                    break
+                data = resp.json()
+                batch = data if isinstance(data, list) else data.get("products", [])
+                if not batch:
+                    break
+                all_items.extend(batch)
+                total_pages = int(resp.headers.get("X-WP-TotalPages") or 0)
+                if total_pages and page >= total_pages:
+                    break
+                if len(batch) < 100:
+                    break
         return all_items
 
     async def _rest_get(
