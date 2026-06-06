@@ -102,8 +102,12 @@ def _api_base_url() -> str:
 def webhook_secret() -> str:
     return _first_env(
         "MERCADOPAGO_WEBHOOK_SECRET",
+        "MERCADOPAGO_WEBHOOK_TOKEN",
         "MERCADOPAGO_SECRET_SIGNATURE",
+        "MERCADOPAGO_WEBHOOK_KEY",
         "MP_WEBHOOK_SECRET",
+        "MP_WEBHOOK_TOKEN",
+        "MERCADO_PAGO_WEBHOOK_SECRET",
     )
 
 
