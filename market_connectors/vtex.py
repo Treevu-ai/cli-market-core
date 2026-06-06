@@ -29,6 +29,18 @@ PAGE_SIZE = 20
 CATALOG_PAGE_SIZE = 50
 
 _VTEX_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+_VTEX_OK_STATUSES = frozenset({200, 206})
+
+
+def _vtex_json_list(resp: httpx.Response) -> list[dict] | None:
+    """Parse VTEX catalog search response; 206 Partial Content is valid."""
+    if resp.status_code not in _VTEX_OK_STATUSES:
+        return None
+    ct = resp.headers.get("content-type", "")
+    if "json" not in ct:
+        return None
+    data = resp.json()
+    return data if isinstance(data, list) else None
 
 
 def _vtex_headers(store_config: dict) -> dict[str, str]:
@@ -246,13 +258,10 @@ class VtexConnector(BaseConnector):
                 try:
                     async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, cookies=cached_cookies) as client:
                         resp = await client.get(url, params=params, headers=headers)
-                        if resp.status_code == 200:
-                            ct = resp.headers.get("content-type", "")
-                            if "json" in ct:
-                                data = resp.json()
-                                if isinstance(data, list) and len(data) > 0:
-                                    logger.debug(f"Cache-assisted search succeeded for {store_key}")
-                                    return data
+                        data = _vtex_json_list(resp)
+                        if data:
+                            logger.debug(f"Cache-assisted search succeeded for {store_key}")
+                            return data
                 except Exception as e:
                     logger.debug(f"Cached cookie attempt failed for {store_key}: {e}")
 
@@ -268,14 +277,10 @@ class VtexConnector(BaseConnector):
                         await asyncio.sleep(2.0)
                         resp = await client.get(url, params=params, headers=headers)
 
-                    # Check for success
-                    if resp.status_code == 200:
-                        ct = resp.headers.get("content-type", "")
-                        if "json" in ct:
-                            data = resp.json()
-                            if isinstance(data, list):
-                                logger.debug(f"Direct search succeeded for {store_key}")
-                                return data
+                    data = _vtex_json_list(resp)
+                    if data is not None:
+                        logger.debug(f"Direct search succeeded for {store_key}")
+                        return data
 
                     # Log the failure before attempting fallback
                     logger.warning(f"Direct HTTP search failed for {store_key}: status={resp.status_code}, content_type={resp.headers.get('content-type', 'unknown')}")
