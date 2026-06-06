@@ -23,31 +23,37 @@ def is_sandbox() -> bool:
     )
 
 
-def access_token() -> str:
-    """Resolve access token from Railway env (sandbox vs production)."""
-    if is_sandbox():
-        for key in (
-            "MERCADOPAGO_ACCESS_TOKEN_SANDBOX",
-            "MERCADOPAGO_ACCESS_TOKEN_TEST",
-            "MP_ACCESS_TOKEN_SANDBOX",
-            "MERCADOPAGO_ACCESS_TOKEN",
-            "MP_ACCESS_TOKEN",
-        ):
-            val = os.getenv(key, "").strip()
-            if val:
-                return val
-        return ""
-    for key in (
-        "MERCADOPAGO_ACCESS_TOKEN_PRODUCTION",
-        "MERCADOPAGO_ACCESS_TOKEN_PROD",
-        "MP_ACCESS_TOKEN_PRODUCTION",
-        "MERCADOPAGO_ACCESS_TOKEN",
-        "MP_ACCESS_TOKEN",
-    ):
+def _first_env(*keys: str) -> str:
+    for key in keys:
         val = os.getenv(key, "").strip()
         if val:
             return val
     return ""
+
+
+def access_token() -> str:
+    """Resolve access token from Railway env (sandbox vs production)."""
+    if is_sandbox():
+        return _first_env(
+            "MERCADOPAGO_ACCESS_TOKEN_SANDBOX",
+            "MERCADOPAGO_ACCESS_TOKEN_TEST",
+            "MERCADOPAGO_SANDBOX_ACCESS_TOKEN",
+            "MP_ACCESS_TOKEN_SANDBOX",
+            "MERCADO_PAGO_ACCESS_TOKEN_SANDBOX",
+            "MERCADOPAGO_ACCESS_TOKEN",
+            "MERCADO_PAGO_ACCESS_TOKEN",
+            "MP_ACCESS_TOKEN",
+        )
+    return _first_env(
+        "MERCADOPAGO_ACCESS_TOKEN_PRODUCTION",
+        "MERCADOPAGO_ACCESS_TOKEN_PROD",
+        "MERCADOPAGO_PRODUCTION_ACCESS_TOKEN",
+        "MP_ACCESS_TOKEN_PRODUCTION",
+        "MERCADO_PAGO_ACCESS_TOKEN_PRODUCTION",
+        "MERCADOPAGO_ACCESS_TOKEN",
+        "MERCADO_PAGO_ACCESS_TOKEN",
+        "MP_ACCESS_TOKEN",
+    )
 
 
 def public_key() -> str:
@@ -68,19 +74,31 @@ def public_key() -> str:
     )
 
 
-def notification_url() -> str:
+def _api_base_url() -> str:
+    """Public API host for webhooks (not the marketing landing)."""
     explicit = os.getenv("MERCADOPAGO_WEBHOOK_URL", "").strip()
     if explicit:
-        return explicit.rstrip("/")
-    base = (
-        os.getenv("MARKET_API_URL", "").strip()
-        or os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
-    )
-    if base and not base.startswith("http"):
-        base = f"https://{base}"
-    if not base:
-        base = "https://cli-market-production.up.railway.app"
-    return base.rstrip("/") + "/checkout/mercadopago-webhook"
+        return explicit.rstrip("/").rsplit("/checkout/mercadopago-webhook", 1)[0]
+
+    railway = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if railway:
+        return f"https://{railway}".rstrip("/")
+
+    for key in ("PUBLIC_API_URL", "API_BASE_URL", "MARKET_API_URL"):
+        base = os.getenv(key, "").strip()
+        if not base:
+            continue
+        if not base.startswith("http"):
+            base = f"https://{base}"
+        if base.rstrip("/").endswith("cli-market.dev"):
+            continue
+        return base.rstrip("/")
+
+    return "https://cli-market-production.up.railway.app"
+
+
+def notification_url() -> str:
+    return _api_base_url() + "/checkout/mercadopago-webhook"
 
 
 def _auth_headers() -> dict[str, str]:
