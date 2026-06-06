@@ -81,7 +81,7 @@ def _api_base_url() -> str:
         return explicit.rstrip("/").rsplit("/checkout/mercadopago-webhook", 1)[0]
 
     railway = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
-    if railway:
+    if railway and railway not in ("cli-market.dev", "www.cli-market.dev"):
         return f"https://{railway}".rstrip("/")
 
     for key in ("PUBLIC_API_URL", "API_BASE_URL", "MARKET_API_URL"):
