@@ -61,8 +61,16 @@ def _live_price_label(fallback: str = "45,000+") -> str:
     return fallback
 
 PRICES_VERIFIED_LABEL = _live_price_label()
+PYPI_PACKAGE_NAME = "cli-market-world"
 PACKAGE_VERSION = "1.9.5"
 LICENSE = "MIT"
+PYPI_URL = f"https://pypi.org/project/{PYPI_PACKAGE_NAME}/"
+PEPY_PROJECT_URL = f"https://pepy.tech/projects/{PYPI_PACKAGE_NAME}"
+PEPY_BADGE_URL = (
+    f"https://static.pepy.tech/personalized-badge/{PYPI_PACKAGE_NAME}"
+    "?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads"
+)
+PIP_INSTALL_CMD = f"pip install {PYPI_PACKAGE_NAME}"
 PAYMENTS_LABEL = "PayPal · Mercado Pago · QR (Yape/Plin)"
 BUSINESS_LINES = 6
 PLATFORM_LIST_EN = "VTEX · Shopify · Magento · WooCommerce"
@@ -135,5 +143,5 @@ def seo_description() -> str:
     return (
         f"Commerce API for AI agents. {MCP_TOOLS} MCP tools, {RETAILERS_PHRASE_EN}. "
         f"{COUNTRIES} countries. {PRICES_VERIFIED_LABEL} verified shelf prices refreshed every {PRICES_REFRESH_HOURS} hours. "
-        "Normalized per kg/L, quality-filtered. pip install cli-market."
+        f"Normalized per kg/L, quality-filtered. {PIP_INSTALL_CMD}."
     )
