@@ -18,6 +18,7 @@ PRO_PAYMENT_URL = os.getenv(
     "https://www.paypal.com/ncp/payment/B6YVFTG4MA73J",
 )
 PRO_PRICE_LABEL = os.getenv("PRO_PRICE_LABEL", "$79/month")
+STARTER_PRICE_LABEL = os.getenv("STARTER_PRICE_LABEL", "$29/month")
 
 
 def _smtp_configured() -> bool:
@@ -546,6 +547,124 @@ market doctor
 <p style="margin:0;font-size:12px;color:#b9cac2;">— Ricardo · CLI Market</p>
 </td></tr>
 </table></td></tr></table>
+</body></html>"""
+    return _send(to_email, subject, text, html)
+
+
+def send_starter_subscribe_pending_email(
+    *,
+    to_email: str,
+    username: str,
+    approve_url: str,
+    request_id: str = "",
+    lang: str = "en",
+) -> dict:
+    """Email after PayPal Starter subscription is created — confirm in PayPal."""
+    ref_line_es = f"\nReferencia: {request_id}" if request_id else ""
+    ref_line_en = f"\nReference: {request_id}" if request_id else ""
+
+    if lang == "es":
+        subject = "Confirme su suscripción Starter en PayPal — CLI Market"
+        text = f"""Hola {username},
+
+Iniciamos su suscripción Starter ({STARTER_PRICE_LABEL}). Un paso más:
+
+1. Confirme en PayPal
+2. Starter se activa automáticamente en segundos (webhook)
+3. Verifique: market whoami  →  tier: starter
+
+CONFIRMAR EN PAYPAL → {approve_url}
+{ref_line_es}
+
+Incluye: 5.000 consultas/día · 3 alertas · export CSV.
+
+— Ricardo · CLI Market
+hello@cli-market.dev
+"""
+        html = f"""<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0a0b;color:#e5e2e3;padding:24px;">
+<h2 style="color:#3afecf;">Confirme Starter en PayPal</h2>
+<p>Hola <strong>{username}</strong>,</p>
+<p>Starter ({STARTER_PRICE_LABEL}) se activa <strong>automáticamente</strong> tras confirmar en PayPal.</p>
+<p><a href="{approve_url}" style="color:#002118;background:#3afecf;padding:12px 24px;text-decoration:none;border-radius:4px;font-weight:bold;">Confirmar en PayPal →</a></p>
+</body></html>"""
+    else:
+        subject = "Confirm your Starter subscription on PayPal — CLI Market"
+        text = f"""Hi {username},
+
+We started your Starter subscription ({STARTER_PRICE_LABEL}). One step left:
+
+1. Confirm on PayPal
+2. Starter activates automatically within seconds (webhook)
+3. Verify: market whoami  →  tier: starter
+
+CONFIRM ON PAYPAL → {approve_url}
+{ref_line_en}
+
+Includes: 5,000 requests/day · 3 alerts · CSV export.
+
+— Ricardo · CLI Market
+hello@cli-market.dev
+"""
+        html = f"""<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0a0b;color:#e5e2e3;padding:24px;">
+<h2 style="color:#3afecf;">Confirm Starter on PayPal</h2>
+<p>Hi <strong>{username}</strong>,</p>
+<p>Starter ({STARTER_PRICE_LABEL}) activates <strong>automatically</strong> after PayPal confirmation.</p>
+<p><a href="{approve_url}" style="color:#002118;background:#3afecf;padding:12px 24px;text-decoration:none;border-radius:4px;font-weight:bold;">Confirm on PayPal →</a></p>
+</body></html>"""
+    return _send(to_email, subject, text, html)
+
+
+def send_starter_activated_email(
+    *,
+    to_email: str,
+    username: str,
+    lang: str = "en",
+    subscription_id: str = "",
+) -> dict:
+    """Confirm Starter activation after PayPal webhook."""
+    sub_line = f"\nPayPal: {subscription_id}" if subscription_id else ""
+    if lang == "es":
+        subject = "CLI Market Starter activo — ya puede usar alertas y export"
+        text = f"""Hola {username},
+
+Su plan Starter quedó activo automáticamente tras confirmar en PayPal.
+
+  market whoami
+  market doctor
+  market alerts --action list
+
+Límites Starter:
+• 5.000 consultas / día
+• 3 claves API (lectura)
+• 3 alertas de precio
+• Exportación CSV
+{sub_line}
+
+— Ricardo · CLI Market
+"""
+    else:
+        subject = "CLI Market Starter is active"
+        text = f"""Hi {username},
+
+Your Starter plan is active after PayPal confirmation.
+
+  market whoami
+  market doctor
+  market alerts --action list
+
+Starter limits:
+• 5,000 requests / day
+• 3 API keys (read-only)
+• 3 price alerts
+• CSV export
+{sub_line}
+
+— Ricardo · CLI Market
+"""
+    html = f"""<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0a0b;color:#e5e2e3;padding:24px;">
+<h2 style="color:#3afecf;">Starter active</h2>
+<p>Hi <strong>{username}</strong>,</p>
+<p>Run <code>market whoami</code> — tier should be <strong>starter</strong>.</p>
 </body></html>"""
     return _send(to_email, subject, text, html)
 

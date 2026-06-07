@@ -280,8 +280,14 @@ def db_get_user_email(username: str) -> str | None:
     return row["email"] if row else None
 
 
-def db_create_subscription_request(username: str, email: str, payment_link: str) -> dict:
-    req_id = f"PRO-{uuid.uuid4().hex[:8].upper()}"
+def db_create_subscription_request(
+    username: str,
+    email: str,
+    payment_link: str,
+    *,
+    prefix: str = "PRO",
+) -> dict:
+    req_id = f"{prefix}-{uuid.uuid4().hex[:8].upper()}"
     db = market_core.get_db()
     db.execute(
         """

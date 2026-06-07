@@ -16,7 +16,10 @@ PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID", "")
 PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET", "")
 PAYPAL_SANDBOX = os.getenv("PAYPAL_SANDBOX", "true").lower() == "true"
 PAYPAL_PLAN_ID = os.getenv("PAYPAL_PLAN_ID", "")
+PAYPAL_STARTER_PLAN_ID = os.getenv("PAYPAL_STARTER_PLAN_ID", "")
 PAYPAL_WEBHOOK_ID = os.getenv("PAYPAL_WEBHOOK_ID", "")
+PRO_PRICE_USD = float(os.getenv("PRO_PRICE_USD", "79"))
+STARTER_PRICE_USD = float(os.getenv("STARTER_PRICE_USD", "29"))
 
 PAYPAL_API = "https://api-m.sandbox.paypal.com" if PAYPAL_SANDBOX else "https://api-m.paypal.com"
 
@@ -118,16 +121,26 @@ async def capture_order(paypal_order_id: str) -> dict:
         return {"ok": False, "error": resp.text, "status": resp.status_code}
 
 
-async def _ensure_billing_plan(token: str, client: httpx.AsyncClient, amount: float, currency: str) -> str:
-    if PAYPAL_PLAN_ID:
-        return PAYPAL_PLAN_ID
+async def _ensure_billing_plan(
+    token: str,
+    client: httpx.AsyncClient,
+    amount: float,
+    currency: str,
+    *,
+    env_plan_id: str,
+    product_name: str,
+    plan_name: str,
+    description: str,
+) -> str:
+    if env_plan_id:
+        return env_plan_id
     h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     p1 = await client.post(
         f"{PAYPAL_API}/v1/catalogs/products",
         json={
-            "name": "CLI Market Pro",
+            "name": product_name,
             "type": "SERVICE",
-            "description": "Monthly subscription — 10,000 req/day, checkout, export",
+            "description": description,
         },
         headers=h,
     )
@@ -138,8 +151,8 @@ async def _ensure_billing_plan(token: str, client: httpx.AsyncClient, amount: fl
         f"{PAYPAL_API}/v1/billing/plans",
         json={
             "product_id": product_id,
-            "name": "CLI Market Pro Monthly",
-            "description": "$79/month",
+            "name": plan_name,
+            "description": description,
             "status": "ACTIVE",
             "billing_cycles": [{
                 "frequency": {"interval_unit": "MONTH", "interval_count": 1},
@@ -159,18 +172,49 @@ async def _ensure_billing_plan(token: str, client: httpx.AsyncClient, amount: fl
     return p2.json()["id"]
 
 
+def _plan_config(plan: str) -> dict:
+    if plan == "starter":
+        return {
+            "amount": STARTER_PRICE_USD,
+            "env_plan_id": PAYPAL_STARTER_PLAN_ID,
+            "product_name": "CLI Market Starter",
+            "plan_name": "CLI Market Starter Monthly",
+            "description": f"${STARTER_PRICE_USD:.0f}/month — alerts, CSV export, 5k req/day",
+        }
+    return {
+        "amount": PRO_PRICE_USD,
+        "env_plan_id": PAYPAL_PLAN_ID,
+        "product_name": "CLI Market Pro",
+        "plan_name": "CLI Market Pro Monthly",
+        "description": f"${PRO_PRICE_USD:.0f}/month — checkout, export, 10k req/day",
+    }
+
+
 async def create_subscription(
     username: str,
-    amount: float = 49.0,
+    amount: float | None = None,
     currency: str = "USD",
     return_url: str = "https://cli-market.dev?sub=success",
     cancel_url: str = "https://cli-market.dev?sub=cancelled",
+    *,
+    plan: str = "pro",
 ) -> dict:
-    """Create a PayPal subscription (Pro plan $79/mo)."""
+    """Create a PayPal subscription (Pro $79/mo or Starter $29/mo)."""
+    cfg = _plan_config(plan)
+    amount = amount if amount is not None else cfg["amount"]
     token = await _get_access_token()
     async with httpx.AsyncClient(timeout=15.0) as client:
         h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        plan_id = await _ensure_billing_plan(token, client, amount, currency)
+        plan_id = await _ensure_billing_plan(
+            token,
+            client,
+            amount,
+            currency,
+            env_plan_id=cfg["env_plan_id"],
+            product_name=cfg["product_name"],
+            plan_name=cfg["plan_name"],
+            description=cfg["description"],
+        )
         p3 = await client.post(
             f"{PAYPAL_API}/v1/billing/subscriptions",
             json={
@@ -197,6 +241,8 @@ async def create_subscription(
                 "status": data["status"],
                 "approve_url": approve_link,
                 "plan_id": plan_id,
+                "plan": plan,
+                "amount": amount,
             }
         return {"error": f"Subscription failed: {p3.text}"}
 
@@ -212,12 +258,28 @@ WEBHOOK_EVENT_TYPES = [
 ]
 
 
-async def create_pro_plan(amount: float = 49.0, currency: str = "USD") -> dict:
-    """Create catalog product + billing plan. Returns {product_id, plan_id}."""
+async def create_billing_plan(plan: str = "pro", amount: float | None = None, currency: str = "USD") -> dict:
+    """Create catalog product + billing plan. Returns {plan_id, plan, amount}."""
+    cfg = _plan_config(plan)
+    amount = amount if amount is not None else cfg["amount"]
     token = await _get_access_token()
     async with httpx.AsyncClient(timeout=15.0) as client:
-        plan_id = await _ensure_billing_plan(token, client, amount, currency)
-    return {"plan_id": plan_id, "amount": amount, "currency": currency}
+        plan_id = await _ensure_billing_plan(
+            token,
+            client,
+            amount,
+            currency,
+            env_plan_id=cfg["env_plan_id"],
+            product_name=cfg["product_name"],
+            plan_name=cfg["plan_name"],
+            description=cfg["description"],
+        )
+    return {"plan_id": plan_id, "plan": plan, "amount": amount, "currency": currency}
+
+
+async def create_pro_plan(amount: float | None = None, currency: str = "USD") -> dict:
+    """Backward-compatible Pro plan helper."""
+    return await create_billing_plan("pro", amount, currency)
 
 
 async def register_webhook(url: str) -> dict:
@@ -260,5 +322,6 @@ async def check_connection() -> dict:
         "api_url": PAYPAL_API,
         "token_preview": f"{token[:8]}...",
         "plan_id_env": PAYPAL_PLAN_ID or None,
+        "starter_plan_id_env": PAYPAL_STARTER_PLAN_ID or None,
         "webhook_id_env": PAYPAL_WEBHOOK_ID or None,
     }
