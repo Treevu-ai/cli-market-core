@@ -66,9 +66,11 @@ PACKAGE_VERSION = "1.9.5"
 LICENSE = "MIT"
 PYPI_URL = f"https://pypi.org/project/{PYPI_PACKAGE_NAME}/"
 PEPY_PROJECT_URL = f"https://pepy.tech/projects/{PYPI_PACKAGE_NAME}"
+# static.pepy.tech personalized-badge 404s until Pepy indexes a new PyPI name;
+# shields.io/pepy/dt uses the same Pepy download data and works immediately.
 PEPY_BADGE_URL = (
-    f"https://static.pepy.tech/personalized-badge/{PYPI_PACKAGE_NAME}"
-    "?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads"
+    f"https://img.shields.io/pepy/dt/{PYPI_PACKAGE_NAME}"
+    "?label=downloads&color=00d75f&logo=pypi"
 )
 PIP_INSTALL_CMD = f"pip install {PYPI_PACKAGE_NAME}"
 PAYMENTS_LABEL = "PayPal · Mercado Pago · QR (Yape/Plin)"
