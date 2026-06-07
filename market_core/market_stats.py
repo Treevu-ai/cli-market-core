@@ -18,7 +18,7 @@ def _default_store_keys():
     return get_default_stores()
 
 def _mcp_tools_count():
-    from .market_mcp import TOOLS
+    from .market_mcp_registry import TOOLS
     return len(TOOLS)
 
 def _indicators_count():
