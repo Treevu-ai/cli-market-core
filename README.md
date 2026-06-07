@@ -1,8 +1,10 @@
 # cli-market-core
 
-> **Private repo** · Treevu-ai org — request access from maintainer.
-
 > **Intelligence Layer** — Indicators, billing, connectors, and MCP tools for CLI Market
+
+```bash
+pip install cli-market-core
+```
 
 ---
 
@@ -30,7 +32,7 @@ cli-market-world    ->  Exposure (landing, docs, MCP registry)
 | `market_core.py` | Core service orchestrator |
 | `market_indicators.py` | 34 market indicators from shelf data |
 | `market_spread.py` | Cross-retailer price spreads |
-| `market_stats.py` | Platform statistics and version (v1.8.0) |
+| `market_stats.py` | Platform statistics and version |
 | `market_db.py` | Database access layer |
 | `market_mcp.py` | 43 MCP tool definitions |
 | `market_basket.py` | Basket comparison logic |
@@ -59,7 +61,7 @@ cli-market-world    ->  Exposure (landing, docs, MCP registry)
 
 ## Version
 
-Current: **1.8.9** — 68 retailers, 4 platforms (incl. WooCommerce FMCG pilot `nunaorganica_pe`)
+Current: **1.9.5** — 68 retailers, 4 platforms (incl. WooCommerce FMCG pilot `nunaorganica_pe`)
 
 ---
 
