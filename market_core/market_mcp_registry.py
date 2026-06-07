@@ -1,9 +1,9 @@
 """MCP tool registry — canonical definitions, metadata, aliases, and profiles.
 
-PR1+PR2: canonical tool registry with metadata, aliases, and profiles.
-Legacy names (43 original + 7 aliases) resolve via ALIASES; ``tools/list`` defaults to
-the ``legacy`` profile (all 45 registered tools) for backward compatibility.
-Set ``MCP_TOOL_PROFILE=default|full|admin`` to filter by bundle/tier.
+PR1+PR2+PR5: canonical tool registry with metadata, aliases, and profiles.
+``tools/list`` defaults to the ``default`` profile (22 curated Shop/Intel/Account tools).
+Set ``MCP_TOOL_PROFILE=legacy`` for all 46 registered tools (includes deprecated aliases).
+Also: ``full`` (43) and ``admin`` (46 + scan/refresh).
 """
 
 from __future__ import annotations
@@ -658,9 +658,9 @@ def tool_in_profile(name: str, profile: str) -> bool:
 
 
 def get_profile() -> str:
-    """Active MCP tool profile from env (default: legacy = all 43 tools)."""
-    raw = (os.environ.get("MCP_TOOL_PROFILE") or "legacy").strip().lower()
-    return raw if raw in PROFILES else "legacy"
+    """Active MCP tool profile from env (default: default = 22 curated tools)."""
+    raw = (os.environ.get("MCP_TOOL_PROFILE") or "default").strip().lower()
+    return raw if raw in PROFILES else "default"
 
 
 def list_tools(profile: str | None = None) -> list[dict[str, Any]]:

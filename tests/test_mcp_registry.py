@@ -13,6 +13,7 @@ from market_core.market_mcp_registry import (
     ORIGINAL_TOOL_NAMES,
     TOOLS,
     get_deprecation,
+    get_profile,
     get_tool_meta,
     list_tools,
     public_tool_count,
@@ -67,6 +68,16 @@ def test_dynamic_retailer_stats_in_search_description():
     search = next(t for t in TOOLS if t["name"] == "market_search")
     assert str(RETAILERS_VERIFIED) in search["description"]
     assert str(COUNTRIES) in search["description"]
+
+
+def test_get_profile_defaults_to_default(monkeypatch):
+    monkeypatch.delenv("MCP_TOOL_PROFILE", raising=False)
+    assert get_profile() == "default"
+
+
+def test_get_profile_legacy_env(monkeypatch):
+    monkeypatch.setenv("MCP_TOOL_PROFILE", "legacy")
+    assert get_profile() == "legacy"
 
 
 def test_legacy_profile_lists_all_46():
