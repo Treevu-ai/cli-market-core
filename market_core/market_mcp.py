@@ -19,8 +19,8 @@ import sys
 from .market_core import API, SESSION_FILE, api, get_token  # noqa: F401
 from .market_mcp_registry import (
     TOOLS,
+    get_deprecation,
     get_profile,
-    is_deprecated_alias,
     list_tools,
     resolve_tool_name,
 )
@@ -37,17 +37,57 @@ __all__ = [
     "resolve_tool_name",
 ]
 
-
 def _checkout_api(args: dict) -> dict:
     pm = (args.get("payment_method") or "yape").lower()
     routes = {"yape": "/checkout/yape", "plin": "/checkout/yape", "paypal": "/checkout/paypal", "tarjeta": "/checkout/paypal"}
     return api("POST", routes.get(pm, "/checkout/yape"), {})
 
 
+def _discover_api(args: dict) -> dict:
+    """Compose lines + stores + countries; optional legacy slice for alias callers."""
+    lines = api("GET", "/lines")
+    store_qs = []
+    if args.get("country"):
+        store_qs.append(f"country={args['country']}")
+    if args.get("line"):
+        store_qs.append(f"line={args['line']}")
+    stores_path = "/stores" + (f"?{'&'.join(store_qs)}" if store_qs else "")
+    stores = api("GET", stores_path)
+    countries = api("GET", "/countries")
+    slice_key = args.get("_slice")
+    if slice_key == "lines":
+        return lines
+    if slice_key == "stores":
+        return stores
+    if slice_key == "countries":
+        return countries
+    return {"lines": lines, "stores": stores, "countries": countries}
+
+
+def _price_alerts_api(args: dict) -> dict:
+    return api(
+        "GET",
+        f"/v1/intel/alerts?product={args['product']}&store={args.get('store', '')}"
+        f"&threshold_pct={args.get('threshold_pct', 5.0)}&limit={args.get('limit', 10)}",
+    )
+
+
+def _normalize_args(requested: str, canonical: str, args: dict) -> dict:
+    """Map legacy tool args to canonical handler shape."""
+    out = dict(args)
+    if requested in ("market_lines", "market_stores", "market_countries"):
+        out["_slice"] = requested.removeprefix("market_")
+    elif requested == "market_cart_remove":
+        out.setdefault("quantity", 0)
+    elif requested == "market_reorder":
+        out["reorder_last"] = True
+    return out
+
+
 def _tool_handlers() -> dict:
     return {
         "market_login": lambda a: api("POST", "/auth/login", {"username": a["username"], "password": a["password"]}),
-        "market_lines": lambda a: api("GET", "/lines"),
+        "market_discover": _discover_api,
         "market_search": lambda a: api(
             "POST",
             "/products/search",
@@ -71,10 +111,12 @@ def _tool_handlers() -> dict:
         ),
         "market_cart": lambda a: api("GET", "/cart"),
         "market_cart_update": lambda a: api("PUT", "/cart/update", {"product_id": a["product_id"], "quantity": a["quantity"]}),
-        "market_cart_remove": lambda a: api("DELETE", f"/cart/{a['product_id']}"),
         "market_checkout": lambda a: _checkout_api(a),
-        "market_orders": lambda a: api("GET", "/orders"),
-        "market_reorder": lambda a: api("POST", "/orders/reorder"),
+        "market_orders": lambda a: (
+            api("POST", "/orders/reorder", {})
+            if a.get("reorder_last")
+            else api("GET", "/orders")
+        ),
         "market_ask": lambda a: api("POST", "/agent/ask", {"prompt": a["prompt"]}),
         "market_basket": lambda a: api("POST", "/v1/basket/compare", {"items": a["items"], "stores": a.get("stores")}),
         "market_inflation": lambda a: api(
@@ -95,8 +137,6 @@ def _tool_handlers() -> dict:
         "market_categories": lambda a: api("GET", f"/categories/{a['store']}"),
         "market_barcode": lambda a: api("GET", f"/products/barcode/{a['code']}"),
         "market_enrich": lambda a: api("GET", f"/products/enrich?query={a['query']}&limit={a.get('limit', 5)}"),
-        "market_stores": lambda a: api("GET", "/stores"),
-        "market_countries": lambda a: api("GET", "/countries"),
         "market_ticket": lambda a: api("POST", "/v1/ticket/scan-url", {"url": a["url"], "country": a.get("country")}),
         "market_voice": lambda a: api("POST", "/v1/voice/transcribe-url", {"url": a["url"]}),
         "market_price_history": lambda a: api(
@@ -109,11 +149,7 @@ def _tool_handlers() -> dict:
             "GET",
             f"/analytics/indicators?country={a.get('country', '')}&line={a.get('line', '')}&limit={a.get('limit', 30)}",
         ),
-        "market_alerts": lambda a: api(
-            "GET",
-            f"/v1/intel/alerts?product={a['product']}&store={a.get('store', '')}"
-            f"&threshold_pct={a.get('threshold_pct', 5.0)}&limit={a.get('limit', 10)}",
-        ),
+        "market_price_alerts": _price_alerts_api,
         "market_whoami": lambda a: api("GET", "/auth/whoami"),
         "market_preferences": lambda a: api("GET", "/agent/preferences"),
         "market_subscription": lambda a: api("GET", "/auth/subscription"),
@@ -147,11 +183,6 @@ def _tool_handlers() -> dict:
                 "store": a.get("store", ""),
             },
         ),
-        "market_notify": lambda a: api(
-            "GET",
-            f"/v1/intel/alerts?product={a['product']}&store={a.get('store', '')}"
-            f"&threshold_pct={a.get('threshold_pct', 5.0)}",
-        ),
         "market_exchange": lambda a: api(
             "POST",
             "/v1/utils/exchange",
@@ -167,6 +198,14 @@ def _tool_handlers() -> dict:
 _TOOL_MAP = _tool_handlers()
 
 
+def _attach_deprecation(result: object, notice: dict[str, str] | None) -> object:
+    if not notice:
+        return result
+    if isinstance(result, dict):
+        return {**result, "_deprecation": notice}
+    return {"data": result, "_deprecation": notice}
+
+
 def handle_tool(name: str, args: dict) -> str:
     """Dispatch MCP tool calls to the API. Resolves legacy aliases."""
     canonical = resolve_tool_name(name)
@@ -176,12 +215,9 @@ def handle_tool(name: str, args: dict) -> str:
     if not handler:
         return json.dumps({"error": f"Unknown tool: {name}"})
     try:
-        result = handler(args)
-        if is_deprecated_alias(name):
-            if isinstance(result, dict):
-                result = {**result, "_deprecation": {"alias": name, "use": canonical}}
-            else:
-                result = {"data": result, "_deprecation": {"alias": name, "use": canonical}}
+        normalized = _normalize_args(name, canonical, args)
+        result = handler(normalized)
+        result = _attach_deprecation(result, get_deprecation(name))
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})

@@ -1,4 +1,4 @@
-"""Tests for MCP tool registry (PR1): metadata, aliases, profiles, legacy compat."""
+"""Tests for MCP tool registry: metadata, aliases, profiles, legacy compat."""
 
 from __future__ import annotations
 
@@ -9,8 +9,10 @@ import pytest
 
 from market_core.market_mcp import handle_tool
 from market_core.market_mcp_registry import (
-    CANONICAL_NAMES,
+    ALIASES,
+    ORIGINAL_TOOL_NAMES,
     TOOLS,
+    get_deprecation,
     get_tool_meta,
     list_tools,
     public_tool_count,
@@ -18,15 +20,25 @@ from market_core.market_mcp_registry import (
 )
 
 
-LEGACY_NAMES = sorted(CANONICAL_NAMES)
-
 BUNDLE_PREFIXES = ("[Shop]", "[Intel]", "[Account]", "[Advanced]", "[Admin]")
 
 
-def test_registry_has_43_tools():
-    assert len(TOOLS) == 43
+def test_registry_has_45_tools():
+    assert len(TOOLS) == 45
     names = [t["name"] for t in TOOLS]
     assert len(names) == len(set(names))
+
+
+def test_original_43_names_still_registered():
+    assert len(ORIGINAL_TOOL_NAMES) == 43
+    for name in ORIGINAL_TOOL_NAMES:
+        assert name in {t["name"] for t in TOOLS}
+
+
+def test_pr2_new_canonical_tools():
+    names = {t["name"] for t in TOOLS}
+    assert "market_discover" in names
+    assert "market_price_alerts" in names
 
 
 def test_every_tool_has_metadata():
@@ -56,13 +68,22 @@ def test_dynamic_retailer_stats_in_search_description():
     assert str(COUNTRIES) in search["description"]
 
 
-def test_legacy_profile_lists_all_43():
-    assert len(list_tools("legacy")) == 43
+def test_legacy_profile_lists_all_45():
+    assert len(list_tools("legacy")) == 45
 
 
-def test_default_profile_is_smaller():
+def test_default_profile_includes_pr2_canonicals():
+    names = {t["name"] for t in list_tools("default")}
+    assert "market_discover" in names
+    assert "market_price_alerts" in names
+    assert "market_lines" not in names
+    assert "market_alerts" not in names
+    assert "market_notify" not in names
+
+
+def test_default_profile_is_curated_size():
     default_count = public_tool_count("default")
-    assert 18 <= default_count <= 24
+    assert 19 <= default_count <= 23
 
 
 def test_admin_profile_includes_scan():
@@ -85,15 +106,15 @@ def test_list_tools_strips_meta():
         assert "inputSchema" in tool
 
 
-@pytest.mark.parametrize("name", LEGACY_NAMES)
-def test_resolve_legacy_name(name: str):
-    assert resolve_tool_name(name) == name
+@pytest.mark.parametrize("alias,canonical", list(ALIASES.items()))
+def test_pr2_aliases_resolve(alias: str, canonical: str):
+    assert resolve_tool_name(alias) == canonical
 
 
-@pytest.mark.parametrize("name", LEGACY_NAMES)
-def test_handle_tool_accepts_legacy_name(name: str):
-    """All 43 legacy tool names must dispatch without 'Unknown tool'."""
-    with patch("market_core.market_mcp.api", return_value={"ok": True}):
+@pytest.mark.parametrize("name", sorted(ORIGINAL_TOOL_NAMES))
+def test_handle_tool_accepts_original_43_names(name: str):
+    """All 43 original tool names must dispatch without 'Unknown tool'."""
+    with patch("market_core.market_mcp.api", return_value={"ok": True}) as mock_api:
         if name == "market_login":
             raw = handle_tool(name, {"username": "u", "password": "p"})
         elif name in ("market_search", "market_compare"):
@@ -103,7 +124,7 @@ def test_handle_tool_accepts_legacy_name(name: str):
                 name,
                 {"product_id": "1", "name": "x", "price": 1.0, "store": "metro"},
             )
-        elif name in ("market_cart_update",):
+        elif name == "market_cart_update":
             raw = handle_tool(name, {"product_id": "1", "quantity": 0})
         elif name == "market_cart_remove":
             raw = handle_tool(name, {"product_id": "1"})
@@ -121,9 +142,7 @@ def test_handle_tool_accepts_legacy_name(name: str):
             raw = handle_tool(name, {"url": "https://example.com/t.jpg"})
         elif name == "market_voice":
             raw = handle_tool(name, {"url": "https://example.com/a.ogg"})
-        elif name == "market_alerts":
-            raw = handle_tool(name, {"product": "leche"})
-        elif name == "market_notify":
+        elif name in ("market_alerts", "market_notify"):
             raw = handle_tool(name, {"product": "leche"})
         elif name == "market_stock":
             raw = handle_tool(name, {"product_id": "1", "store": "metro"})
@@ -148,3 +167,52 @@ def test_get_tool_meta_market_basket():
     assert meta is not None
     assert meta["bundle"] == "shop"
     assert "market_search" in meta["pairs_with"]
+
+
+def test_market_discover_composes_three_apis():
+    with patch("market_core.market_mcp.api", side_effect=[{"lines": 1}, {"stores": 2}, {"countries": 3}]):
+        raw = handle_tool("market_discover", {})
+    data = json.loads(raw)
+    assert data["lines"] == {"lines": 1}
+    assert data["stores"] == {"stores": 2}
+    assert data["countries"] == {"countries": 3}
+
+
+def test_legacy_lines_returns_lines_slice():
+    with patch("market_core.market_mcp.api", side_effect=[{"lines": "L"}, {"stores": "S"}, {"countries": "C"}]):
+        raw = handle_tool("market_lines", {})
+    data = json.loads(raw)
+    assert data["lines"] == "L"
+    assert data["_deprecation"]["use"] == "market_discover"
+
+
+def test_cart_remove_uses_cart_update_with_zero_qty():
+    with patch("market_core.market_mcp.api", return_value={"updated": True}) as mock_api:
+        handle_tool("market_cart_remove", {"product_id": "sku-1"})
+    mock_api.assert_called_once_with("PUT", "/cart/update", {"product_id": "sku-1", "quantity": 0})
+
+
+def test_reorder_uses_orders_reorder_last():
+    with patch("market_core.market_mcp.api", return_value={"reordered": True}) as mock_api:
+        handle_tool("market_reorder", {})
+    mock_api.assert_called_once_with("POST", "/orders/reorder", {})
+
+
+def test_orders_reorder_last_param():
+    with patch("market_core.market_mcp.api", return_value={"reordered": True}) as mock_api:
+        handle_tool("market_orders", {"reorder_last": True})
+    mock_api.assert_called_once_with("POST", "/orders/reorder", {})
+
+
+def test_alerts_and_notify_route_to_price_alerts():
+    with patch("market_core.market_mcp.api", return_value={"alerts": []}) as mock_api:
+        handle_tool("market_alerts", {"product": "leche", "store": "metro"})
+    assert "/v1/intel/alerts" in mock_api.call_args[0][1]
+    with patch("market_core.market_mcp.api", return_value={"alerts": []}) as mock_api:
+        handle_tool("market_notify", {"product": "leche"})
+    assert "/v1/intel/alerts" in mock_api.call_args[0][1]
+
+
+def test_deprecation_notice_on_direct_deprecated_tool():
+    notice = get_deprecation("market_lines")
+    assert notice == {"deprecated": "market_lines", "use": "market_discover"}

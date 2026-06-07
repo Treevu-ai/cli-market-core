@@ -1,7 +1,8 @@
 """MCP tool registry — canonical definitions, metadata, aliases, and profiles.
 
-PR1: single source of truth for all 43 tools. Legacy names resolve via ALIASES;
-``tools/list`` defaults to the ``legacy`` profile (all 43) for backward compatibility.
+PR1+PR2: canonical tool registry with metadata, aliases, and profiles.
+Legacy names (43 original + 7 aliases) resolve via ALIASES; ``tools/list`` defaults to
+the ``legacy`` profile (all 45 registered tools) for backward compatibility.
 Set ``MCP_TOOL_PROFILE=default|full|admin`` to filter by bundle/tier.
 """
 
@@ -61,12 +62,19 @@ _DEFAULT_HIDDEN = frozenset(
         "market_enrichment",
         "market_enrichment_subcategories",
         "market_notify",
+        "market_alerts",
     }
 )
 
-# Future canonical names → legacy names still accepted in handle_tool.
+# Legacy tool names → canonical handler (PR2 consolidations).
 ALIASES: dict[str, str] = {
-    # PR2+ will add e.g. "market_discover": "market_lines" (reverse map at resolve time)
+    "market_lines": "market_discover",
+    "market_stores": "market_discover",
+    "market_countries": "market_discover",
+    "market_cart_remove": "market_cart_update",
+    "market_reorder": "market_orders",
+    "market_alerts": "market_price_alerts",
+    "market_notify": "market_price_alerts",
 }
 
 
@@ -124,12 +132,26 @@ def _build_tool_specs() -> list[dict[str, Any]]:
             meta=_meta(bundle="shop", order=1, requires_auth="setup"),
         ),
         _tool(
+            "market_discover",
+            f"[Shop] Retail coverage in one call: business lines, retailers, and countries. "
+            f"Replaces market_lines + market_stores + market_countries. {cov}.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "description": "Optional country filter for stores"},
+                    "line": {"type": "string", "description": "Optional business line filter for stores"},
+                }
+            ),
+            meta=_meta(
+                bundle="shop",
+                order=2,
+                pairs_with=["market_search", "market_compare"],
+            ),
+        ),
+        _tool(
             "market_lines",
-            f"[Shop] List the 6 verified business lines (grocery, pharmacy, electronics, home, "
-            f"department stores, fashion) with VTEX retailers, countries, and currencies. "
-            f"Coverage: {cov}. Prefer market_discover (PR2).",
+            f"[Shop] Deprecated — use market_discover. Lists business lines with VTEX retailers. {cov}.",
             _schema_object(),
-            meta=_meta(bundle="shop", order=2, replaces="market_discover"),
+            meta=_meta(bundle="shop", order=99, replaces="market_discover"),
         ),
         _tool(
             "market_search",
@@ -139,7 +161,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
             _schema_object(
                 {
                     "query": {"type": "string", "description": "Search term"},
-                    "store": {"type": "string", "description": "Store ID (empty = all). Use market_lines for valid IDs."},
+                    "store": {"type": "string", "description": "Store ID (empty = all). Use market_discover for valid IDs."},
                     "line": {"type": "string", "description": "Business line: supermercados, farmacias, electro, moda, deportes, hogar"},
                     "limit": {"type": "integer", "default": 10},
                 },
@@ -197,12 +219,12 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         ),
         _tool(
             "market_cart_remove",
-            "[Shop] Remove a product from the cart by ID. Deprecated: use market_cart_update with quantity=0.",
+            "[Shop] Deprecated — use market_cart_update with quantity=0.",
             _schema_object(
                 {"product_id": {"type": "string", "description": "Product ID to remove"}},
                 required=["product_id"],
             ),
-            meta=_meta(bundle="shop", order=8, requires_auth=True, replaces="market_cart_update"),
+            meta=_meta(bundle="shop", order=99, requires_auth=True, replaces="market_cart_update"),
         ),
         _tool(
             "market_checkout",
@@ -215,15 +237,17 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         ),
         _tool(
             "market_orders",
-            "[Shop] Order history. Use market_reorder to repeat the last order (PR2 will merge via reorder_last param).",
-            _schema_object(),
+            "[Shop] Order history. Set reorder_last=true to repeat the last order.",
+            _schema_object(
+                {"reorder_last": {"type": "boolean", "default": False, "description": "Repeat last order"}},
+            ),
             meta=_meta(bundle="shop", order=10, requires_auth=True),
         ),
         _tool(
             "market_reorder",
-            "[Shop] Repeat the last order. Deprecated: use market_orders with reorder_last=true.",
+            "[Shop] Deprecated — use market_orders with reorder_last=true.",
             _schema_object(),
-            meta=_meta(bundle="shop", order=11, requires_auth=True, replaces="market_orders"),
+            meta=_meta(bundle="shop", order=99, requires_auth=True, replaces="market_orders"),
         ),
         _tool(
             "market_ask",
@@ -340,17 +364,15 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         ),
         _tool(
             "market_stores",
-            f"[Shop] List verified retailers with country, currency, business line, and emoji. "
-            f"Coverage: {cov}. Prefer market_discover (PR2).",
+            f"[Shop] Deprecated — use market_discover. Lists verified retailers. {cov}.",
             _schema_object(),
-            meta=_meta(bundle="shop", order=14, replaces="market_discover"),
+            meta=_meta(bundle="shop", order=99, replaces="market_discover"),
         ),
         _tool(
             "market_countries",
-            f"[Shop] List available countries with retailers and store counts. "
-            f"{countries} countries. Prefer market_discover (PR2).",
+            f"[Shop] Deprecated — use market_discover. Lists {countries} countries with store counts.",
             _schema_object(),
-            meta=_meta(bundle="shop", order=15, replaces="market_discover"),
+            meta=_meta(bundle="shop", order=99, replaces="market_discover"),
         ),
         _tool(
             "market_ticket",
@@ -407,9 +429,8 @@ def _build_tool_specs() -> list[dict[str, Any]]:
             meta=_meta(bundle="intel", order=7, replaces="market_intel_brief"),
         ),
         _tool(
-            "market_alerts",
-            "[Account] Price alerts: products that dropped more than X% in recent days. "
-            "Consolidates with market_notify (PR2).",
+            "market_price_alerts",
+            "[Account] Price alerts: query drops or configure threshold notifications for a product.",
             _schema_object(
                 {
                     "product": {"type": "string", "description": "Product to monitor"},
@@ -420,6 +441,20 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                 required=["product"],
             ),
             meta=_meta(bundle="account", order=4, requires_auth=True),
+        ),
+        _tool(
+            "market_alerts",
+            "[Account] Deprecated — use market_price_alerts.",
+            _schema_object(
+                {
+                    "product": {"type": "string", "description": "Product to monitor"},
+                    "store": {"type": "string"},
+                    "threshold_pct": {"type": "number", "default": 5.0},
+                    "limit": {"type": "integer", "default": 10},
+                },
+                required=["product"],
+            ),
+            meta=_meta(bundle="account", order=99, requires_auth=True, replaces="market_price_alerts"),
         ),
         _tool(
             "market_whoami",
@@ -506,8 +541,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         ),
         _tool(
             "market_notify",
-            "[Account] Configure price alerts when a product drops below threshold. "
-            "Deprecated: use market_alerts (PR2).",
+            "[Account] Deprecated — use market_price_alerts.",
             _schema_object(
                 {
                     "product": {"type": "string"},
@@ -516,7 +550,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                 },
                 required=["product"],
             ),
-            meta=_meta(bundle="account", order=4, requires_auth=True, replaces="market_alerts"),
+            meta=_meta(bundle="account", order=99, requires_auth=True, replaces="market_price_alerts"),
         ),
         _tool(
             "market_exchange",
@@ -572,6 +606,16 @@ def is_deprecated_alias(name: str) -> bool:
     return canonical is not None and name != canonical
 
 
+def get_deprecation(name: str) -> dict[str, str] | None:
+    """Deprecation notice for a tool call (alias redirect or replaces metadata)."""
+    if is_deprecated_alias(name):
+        return {"deprecated": name, "use": resolve_tool_name(name) or name}
+    meta = get_tool_meta(name)
+    if meta and meta.get("replaces"):
+        return {"deprecated": name, "use": meta["replaces"]}
+    return None
+
+
 def tool_in_profile(name: str, profile: str) -> bool:
     """Whether ``name`` appears in tools/list for the given profile."""
     if profile not in PROFILES:
@@ -616,3 +660,9 @@ def get_tool_meta(name: str) -> dict[str, Any] | None:
         if t["name"] == name:
             return dict(t["_meta"])
     return None
+
+
+# Original 43 tool names — must keep resolving after PR2 additions.
+ORIGINAL_TOOL_NAMES: frozenset[str] = frozenset(
+    n for n in CANONICAL_NAMES if n not in {"market_discover", "market_price_alerts"}
+)
