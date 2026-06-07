@@ -23,8 +23,8 @@ from market_core.market_mcp_registry import (
 BUNDLE_PREFIXES = ("[Shop]", "[Intel]", "[Account]", "[Advanced]", "[Admin]")
 
 
-def test_registry_has_45_tools():
-    assert len(TOOLS) == 45
+def test_registry_has_46_tools():
+    assert len(TOOLS) == 46
     names = [t["name"] for t in TOOLS]
     assert len(names) == len(set(names))
 
@@ -39,6 +39,7 @@ def test_pr2_new_canonical_tools():
     names = {t["name"] for t in TOOLS}
     assert "market_discover" in names
     assert "market_price_alerts" in names
+    assert "market_intel_brief" in names
 
 
 def test_every_tool_has_metadata():
@@ -68,17 +69,20 @@ def test_dynamic_retailer_stats_in_search_description():
     assert str(COUNTRIES) in search["description"]
 
 
-def test_legacy_profile_lists_all_45():
-    assert len(list_tools("legacy")) == 45
+def test_legacy_profile_lists_all_46():
+    assert len(list_tools("legacy")) == 46
 
 
 def test_default_profile_includes_pr2_canonicals():
     names = {t["name"] for t in list_tools("default")}
     assert "market_discover" in names
     assert "market_price_alerts" in names
+    assert "market_intel_brief" in names
     assert "market_lines" not in names
     assert "market_alerts" not in names
     assert "market_notify" not in names
+    assert "market_indicators" not in names
+    assert "market_enrichment" not in names
 
 
 def test_default_profile_is_curated_size():
@@ -216,3 +220,35 @@ def test_alerts_and_notify_route_to_price_alerts():
 def test_deprecation_notice_on_direct_deprecated_tool():
     notice = get_deprecation("market_lines")
     assert notice == {"deprecated": "market_lines", "use": "market_discover"}
+
+
+@pytest.mark.parametrize(
+    "alias,slice_key",
+    [
+        ("market_indicators", "catalog"),
+        ("market_analytics_indicators", "analytics"),
+        ("market_enrichment", "enrichment"),
+        ("market_enrichment_subcategories", "subcategories"),
+    ],
+)
+def test_pr3_intel_aliases_resolve(alias: str, slice_key: str):
+    assert resolve_tool_name(alias) == "market_intel_brief"
+
+
+def test_market_intel_brief_handler():
+    mock_brief = {
+        "headline": "test",
+        "catalog": [{"key": "promo_intensity"}],
+        "analytics": {"indicators": [{"key": "promo_intensity"}], "total": 1},
+        "enrichment": {"indicators": [{"key": "off_match_rate"}], "total": 1},
+        "subcategories": {"subcategories": [{"key": "subcat_x"}], "total": 1},
+        "country": "PE",
+    }
+    with patch("market_core.market_mcp.api", return_value=mock_brief):
+        raw_indicators = handle_tool("market_indicators", {})
+        raw_analytics = handle_tool("market_analytics_indicators", {"country": "PE"})
+    data_ind = json.loads(raw_indicators)
+    data_an = json.loads(raw_analytics)
+    assert data_ind["total"] == 1
+    assert data_an["total"] == 1
+    assert data_ind["_deprecation"]["use"] == "market_intel_brief"

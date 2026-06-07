@@ -1212,14 +1212,8 @@ def get_latest_values(
     return out
 
 
-def compute_composite_scores(country: str | None = None, line: str | None = None) -> dict[str, Any]:
-    db = get_db()
-    seed_indicator_definitions(db)
-    refresh_internal_indicators(db, country, line)
-    db.commit()
-
-    latest = {v["key"]: v for v in get_latest_values(db, country=country, line=line, limit=200)}
-
+def _scores_from_latest(latest: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Build composite scores from a latest-values map (read-only)."""
     promo = latest.get("promo_intensity", {}).get("value")
     dispersion = latest.get("price_dispersion", {}).get("value")
     freshness = latest.get("moat_freshness", {}).get("value")
@@ -1347,11 +1341,159 @@ def compute_composite_scores(country: str | None = None, line: str | None = None
             "input": {"imf_gdp_growth_yoy_pct": imf_gdp},
         }
 
-    db.close()
+    return scores
+
+
+def get_scores(db, country: str | None = None, line: str | None = None) -> dict[str, Any]:
+    """Read-only composite scores from latest indicator values (no refresh)."""
+    seed_indicator_definitions(db)
+    latest_list = get_latest_values(db, country=country, line=line, limit=200)
+    latest = {v["key"]: v for v in latest_list}
     return {
         "country": country,
         "line": line,
         "computed_at": _now_iso(),
-        "scores": scores,
+        "scores": _scores_from_latest(latest),
         "disclaimer": "Composite scores combine internal moat signals with public macro APIs where available.",
     }
+
+
+def _brief_headline(
+    *,
+    inflation_pct: float | None,
+    gap_pp: float | None,
+    days: int,
+    country: str | None,
+    line: str | None,
+) -> str:
+    parts: list[str] = []
+    if inflation_pct is not None:
+        sign = "+" if inflation_pct >= 0 else ""
+        parts.append(f"Shelf inflation {sign}{inflation_pct}% over {days}d")
+    if gap_pp is not None:
+        direction = "above" if gap_pp > 0 else "below"
+        parts.append(f"{abs(gap_pp):.1f} pp {direction} official CPI")
+    if parts:
+        return "; ".join(parts)
+    scope = country or "LATAM"
+    if line:
+        scope = f"{scope} / {line}"
+    return f"Intelligence brief for {scope} — moat signals from shelf prices"
+
+
+def _brief_sources(latest_list: list[dict]) -> list[str]:
+    found: set[str] = set()
+    for v in latest_list:
+        src = (v.get("source") or "").lower()
+        key = (v.get("key") or "").lower()
+        if "price" in src or "internal" in src:
+            found.add("price_history")
+        if "worldbank" in src:
+            found.add("worldbank")
+        if "openfoodfacts" in src or key.startswith("off_"):
+            found.add("openfoodfacts")
+        if "wiki" in src or key.startswith("wiki"):
+            found.add("wikimedia")
+        if "open-meteo" in src or "weather" in key:
+            found.add("openmeteo")
+    return sorted(found) or ["price_history"]
+
+
+def build_intel_brief(
+    db,
+    *,
+    country: str | None = None,
+    line: str | None = None,
+    days: int = 7,
+    include_catalog: bool = False,
+) -> dict[str, Any]:
+    """One-call intelligence narrative: shelf signals, macro gap, scores, confidence."""
+    seed_indicator_definitions(db)
+    latest_list = get_latest_values(db, country=country, line=line, limit=200)
+    latest = {v["key"]: v for v in latest_list}
+
+    inflation_pct = compute_internal_inflation_avg(db, country, line, days=days)
+    staple_mom = compute_staple_price_momentum(db, country, days=days)
+
+    def _val(key: str) -> Any:
+        entry = latest.get(key)
+        return entry.get("value") if entry else None
+
+    shelf: dict[str, Any] = {}
+    for key in ("promo_intensity", "price_dispersion", "basket_stress_index"):
+        v = _val(key)
+        if v is not None:
+            shelf[key] = v
+    if staple_mom is not None:
+        shelf["staple_momentum_7d_pct"] = staple_mom
+    if inflation_pct is not None:
+        shelf["shelf_inflation_avg_pct"] = inflation_pct
+
+    macro_gap: dict[str, Any] = {}
+    gap = _val("collector_vs_official_gap")
+    food_spread = _val("food_inflation_spread")
+    if gap is not None:
+        macro_gap["collector_vs_official_gap_pp"] = gap
+    if food_spread is not None:
+        macro_gap["food_inflation_spread_pp"] = food_spread
+
+    confidence: dict[str, Any] = {}
+    freshness = _val("moat_freshness")
+    stores = _val("store_coverage")
+    if freshness is not None:
+        confidence["moat_freshness_pct"] = freshness
+    if stores is not None:
+        confidence["stores_active"] = int(stores)
+    else:
+        from .store_credentials import get_default_stores
+
+        confidence["stores_active"] = len(get_default_stores())
+
+    full_scores = _scores_from_latest(latest)
+    scores_summary = {
+        k: {"score": v["score"], "label": v["label"]}
+        for k, v in full_scores.items()
+    }
+
+    enrichment = [v for v in latest_list if v.get("key") in ENRICHMENT_INDICATOR_KEYS]
+    subcategories = [v for v in latest_list if (v.get("key") or "").startswith("subcat_")]
+    analytics = [
+        v for v in latest_list
+        if v.get("category") in ("retail", "affordability", "demand", "composite")
+    ][:30]
+
+    result: dict[str, Any] = {
+        "headline": _brief_headline(
+            inflation_pct=inflation_pct,
+            gap_pp=gap,
+            days=days,
+            country=country,
+            line=line,
+        ),
+        "country": country,
+        "line": line,
+        "days": days,
+        "shelf": shelf,
+        "macro_gap": macro_gap,
+        "confidence": confidence,
+        "scores": scores_summary,
+        "sources": _brief_sources(latest_list),
+        "staleness_hours": {"shelf": 4, "macro": 168},
+        "enrichment": {"indicators": enrichment, "total": len(enrichment)},
+        "subcategories": {"subcategories": subcategories, "total": len(subcategories)},
+        "analytics": {"indicators": analytics, "total": len(analytics)},
+        "disclaimer": "Shelf signals from online góndola prices. Does not replace official CPI (INEI, INDEC, etc.).",
+    }
+    if include_catalog:
+        result["catalog"] = get_indicator_catalog()
+    return result
+
+
+def compute_composite_scores(country: str | None = None, line: str | None = None) -> dict[str, Any]:
+    db = get_db()
+    seed_indicator_definitions(db)
+    refresh_internal_indicators(db, country, line)
+    db.commit()
+    result = get_scores(db, country=country, line=line)
+    db.close()
+    return result

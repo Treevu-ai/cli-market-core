@@ -75,6 +75,11 @@ ALIASES: dict[str, str] = {
     "market_reorder": "market_orders",
     "market_alerts": "market_price_alerts",
     "market_notify": "market_price_alerts",
+    # PR3 — intel narrative consolidates fragmented reads
+    "market_indicators": "market_intel_brief",
+    "market_analytics_indicators": "market_intel_brief",
+    "market_enrichment": "market_intel_brief",
+    "market_enrichment_subcategories": "market_intel_brief",
 }
 
 
@@ -275,6 +280,29 @@ def _build_tool_specs() -> list[dict[str, Any]]:
             meta=_meta(bundle="shop", order=13, pairs_with=["market_search", "market_compare"]),
         ),
         _tool(
+            "market_intel_brief",
+            "[Intel] One-call intelligence narrative: shelf signals, macro gap vs official CPI, "
+            "composite scores, and moat confidence. Replaces indicators + analytics + enrichment reads.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"},
+                    "line": {"type": "string", "description": "supermercados, farmacias, electro"},
+                    "days": {"type": "integer", "default": 7, "description": "Analysis window in days"},
+                    "include_catalog": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Include full indicator catalog (replaces market_indicators)",
+                    },
+                }
+            ),
+            meta=_meta(
+                bundle="intel",
+                order=0,
+                icp=["research", "fintech", "trade", "builder"],
+                pairs_with=["market_inflation", "market_scores"],
+            ),
+        ),
+        _tool(
             "market_inflation",
             "[Intel] Shelf inflation from the data moat: price deltas and average inflation. Filter by country or line.",
             _schema_object(
@@ -288,10 +316,9 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         ),
         _tool(
             "market_indicators",
-            "[Intel] Data moat indicator catalog (promo intensity, FX, official CPI, basket stress, etc.). "
-            "Will merge into market_intel_brief (PR3).",
+            "[Intel] Deprecated — use market_intel_brief(include_catalog=true).",
             _schema_object(),
-            meta=_meta(bundle="intel", order=2, replaces="market_intel_brief"),
+            meta=_meta(bundle="intel", order=99, replaces="market_intel_brief"),
         ),
         _tool(
             "market_scores",
@@ -314,17 +341,15 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         ),
         _tool(
             "market_enrichment",
-            "[Intel] Enrichment indicators: Open Food Facts match rate, NOVA, Wikimedia demand, "
-            "logistics weather, food CPI. Merges into market_intel_brief (PR3).",
+            "[Intel] Deprecated — use market_intel_brief (enrichment section).",
             _schema_object({"country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"}}),
-            meta=_meta(bundle="intel", order=4, replaces="market_intel_brief"),
+            meta=_meta(bundle="intel", order=99, replaces="market_intel_brief"),
         ),
         _tool(
             "market_enrichment_subcategories",
-            "[Intel] Basket subcategory enrichment (10 staples): price momentum, wiki, min price. "
-            "Merges into market_intel_brief (PR3).",
+            "[Intel] Deprecated — use market_intel_brief (subcategories section).",
             _schema_object({"country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"}}),
-            meta=_meta(bundle="intel", order=5, replaces="market_intel_brief"),
+            meta=_meta(bundle="intel", order=99, replaces="market_intel_brief"),
         ),
         _tool(
             "market_enrichment_refresh",
@@ -417,8 +442,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         ),
         _tool(
             "market_analytics_indicators",
-            "[Intel] Latest moat indicator values (promo intensity, FX, CPI, basket stress). "
-            "Merges into market_intel_brief (PR3).",
+            "[Intel] Deprecated — use market_intel_brief (analytics section).",
             _schema_object(
                 {
                     "country": {"type": "string"},
@@ -426,7 +450,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                     "limit": {"type": "integer", "default": 30},
                 }
             ),
-            meta=_meta(bundle="intel", order=7, replaces="market_intel_brief"),
+            meta=_meta(bundle="intel", order=99, replaces="market_intel_brief"),
         ),
         _tool(
             "market_price_alerts",
@@ -664,5 +688,5 @@ def get_tool_meta(name: str) -> dict[str, Any] | None:
 
 # Original 43 tool names — must keep resolving after PR2 additions.
 ORIGINAL_TOOL_NAMES: frozenset[str] = frozenset(
-    n for n in CANONICAL_NAMES if n not in {"market_discover", "market_price_alerts"}
+    n for n in CANONICAL_NAMES if n not in {"market_discover", "market_price_alerts", "market_intel_brief"}
 )

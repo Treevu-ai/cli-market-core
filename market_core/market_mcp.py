@@ -72,6 +72,48 @@ def _price_alerts_api(args: dict) -> dict:
     )
 
 
+def _intel_brief_path(args: dict) -> str:
+    qs: list[str] = []
+    if args.get("country"):
+        qs.append(f"country={args['country']}")
+    if args.get("line"):
+        qs.append(f"line={args['line']}")
+    days = args.get("days", 7)
+    qs.append(f"days={days}")
+    if args.get("include_catalog"):
+        qs.append("include_catalog=true")
+    return "/v1/intel/brief" + ("?" + "&".join(qs) if qs else "")
+
+
+def _slice_intel_brief(brief: dict, slice_key: str | None) -> dict:
+    if slice_key == "catalog":
+        catalog = brief.get("catalog", [])
+        return {"indicators": catalog, "total": len(catalog)}
+    if slice_key == "analytics":
+        return brief.get("analytics", {"indicators": [], "total": 0})
+    if slice_key == "enrichment":
+        block = brief.get("enrichment", {"indicators": [], "total": 0})
+        return {
+            "indicators": block.get("indicators", []),
+            "total": block.get("total", 0),
+            "country": brief.get("country"),
+            "sources": "Open Food Facts · Wikimedia Pageviews · Open-Meteo · World Bank",
+        }
+    if slice_key == "subcategories":
+        block = brief.get("subcategories", {"subcategories": [], "total": 0})
+        return {
+            "subcategories": block.get("subcategories", []),
+            "total": block.get("total", 0),
+            "country": brief.get("country"),
+        }
+    return brief
+
+
+def _intel_brief_api(args: dict) -> dict:
+    brief = api("GET", _intel_brief_path(args))
+    return _slice_intel_brief(brief, args.get("_slice"))
+
+
 def _normalize_args(requested: str, canonical: str, args: dict) -> dict:
     """Map legacy tool args to canonical handler shape."""
     out = dict(args)
@@ -81,6 +123,15 @@ def _normalize_args(requested: str, canonical: str, args: dict) -> dict:
         out.setdefault("quantity", 0)
     elif requested == "market_reorder":
         out["reorder_last"] = True
+    elif requested == "market_indicators":
+        out["include_catalog"] = True
+        out["_slice"] = "catalog"
+    elif requested == "market_analytics_indicators":
+        out["_slice"] = "analytics"
+    elif requested == "market_enrichment":
+        out["_slice"] = "enrichment"
+    elif requested == "market_enrichment_subcategories":
+        out["_slice"] = "subcategories"
     return out
 
 
@@ -119,20 +170,16 @@ def _tool_handlers() -> dict:
         ),
         "market_ask": lambda a: api("POST", "/agent/ask", {"prompt": a["prompt"]}),
         "market_basket": lambda a: api("POST", "/v1/basket/compare", {"items": a["items"], "stores": a.get("stores")}),
+        "market_intel_brief": _intel_brief_api,
         "market_inflation": lambda a: api(
             "GET", f"/v1/intel/inflation?country={a.get('country', '')}&line={a.get('line', '')}"
         ),
-        "market_indicators": lambda a: api("GET", "/v1/intel/indicators"),
         "market_scores": lambda a: api("GET", f"/v1/intel/scores?country={a.get('country', '')}&line={a.get('line', '')}"),
         "market_intel_refresh": lambda a: api(
             "POST", f"/v1/intel/refresh?country={a.get('country', '')}&line={a.get('line', '')}"
         ),
-        "market_enrichment": lambda a: api("GET", f"/v1/intel/enrichment?country={a.get('country', '')}"),
         "market_enrichment_refresh": lambda a: api(
             "POST", f"/v1/intel/enrichment/refresh?country={a.get('country', '')}"
-        ),
-        "market_enrichment_subcategories": lambda a: api(
-            "GET", f"/v1/intel/enrichment/subcategories?country={a.get('country', 'PE')}"
         ),
         "market_categories": lambda a: api("GET", f"/categories/{a['store']}"),
         "market_barcode": lambda a: api("GET", f"/products/barcode/{a['code']}"),
@@ -145,10 +192,6 @@ def _tool_handlers() -> dict:
             f"&line={a.get('line', '')}&limit={a.get('limit', 50)}",
         ),
         "market_stats": lambda a: api("GET", "/analytics/stats"),
-        "market_analytics_indicators": lambda a: api(
-            "GET",
-            f"/analytics/indicators?country={a.get('country', '')}&line={a.get('line', '')}&limit={a.get('limit', 30)}",
-        ),
         "market_price_alerts": _price_alerts_api,
         "market_whoami": lambda a: api("GET", "/auth/whoami"),
         "market_preferences": lambda a: api("GET", "/agent/preferences"),
