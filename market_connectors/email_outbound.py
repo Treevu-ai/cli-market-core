@@ -58,7 +58,9 @@ Después de pagar, responde a este correo con:
   1. {user_plain_es}
   2. Referencia: {request_id}
 
-Activamos tu cuenta Pro en menos de 24 h y te confirmamos por email.
+Si pagó con el botón alojado de PayPal (flujo manual), activamos Pro en ≤24 h hábiles y le confirmamos por email.
+
+¿Prefiere activación automática? Use la suscripción PayPal en https://cli-market.dev/#pricing — Pro se activa en segundos vía webhook.
 
 ¿Preguntas? Responde este correo — contestamos el mismo día.
 
@@ -101,7 +103,8 @@ hello@cli-market.dev
           <tr><td style="padding:3px 0;">2.&nbsp;</td><td>Referencia: <code style="background:#1c1b1c;padding:1px 6px;border-radius:3px;color:#3afecf;">{request_id}</code></td></tr>
         </table>
         <p style="margin:20px 0 0;font-size:13px;color:#b9cac2;line-height:1.6;">
-          Activamos tu cuenta en <strong style="color:#fff">menos de 24 h</strong> y te confirmamos por email.<br>
+          Flujo manual (botón alojado): activación en <strong style="color:#fff">≤24 h hábiles</strong>.<br>
+          Suscripción PayPal en cli-market.dev: activación automática en segundos.<br>
           ¿Preguntas? Responde este correo — contestamos el mismo día.
         </p>
       </td></tr>
@@ -133,7 +136,9 @@ After payment, reply to this email with:
   1. {user_plain_en}
   2. Reference: {request_id}
 
-We activate your Pro account within 24 hours and confirm by email.
+If you paid via the hosted PayPal button (manual flow), we activate Pro within 24 business hours and confirm by email.
+
+Prefer instant activation? Use PayPal subscription at https://cli-market.dev/#pricing — Pro activates in seconds via webhook.
 
 Questions? Reply to this email — we respond same day.
 
@@ -212,7 +217,7 @@ def send_credentials_email(
             if is_pro else
             "Tu prueba gratuita de CLI Market — API key lista"
         )
-        plan_label = "Pro — $79/mes" if is_pro else "Starter — 14 días gratis"
+        plan_label = "Pro — $79/mes" if is_pro else "Starter — $29/mes (activación manual)"
         limits = (
             "• 10,000 consultas / día\n"
             "• 10 claves API (lectura + escritura)\n"
@@ -226,7 +231,7 @@ def send_credentials_email(
         )
         text = f"""Hola {username},
 
-{'Tu cuenta Pro está activa.' if is_pro else 'Tu periodo de prueba de 14 días ha comenzado.'}
+{'Tu cuenta Pro está activa.' if is_pro else 'Su plan Starter está activo.'}
 
 API KEY (¡guárdala ahora — no se vuelve a mostrar!):
 {api_key}
@@ -251,21 +256,21 @@ Docs y ejemplos: https://pypi.org/project/cli-market/
 — Ricardo · CLI Market
 hello@cli-market.dev
 """
-        html_title = "Tu API key Pro está lista" if is_pro else "Tu trial de CLI Market ha comenzado"
+        html_title = "Tu API key Pro está lista" if is_pro else "Su plan Starter está activo"
         html_badge = "CLI MARKET PRO" if is_pro else "CLI MARKET STARTER"
         html_intro = (
             f"Hola <strong style=\"color:#fff\">{username}</strong>,<br><br>"
-            f"{'Tu cuenta Pro está activa.' if is_pro else 'Tu periodo de prueba de 14 días ha comenzado.'} "
+            f"{'Tu cuenta Pro está activa.' if is_pro else 'Su plan Starter está activo.'} "
             f"Aquí está tu API key — <strong style=\"color:#fff\">muéstrala solo ahora</strong>."
         )
-        html_footer_note = "14 días gratis · Sin tarjeta · Cancela cuando quieras" if not is_pro else ""
+        html_footer_note = "Starter · Activación manual · Sin checkout instantáneo" if not is_pro else ""
     else:
         subject = (
             "Your CLI Market Pro API key — save it now"
             if is_pro else
             "Your CLI Market Starter trial — API key ready"
         )
-        plan_label = "Pro — $79/month" if is_pro else "Starter — 14-day free trial"
+        plan_label = "Pro — $79/month" if is_pro else "Starter — $29/mo (manual activation)"
         limits = (
             "• 10,000 requests / day\n"
             "• 10 API keys (read + write)\n"
@@ -279,7 +284,7 @@ hello@cli-market.dev
         )
         text = f"""Hi {username},
 
-{'Your Pro account is now active.' if is_pro else 'Your 14-day free trial has started.'}
+{'Your Pro account is now active.' if is_pro else 'Your Starter plan is now active.'}
 
 API KEY (save it now — won't be shown again!):
 {api_key}
@@ -304,14 +309,14 @@ Questions? Reply to this email — we respond same day.
 — Ricardo · CLI Market
 hello@cli-market.dev
 """
-        html_title = "Your Pro API key is ready" if is_pro else "Your CLI Market trial has started"
+        html_title = "Your Pro API key is ready" if is_pro else "Your Starter plan is active"
         html_badge = "CLI MARKET PRO" if is_pro else "CLI MARKET STARTER"
         html_intro = (
             f"Hi <strong style=\"color:#fff\">{username}</strong>,<br><br>"
-            f"{'Your Pro account is active.' if is_pro else 'Your 14-day free trial has started.'} "
+            f"{'Your Pro account is active.' if is_pro else 'Your Starter plan is active.'} "
             f"Here's your API key — <strong style=\"color:#fff\">this is the only time it'll be shown</strong>."
         )
-        html_footer_note = "14-day free trial · No credit card · Cancel anytime" if not is_pro else ""
+        html_footer_note = "Starter · Manual activation · No instant checkout" if not is_pro else ""
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -355,6 +360,75 @@ hello@cli-market.dev
 </table>
 </body>
 </html>"""
+    return _send(to_email, subject, text, html)
+
+
+def send_pro_subscribe_pending_email(
+    *,
+    to_email: str,
+    username: str,
+    approve_url: str,
+    request_id: str = "",
+    lang: str = "en",
+) -> dict:
+    """Email after PayPal subscription is created — confirm in PayPal, auto-activates via webhook."""
+    ref_line_es = f"\nReferencia: {request_id}" if request_id else ""
+    ref_line_en = f"\nReference: {request_id}" if request_id else ""
+
+    if lang == "es":
+        subject = "Confirme su suscripción Pro en PayPal — CLI Market"
+        text = f"""Hola {username},
+
+Iniciamos su suscripción Pro ({PRO_PRICE_LABEL}). Falta un paso:
+
+1. Abra el enlace de PayPal y confirme la suscripción
+2. Pro se activa automáticamente en segundos (webhook)
+3. Verifique: market whoami  →  tier: pro
+
+CONFIRMAR EN PAYPAL → {approve_url}
+{ref_line_es}
+
+Si ya pagó y sigue en tier free, espere 2 minutos y ejecute market doctor.
+
+¿Preguntas? Responda este correo — contestamos el mismo día.
+
+— Ricardo · CLI Market
+hello@cli-market.dev
+"""
+        html = f"""<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0a0b;color:#e5e2e3;padding:24px;">
+<h2 style="color:#3afecf;">Confirme Pro en PayPal</h2>
+<p>Hola <strong>{username}</strong>,</p>
+<p>Pro ({PRO_PRICE_LABEL}) se activa <strong>automáticamente</strong> tras confirmar en PayPal — sin espera manual.</p>
+<p><a href="{approve_url}" style="color:#002118;background:#3afecf;padding:12px 24px;text-decoration:none;border-radius:4px;font-weight:bold;">Confirmar en PayPal →</a></p>
+<p style="font-size:13px;color:#b9cac2;">Luego: <code>market whoami</code> · <code>market doctor</code></p>
+</body></html>"""
+    else:
+        subject = "Confirm your Pro subscription on PayPal — CLI Market"
+        text = f"""Hi {username},
+
+We started your Pro subscription ({PRO_PRICE_LABEL}). One step left:
+
+1. Open the PayPal link and confirm the subscription
+2. Pro activates automatically within seconds (webhook)
+3. Verify: market whoami  →  tier: pro
+
+CONFIRM ON PAYPAL → {approve_url}
+{ref_line_en}
+
+If you already paid and still see free tier, wait 2 minutes and run market doctor.
+
+Questions? Reply to this email — we respond same day.
+
+— Ricardo · CLI Market
+hello@cli-market.dev
+"""
+        html = f"""<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0a0b;color:#e5e2e3;padding:24px;">
+<h2 style="color:#3afecf;">Confirm Pro on PayPal</h2>
+<p>Hi <strong>{username}</strong>,</p>
+<p>Pro ({PRO_PRICE_LABEL}) activates <strong>automatically</strong> after PayPal confirmation — no manual wait.</p>
+<p><a href="{approve_url}" style="color:#002118;background:#3afecf;padding:12px 24px;text-decoration:none;border-radius:4px;font-weight:bold;">Confirm on PayPal →</a></p>
+<p style="font-size:13px;color:#b9cac2;">Then: <code>market whoami</code> · <code>market doctor</code></p>
+</body></html>"""
     return _send(to_email, subject, text, html)
 
 
