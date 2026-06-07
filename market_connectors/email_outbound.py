@@ -622,13 +622,17 @@ def send_starter_activated_email(
     subscription_id: str = "",
 ) -> dict:
     """Confirm Starter activation after PayPal webhook."""
-    sub_line = f"\nPayPal: {subscription_id}" if subscription_id else ""
+    sub_line_es = f"\nSuscripción PayPal: {subscription_id}" if subscription_id else ""
+    sub_line_en = f"\nPayPal subscription: {subscription_id}" if subscription_id else ""
+
     if lang == "es":
-        subject = "CLI Market Starter activo — ya puede usar alertas y export"
+        subject = "CLI Market Starter activo — alertas y export listos"
         text = f"""Hola {username},
 
-Su plan Starter quedó activo automáticamente tras confirmar en PayPal.
+Su plan Starter quedó activo. No necesita activación manual.
 
+──────────────────────────────
+Siguiente paso en terminal:
   market whoami
   market doctor
   market alerts --action list
@@ -638,16 +642,51 @@ Límites Starter:
 • 3 claves API (lectura)
 • 3 alertas de precio
 • Exportación CSV
-{sub_line}
+──────────────────────────────
+{sub_line_es}
+
+Docs: https://cli-market.dev/docs#quickstart
+Herramientas MCP: https://cli-market.dev/tools
+
+¿Preguntas? Responda este correo — contestamos el mismo día.
 
 — Ricardo · CLI Market
+hello@cli-market.dev
 """
+        html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0a0a0b;font-family:ui-sans-serif,system-ui,sans-serif;color:#e5e2e3;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0b;padding:40px 0;">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#131314;border:1px solid #3b4a44;border-radius:12px;max-width:560px;">
+<tr><td style="padding:32px 36px;">
+<p style="margin:0 0 4px;font-family:monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#3afecf;">CLI MARKET STARTER</p>
+<h1 style="margin:0 0 16px;font-size:22px;color:#fff;">Su plan Starter está activo</h1>
+<p style="margin:0 0 20px;font-size:14px;color:#b9cac2;line-height:1.6;">
+Hola <strong style="color:#fff">{username}</strong>,<br><br>
+Confirmamos la activación automática tras su pago en PayPal. Ya puede usar alertas y exportación CSV.
+</p>
+<table width="100%" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:6px;margin-bottom:20px;">
+<tr><td style="padding:14px 18px;font-family:monospace;font-size:12px;color:#b9cac2;line-height:1.8;">
+market whoami<br>
+market doctor<br>
+market alerts --action list
+</td></tr></table>
+<p style="margin:0;font-size:13px;color:#b9cac2;">Docs: <a href="https://cli-market.dev/docs#quickstart" style="color:#3afecf;">cli-market.dev/docs</a> · MCP: <a href="https://cli-market.dev/tools" style="color:#3afecf;">cli-market.dev/tools</a></p>
+</td></tr>
+<tr><td style="padding:20px 36px;border-top:1px solid #3b4a44;">
+<p style="margin:0;font-size:12px;color:#b9cac2;">— Ricardo · CLI Market</p>
+</td></tr>
+</table></td></tr></table>
+</body></html>"""
     else:
-        subject = "CLI Market Starter is active"
+        subject = "CLI Market Starter is active — alerts and export ready"
         text = f"""Hi {username},
 
-Your Starter plan is active after PayPal confirmation.
+Your Starter plan is now active. No manual activation wait is required.
 
+──────────────────────────────
+Next in your terminal:
   market whoami
   market doctor
   market alerts --action list
@@ -657,14 +696,42 @@ Starter limits:
 • 3 API keys (read-only)
 • 3 price alerts
 • CSV export
-{sub_line}
+──────────────────────────────
+{sub_line_en}
+
+Docs: https://cli-market.dev/docs#quickstart
+MCP tools: https://cli-market.dev/tools
+
+Questions? Reply to this email — we respond same day.
 
 — Ricardo · CLI Market
+hello@cli-market.dev
 """
-    html = f"""<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0a0b;color:#e5e2e3;padding:24px;">
-<h2 style="color:#3afecf;">Starter active</h2>
-<p>Hi <strong>{username}</strong>,</p>
-<p>Run <code>market whoami</code> — tier should be <strong>starter</strong>.</p>
+        html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0a0a0b;font-family:ui-sans-serif,system-ui,sans-serif;color:#e5e2e3;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0b;padding:40px 0;">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#131314;border:1px solid #3b4a44;border-radius:12px;max-width:560px;">
+<tr><td style="padding:32px 36px;">
+<p style="margin:0 0 4px;font-family:monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#3afecf;">CLI MARKET STARTER</p>
+<h1 style="margin:0 0 16px;font-size:22px;color:#fff;">Your Starter plan is active</h1>
+<p style="margin:0 0 20px;font-size:14px;color:#b9cac2;line-height:1.6;">
+Hi <strong style="color:#fff">{username}</strong>,<br><br>
+We confirmed automatic activation after your PayPal payment. Alerts and CSV export are available now.
+</p>
+<table width="100%" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:6px;margin-bottom:20px;">
+<tr><td style="padding:14px 18px;font-family:monospace;font-size:12px;color:#b9cac2;line-height:1.8;">
+market whoami<br>
+market doctor<br>
+market alerts --action list
+</td></tr></table>
+<p style="margin:0;font-size:13px;color:#b9cac2;">Docs: <a href="https://cli-market.dev/docs#quickstart" style="color:#3afecf;">cli-market.dev/docs</a> · MCP: <a href="https://cli-market.dev/tools" style="color:#3afecf;">cli-market.dev/tools</a></p>
+</td></tr>
+<tr><td style="padding:20px 36px;border-top:1px solid #3b4a44;">
+<p style="margin:0;font-size:12px;color:#b9cac2;">— Ricardo · CLI Market</p>
+</td></tr>
+</table></td></tr></table>
 </body></html>"""
     return _send(to_email, subject, text, html)
 
