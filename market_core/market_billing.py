@@ -362,6 +362,19 @@ def db_find_subscription_request(*, request_id: str = "", email: str = "") -> di
     return dict(row) if row else None
 
 
+def db_mark_subscription_requests_activated_for_user(username: str) -> int:
+    """Mark all pending Pro requests for username as activated (post PayPal webhook)."""
+    db = market_core.get_db()
+    cur = db.execute(
+        "UPDATE subscription_requests SET status='activated' WHERE username=? AND status='pending'",
+        (username.strip(),),
+    )
+    db.commit()
+    count = cur.rowcount
+    db.close()
+    return count
+
+
 def db_mark_subscription_request_activated(request_id: str, username: str = "") -> bool:
     db = market_core.get_db()
     if username:

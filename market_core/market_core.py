@@ -52,7 +52,9 @@ logger = logging.getLogger("market")
 
 # ── Paths & config ────────────────────────────────────────────────────────────
 
-API = os.environ.get("MARKET_API_URL", "http://127.0.0.1:8765")
+DEFAULT_API_URL = "https://cli-market-production.up.railway.app"
+LOCAL_API_URL = "http://127.0.0.1:8765"
+API = os.environ.get("MARKET_API_URL", DEFAULT_API_URL)
 DATA_DIR = Path(os.getenv("MARKET_DATA_DIR", Path.home() / ".market"))
 # Ensure writable: fall back to cwd if home is not writable (e.g. serverless)
 try:
@@ -234,7 +236,14 @@ def api(method: str, path: str, json_data: dict | None = None) -> dict:
                 save_session(data.get("username", ""), key)
         return data
     except httpx.ConnectError:
-        return {"error": "Server not running. Start: python market_server.py"}
+        if "127.0.0.1" in API or "localhost" in API:
+            return {
+                "error": (
+                    f"Cannot reach local API at {API}. "
+                    "Start: python market_server.py — or unset MARKET_API_URL to use production."
+                ),
+            }
+        return {"error": f"Cannot reach API at {API}. Check MARKET_API_URL and your network."}
 
 # ── Multi-platform store access ────────────────────────────────────────────
 
@@ -321,6 +330,7 @@ from .market_billing import (  # noqa: E402, F401
     db_get_subscription,
     db_get_user_email,
     db_mark_subscription_request_activated,
+    db_mark_subscription_requests_activated_for_user,
     db_mark_subscription_request_emailed,
     db_recent_subscription_request,
     db_save_billing_pending,

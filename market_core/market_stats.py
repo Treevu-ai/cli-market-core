@@ -48,10 +48,9 @@ PRICES_REFRESH_HOURS = 4
 
 def _live_price_label(fallback: str = "45,000+") -> str:
     """Fetch total snapshots from health/db endpoint and round to nearest thousand."""
-    import os
     try:
         import httpx
-        api = os.getenv("MARKET_API_URL", "https://cli-market-production.up.railway.app")
+        from .market_core import API as api
         r = httpx.get(f"{api}/health/db", timeout=10)
         r.raise_for_status()
         n = r.json().get("snapshots", 0)
@@ -62,7 +61,7 @@ def _live_price_label(fallback: str = "45,000+") -> str:
     return fallback
 
 PRICES_VERIFIED_LABEL = _live_price_label()
-PACKAGE_VERSION = "1.9.0"
+PACKAGE_VERSION = "1.9.2"
 LICENSE = "MIT"
 PAYMENTS_LABEL = "PayPal · Mercado Pago · QR (Yape/Plin)"
 BUSINESS_LINES = 6
