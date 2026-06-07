@@ -68,8 +68,10 @@ PYPI_URL = f"https://pypi.org/project/{PYPI_PACKAGE_NAME}/"
 PEPY_PROJECT_URL = f"https://pepy.tech/projects/{PYPI_PACKAGE_NAME}"
 # static.pepy.tech personalized-badge 404s until Pepy indexes a new PyPI name;
 # shields.io/pepy/dt uses the same Pepy download data and works immediately.
+# Pepy indexes legacy `cli-market` until cli-market-world accumulates stats.
+PEPY_STATS_PROJECT = "cli-market"
 PEPY_BADGE_URL = (
-    f"https://img.shields.io/pepy/dt/{PYPI_PACKAGE_NAME}"
+    f"https://img.shields.io/pepy/dt/{PEPY_STATS_PROJECT}"
     "?label=downloads&color=00d75f&logo=pypi"
 )
 PIP_INSTALL_CMD = f"pip install {PYPI_PACKAGE_NAME}"
