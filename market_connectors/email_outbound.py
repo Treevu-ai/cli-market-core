@@ -17,7 +17,7 @@ PRO_PAYMENT_URL = os.getenv(
     "PRO_PAYMENT_URL",
     "https://www.paypal.com/ncp/payment/B6YVFTG4MA73J",
 )
-PRO_PRICE_LABEL = os.getenv("PRO_PRICE_LABEL", "$79/month")
+PRO_PRICE_LABEL = os.getenv("PRO_PRICE_LABEL", "$39/month")
 STARTER_PRICE_LABEL = os.getenv("STARTER_PRICE_LABEL", "$29/month")
 
 
@@ -218,7 +218,7 @@ def send_credentials_email(
             if is_pro else
             "Tu prueba gratuita de CLI Market — API key lista"
         )
-        plan_label = "Pro — $79/mes" if is_pro else "Starter — $29/mes (activación manual)"
+        plan_label = f"Pro — {PRO_PRICE_LABEL}" if is_pro else f"Starter — {STARTER_PRICE_LABEL} (activación manual)"
         limits = (
             "• 10,000 consultas / día\n"
             "• 10 claves API (lectura + escritura)\n"
@@ -271,7 +271,7 @@ hello@cli-market.dev
             if is_pro else
             "Your CLI Market Starter trial — API key ready"
         )
-        plan_label = "Pro — $79/month" if is_pro else "Starter — $29/mo (manual activation)"
+        plan_label = f"Pro — {PRO_PRICE_LABEL}" if is_pro else f"Starter — {STARTER_PRICE_LABEL} (manual activation)"
         limits = (
             "• 10,000 requests / day\n"
             "• 10 API keys (read + write)\n"

@@ -18,7 +18,7 @@ PAYPAL_SANDBOX = os.getenv("PAYPAL_SANDBOX", "true").lower() == "true"
 PAYPAL_PLAN_ID = os.getenv("PAYPAL_PLAN_ID", "")
 PAYPAL_STARTER_PLAN_ID = os.getenv("PAYPAL_STARTER_PLAN_ID", "")
 PAYPAL_WEBHOOK_ID = os.getenv("PAYPAL_WEBHOOK_ID", "")
-PRO_PRICE_USD = float(os.getenv("PRO_PRICE_USD", "79"))
+PRO_PRICE_USD = float(os.getenv("PRO_PRICE_USD", "39"))
 STARTER_PRICE_USD = float(os.getenv("STARTER_PRICE_USD", "29"))
 
 PAYPAL_API = "https://api-m.sandbox.paypal.com" if PAYPAL_SANDBOX else "https://api-m.paypal.com"
@@ -199,7 +199,7 @@ async def create_subscription(
     *,
     plan: str = "pro",
 ) -> dict:
-    """Create a PayPal subscription (Pro $79/mo or Starter $29/mo)."""
+    """Create a PayPal subscription (Pro or Starter; amounts from env defaults)."""
     cfg = _plan_config(plan)
     amount = amount if amount is not None else cfg["amount"]
     token = await _get_access_token()

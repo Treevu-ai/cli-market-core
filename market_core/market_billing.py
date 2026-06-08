@@ -1,4 +1,12 @@
-"""Billing, subscriptions, and payment schema migrations."""
+"""Billing, subscriptions, and payment schema migrations.
+
+Public pricing (landing + README, 2026-06):
+  free       $0   — 1,000 req/day (register + API key)
+  pro        $39/mo — 10,000 req/day, checkout, full MCP
+  enterprise custom
+
+Legacy tiers (starter, builder) remain for DB rows and PayPal plan IDs; not on landing.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +17,11 @@ from datetime import datetime, timedelta, timezone
 from . import market_core
 
 logger = market_core.logger
+
+# Canonical limits — propagate via ops/PRICING-CHANGE-CHECKLIST.md
+PUBLIC_FREE_REQ_DAY = 1_000
+PUBLIC_PRO_REQ_DAY = 10_000
+PUBLIC_PRO_PRICE_USD = 39.0
 
 TIERS = {
     "free": {
