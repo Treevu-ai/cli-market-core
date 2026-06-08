@@ -63,16 +63,34 @@ class TestProActivationEmail:
             format_pro_activated_reply_draft,
         )
 
-        text = _pro_activation_quickstart_text(username="acubatruweb", lang="es")
-        assert "pip install cli-market-world" in text
-        assert "market login --username acubatruweb" in text
-        assert "tier: pro" in text
+        from market_connectors.email_outbound import compose_pro_welcome_email
+
+        composed = compose_pro_welcome_email(
+            display_name="Ricardo",
+            username="acubatruweb",
+            email="acubatruweb@outlook.com",
+            password="Secr3t-Cli9",
+            lang="es",
+            payment_method="yape",
+            request_id="PRO-3E2A9E04",
+        )
+        assert "Hola Ricardo" in composed["text"]
+        assert "Email · acubatruweb@outlook.com" in composed["text"]
+        assert "Usuario CLI · acubatruweb" in composed["text"]
+        assert "Contraseña · Secr3t-Cli9" in composed["text"]
+        assert "```bash" in composed["text"]
+        assert "market login --username acubatruweb --password Secr3t-Cli9" in composed["text"]
+        assert "no reinstales" in composed["text"]
 
         draft = format_pro_activated_reply_draft(
             username="acubatruweb",
             lang="es",
             payment_method="yape",
             request_id="PRO-3E2A9E04",
+            password="Secr3t-Cli9",
+            email="acubatruweb@outlook.com",
+            display_name="Ricardo",
         )
-        assert "market login --username acubatruweb" in draft["text"]
+        assert "Ricardo" in draft["subject"]
+        assert "Hola Ricardo" in draft["text"]
         assert "PRO-3E2A9E04" in draft["text"]

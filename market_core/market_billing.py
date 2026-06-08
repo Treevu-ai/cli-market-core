@@ -89,6 +89,7 @@ def _migrate_payment_schema(db) -> None:
                 id TEXT PRIMARY KEY,
                 username TEXT NOT NULL,
                 email TEXT NOT NULL,
+                display_name TEXT DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'pending',
                 payment_link TEXT DEFAULT '',
                 email_sent INTEGER NOT NULL DEFAULT 0,
@@ -110,6 +111,7 @@ def _migrate_payment_schema(db) -> None:
         for stmt in (
             "ALTER TABLE app_orders ADD COLUMN IF NOT EXISTS gateway_ref TEXT DEFAULT ''",
             "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS paypal_subscription_id TEXT DEFAULT ''",
+            "ALTER TABLE subscription_requests ADD COLUMN IF NOT EXISTS display_name TEXT DEFAULT ''",
         ):
             try:
                 db.execute(stmt)
@@ -128,6 +130,7 @@ def _migrate_payment_schema(db) -> None:
     for stmt in (
         "ALTER TABLE app_orders ADD COLUMN gateway_ref TEXT DEFAULT ''",
         "ALTER TABLE subscriptions ADD COLUMN paypal_subscription_id TEXT DEFAULT ''",
+        "ALTER TABLE subscription_requests ADD COLUMN display_name TEXT DEFAULT ''",
     ):
         try:
             db.execute(stmt)
@@ -138,6 +141,7 @@ def _migrate_payment_schema(db) -> None:
             id TEXT PRIMARY KEY,
             username TEXT NOT NULL,
             email TEXT NOT NULL,
+            display_name TEXT DEFAULT '',
             status TEXT NOT NULL DEFAULT 'pending',
             payment_link TEXT DEFAULT '',
             email_sent INTEGER NOT NULL DEFAULT 0,
@@ -299,15 +303,17 @@ def db_create_subscription_request(
     payment_link: str,
     *,
     prefix: str = "PRO",
+    display_name: str = "",
 ) -> dict:
     req_id = f"{prefix}-{uuid.uuid4().hex[:8].upper()}"
+    dn = (display_name or "").strip()
     db = market_core.get_db()
     db.execute(
         """
-        INSERT INTO subscription_requests (id, username, email, status, payment_link, email_sent)
-        VALUES (?, ?, ?, 'pending', ?, 0)
+        INSERT INTO subscription_requests (id, username, email, display_name, status, payment_link, email_sent)
+        VALUES (?, ?, ?, ?, 'pending', ?, 0)
         """,
-        (req_id, username, email.strip().lower(), payment_link),
+        (req_id, username, email.strip().lower(), dn, payment_link),
     )
     db.commit()
     db.close()
@@ -315,8 +321,24 @@ def db_create_subscription_request(
         "id": req_id,
         "username": username,
         "email": email.strip().lower(),
+        "display_name": dn,
         "payment_link": payment_link,
     }
+
+
+def db_get_latest_subscription_request_for_user(username: str) -> dict | None:
+    db = market_core.get_db()
+    row = db.execute(
+        """
+        SELECT id, username, email, display_name, status, payment_link, email_sent, created_at
+        FROM subscription_requests
+        WHERE username=?
+        ORDER BY created_at DESC LIMIT 1
+        """,
+        (username.strip(),),
+    ).fetchone()
+    db.close()
+    return dict(row) if row else None
 
 
 def db_mark_subscription_request_emailed(request_id: str) -> None:
@@ -342,11 +364,27 @@ def db_update_subscription_request_payment_link(request_id: str, payment_link: s
     return updated
 
 
+def db_update_subscription_request_display_name(request_id: str, display_name: str) -> bool:
+    """Persist friendly name on a subscription request (checkout or ops override)."""
+    dn = (display_name or "").strip()
+    if not dn:
+        return False
+    db = market_core.get_db()
+    cur = db.execute(
+        "UPDATE subscription_requests SET display_name=? WHERE id=?",
+        (dn, request_id),
+    )
+    db.commit()
+    updated = cur.rowcount > 0
+    db.close()
+    return updated
+
+
 def db_recent_subscription_request(email: str, hours: int = 24) -> dict | None:
     db = market_core.get_db()
     row = db.execute(
         """
-        SELECT id, username, email, status, payment_link, email_sent, created_at
+        SELECT id, username, email, display_name, status, payment_link, email_sent, created_at
         FROM subscription_requests
         WHERE email=?
         ORDER BY created_at DESC LIMIT 1
@@ -377,13 +415,13 @@ def db_find_subscription_request(*, request_id: str = "", email: str = "") -> di
     db = market_core.get_db()
     if request_id:
         row = db.execute(
-            "SELECT id, username, email, status, payment_link, email_sent, created_at "
+            "SELECT id, username, email, display_name, status, payment_link, email_sent, created_at "
             "FROM subscription_requests WHERE id=?",
             (request_id,),
         ).fetchone()
     elif email:
         row = db.execute(
-            "SELECT id, username, email, status, payment_link, email_sent, created_at "
+            "SELECT id, username, email, display_name, status, payment_link, email_sent, created_at "
             "FROM subscription_requests WHERE email=? ORDER BY created_at DESC LIMIT 1",
             (email.strip().lower(),),
         ).fetchone()

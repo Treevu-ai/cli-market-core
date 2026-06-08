@@ -433,128 +433,208 @@ hello@cli-market.dev
     return _send(to_email, subject, text, html)
 
 
-def _pro_activation_intro(
-    *,
-    username: str,
-    lang: str,
-    payment_method: str,
-) -> str:
+def _pro_payment_line(*, lang: str, payment_method: str) -> str:
     method = (payment_method or "paypal").strip().lower()
     if lang == "es":
         if method in ("yape", "plin"):
-            return (
-                f"Confirmamos tu pago ({method.upper()}) y activamos Build Pro "
-                f"en la cuenta {username}."
-            )
+            return f"Confirmamos tu pago por {method.upper()}."
         if method == "mercadopago":
-            return (
-                f"Confirmamos tu pago en Mercado Pago y activamos Build Pro "
-                f"en la cuenta {username}."
-            )
-        return (
-            f"Tu suscripción Build Pro quedó activa en la cuenta {username} "
-            f"(activación automática tras PayPal)."
-        )
+            return "Confirmamos tu pago en Mercado Pago."
+        return "Tu suscripción quedó activa."
     if method in ("yape", "plin"):
-        return (
-            f"We confirmed your {method.upper()} payment and activated Build Pro "
-            f"on account {username}."
-        )
+        return f"We confirmed your {method.upper()} payment."
     if method == "mercadopago":
-        return (
-            f"We confirmed your Mercado Pago payment and activated Build Pro "
-            f"on account {username}."
-        )
-    return (
-        f"Your Build Pro subscription is active on account {username} "
-        f"(automatic activation after PayPal)."
-    )
+        return "We confirmed your Mercado Pago payment."
+    return "Your subscription is active."
 
 
-def _pro_activation_quickstart_text(*, username: str, lang: str) -> str:
+def _pro_activation_intro(*, username: str, lang: str, payment_method: str) -> str:
+    return _pro_payment_line(lang=lang, payment_method=payment_method)
+
+
+def _pro_login_cmd(username: str, password: str) -> str:
+    cmd = f"market login --username {username}"
+    if password:
+        cmd = f"{cmd} --password {password}"
+    return cmd
+
+
+def compose_pro_welcome_email(
+    *,
+    display_name: str,
+    username: str,
+    email: str,
+    password: str = "",
+    lang: str = "es",
+    payment_method: str = "paypal",
+    request_id: str = "",
+) -> dict[str, str]:
+    """Single structured welcome: nombre + acceso vinculado + un bloque terminal."""
+    lang = (lang or "es").strip().lower()[:2]
+    dn = (display_name or username or "Cliente").strip()
+    user = (username or "").strip()
+    mail = (email or "").strip()
+    login = _pro_login_cmd(user, password)
+    pay = _pro_payment_line(lang=lang, payment_method=payment_method)
+    ref_es = f"\nRef. {request_id}" if request_id else ""
+    ref_en = f"\nRef. {request_id}" if request_id else ""
+
     if lang == "es":
-        return f"""CÓMO EMPEZAR (copia y pega en tu terminal, línea por línea)
-
-1) Instalar CLI (solo la primera vez)
-   pip install cli-market-world
-
-2) Iniciar sesión con tu cuenta Pro
-   market login --username {username}
-   (te pedirá tu contraseña — la misma del registro)
-
-3) Verificar que Pro está activo
-   market whoami
-   → debe mostrar: tier: pro
-
-4) Probar una búsqueda
-   market search "arroz" --country PE
-
-5) (Opcional) Revisar que todo está bien
-   market doctor
-
-Guía paso a paso: https://cli-market.dev/docs#quickstart
-Herramientas MCP (Cursor, Claude): https://cli-market.dev/tools"""
-    return f"""GET STARTED (copy-paste into your terminal, one line at a time)
-
-1) Install the CLI (first time only)
-   pip install cli-market-world
-
-2) Log in with your Pro account
-   market login --username {username}
-   (you will be prompted for your password)
-
-3) Verify Pro is active
-   market whoami
-   → should show: tier: pro
-
-4) Try a search
-   market search "rice" --country PE
-
-5) (Optional) Run a health check
-   market doctor
-
-Step-by-step guide: https://cli-market.dev/docs#quickstart
-MCP tools (Cursor, Claude): https://cli-market.dev/tools"""
-
-
-def _pro_activation_quickstart_html(*, username: str, lang: str) -> str:
-    if lang == "es":
-        title = "Cómo empezar"
-        steps = (
-            f"<strong>1)</strong> Instalar CLI (solo la primera vez)<br>"
-            f"<code style='color:#3afecf;'>pip install cli-market-world</code><br><br>"
-            f"<strong>2)</strong> Iniciar sesión con tu cuenta Pro<br>"
-            f"<code style='color:#3afecf;'>market login --username {username}</code><br>"
-            f"<span style='color:#889992;font-size:12px;'>Te pedirá tu contraseña del registro.</span><br><br>"
-            f"<strong>3)</strong> Verificar que Pro está activo<br>"
-            f"<code style='color:#3afecf;'>market whoami</code><br>"
-            f"<span style='color:#889992;font-size:12px;'>Debe mostrar: tier: pro</span><br><br>"
-            f"<strong>4)</strong> Probar una búsqueda<br>"
-            f"<code style='color:#3afecf;'>market search \"arroz\" --country PE</code><br><br>"
-            f"<strong>5)</strong> (Opcional) Revisar estado<br>"
-            f"<code style='color:#3afecf;'>market doctor</code>"
+        subject = f"{dn}, tu CLI Market Pro ya está listo"
+        access = (
+            f"Nombre · {dn}\n"
+            f"Email · {mail}\n"
+            f"Usuario CLI · {user}\n"
+            f"Contraseña · {password or '(en el bloque de abajo)'}"
         )
+        text = f"""Hola {dn},
+
+{pay} Build Pro ya está activo en tu cuenta.
+
+Conéctate en dos pasos — copia y pega el bloque de abajo en tu terminal.
+Si ya tienes `market` instalado, no reinstales nada.
+
+── TU ACCESO (todo va junto) ──
+{access}
+
+El login usa Usuario CLI + Contraseña. El email es el de tu facturación.
+
+```bash
+{login}
+market
+```
+
+Deberías ver: tier pro · user {user}
+
+¿Primera vez sin CLI? Antes del bloque anterior, una sola vez:
+pip install cli-market-world
+
+Docs · https://cli-market.dev/docs#quickstart
+MCP · https://cli-market.dev/tools{ref_es}
+
+¿Algo no funciona? Responde este correo — te acompañamos hoy mismo.
+
+— Ricardo · CLI Market
+"""
+        access_rows = (
+            ("Nombre", dn),
+            ("Email", mail),
+            ("Usuario CLI", user),
+            ("Contraseña", password or "—"),
+        )
+        access_html = "".join(
+            f"<tr><td style='padding:6px 0;color:#889992;font-size:12px;width:38%;'>{label}</td>"
+            f"<td style='padding:6px 0;color:#fff;font-family:monospace;font-size:13px;'>{val}</td></tr>"
+            for label, val in access_rows
+        )
+        html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0a0a0b;font-family:ui-sans-serif,system-ui,sans-serif;color:#e5e2e3;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0b;padding:32px 0;">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#131314;border:1px solid #3b4a44;border-radius:12px;max-width:560px;">
+<tr><td style="padding:28px 32px;">
+<p style="margin:0 0 6px;font-family:monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#3afecf;">CLI MARKET PRO</p>
+<h1 style="margin:0 0 12px;font-size:22px;color:#fff;">Hola {dn}</h1>
+<p style="margin:0 0 20px;font-size:14px;color:#b9cac2;line-height:1.6;">{pay} Build Pro ya está activo. Conéctate en dos pasos — si ya tienes <code style="color:#3afecf;">market</code>, no reinstales.</p>
+<p style="margin:0 0 8px;font-size:11px;color:#3afecf;font-family:monospace;letter-spacing:0.08em;text-transform:uppercase;">Tu acceso</p>
+<table width="100%" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:8px;margin-bottom:16px;">
+<tr><td style="padding:14px 16px;"><table width="100%" cellpadding="0" cellspacing="0">{access_html}</table></td></tr></table>
+<p style="margin:0 0 8px;font-size:11px;color:#889992;">Usuario CLI + contraseña para el login · email de facturación</p>
+<pre style="margin:0 0 16px;padding:14px 16px;background:#0a0a0b;border:1px solid #3b4a44;border-radius:8px;font-family:ui-monospace,monospace;font-size:12px;color:#3afecf;line-height:1.6;white-space:pre-wrap;user-select:all;">{login}
+market</pre>
+<p style="margin:0 0 8px;font-size:12px;color:#889992;">Barra esperada: tier pro · user {user}</p>
+<p style="margin:0 0 16px;font-size:12px;color:#889992;">¿Sin CLI aún? Una vez: <code style="color:#3afecf;">pip install cli-market-world</code></p>
+<p style="margin:0;font-size:12px;color:#b9cac2;"><a href="https://cli-market.dev/docs#quickstart" style="color:#3afecf;">Docs</a> · <a href="https://cli-market.dev/tools" style="color:#3afecf;">MCP</a></p>
+</td></tr>
+<tr><td style="padding:16px 32px;border-top:1px solid #3b4a44;">
+<p style="margin:0;font-size:12px;color:#b9cac2;">¿Dudas? Responde este correo — Ricardo · CLI Market</p>
+</td></tr>
+</table></td></tr></table>
+</body></html>"""
     else:
-        title = "Get started"
-        steps = (
-            f"<strong>1)</strong> Install the CLI (first time only)<br>"
-            f"<code style='color:#3afecf;'>pip install cli-market-world</code><br><br>"
-            f"<strong>2)</strong> Log in with your Pro account<br>"
-            f"<code style='color:#3afecf;'>market login --username {username}</code><br>"
-            f"<span style='color:#889992;font-size:12px;'>You will be prompted for your password.</span><br><br>"
-            f"<strong>3)</strong> Verify Pro is active<br>"
-            f"<code style='color:#3afecf;'>market whoami</code><br>"
-            f"<span style='color:#889992;font-size:12px;'>Should show: tier: pro</span><br><br>"
-            f"<strong>4)</strong> Try a search<br>"
-            f"<code style='color:#3afecf;'>market search \"rice\" --country PE</code><br><br>"
-            f"<strong>5)</strong> (Optional) Health check<br>"
-            f"<code style='color:#3afecf;'>market doctor</code>"
+        subject = f"{dn}, your CLI Market Pro is ready"
+        access = (
+            f"Name · {dn}\n"
+            f"Email · {mail}\n"
+            f"CLI user · {user}\n"
+            f"Password · {password or '(in the block below)'}"
         )
-    return (
-        f"<p style='margin:0 0 10px;font-size:13px;color:#3afecf;"
-        f"font-family:monospace;letter-spacing:0.08em;text-transform:uppercase;'>{title}</p>"
-        f"<p style='margin:0;font-family:monospace;font-size:12px;color:#b9cac2;line-height:2.0;'>{steps}</p>"
-    )
+        text = f"""Hi {dn},
+
+{pay} Build Pro is active on your account.
+
+Connect in two steps — copy the block below into your terminal.
+If you already have `market`, do not reinstall.
+
+── YOUR ACCESS (linked together) ──
+{access}
+
+Login uses CLI user + password. Email is for billing.
+
+```bash
+{login}
+market
+```
+
+You should see: tier pro · user {user}
+
+First time without CLI? Once, before the block above:
+pip install cli-market-world
+
+Docs · https://cli-market.dev/docs#quickstart
+MCP · https://cli-market.dev/tools{ref_en}
+
+Something off? Reply to this email — we will help today.
+
+— Ricardo · CLI Market
+"""
+        access_rows = (
+            ("Name", dn),
+            ("Email", mail),
+            ("CLI user", user),
+            ("Password", password or "—"),
+        )
+        access_html = "".join(
+            f"<tr><td style='padding:6px 0;color:#889992;font-size:12px;width:38%;'>{label}</td>"
+            f"<td style='padding:6px 0;color:#fff;font-family:monospace;font-size:13px;'>{val}</td></tr>"
+            for label, val in access_rows
+        )
+        html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0a0a0b;font-family:ui-sans-serif,system-ui,sans-serif;color:#e5e2e3;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0b;padding:32px 0;">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#131314;border:1px solid #3b4a44;border-radius:12px;max-width:560px;">
+<tr><td style="padding:28px 32px;">
+<p style="margin:0 0 6px;font-family:monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#3afecf;">CLI MARKET PRO</p>
+<h1 style="margin:0 0 12px;font-size:22px;color:#fff;">Hi {dn}</h1>
+<p style="margin:0 0 20px;font-size:14px;color:#b9cac2;line-height:1.6;">{pay} Build Pro is active. Connect in two steps — if you already have <code style="color:#3afecf;">market</code>, skip reinstall.</p>
+<p style="margin:0 0 8px;font-size:11px;color:#3afecf;font-family:monospace;letter-spacing:0.08em;text-transform:uppercase;">Your access</p>
+<table width="100%" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:8px;margin-bottom:16px;">
+<tr><td style="padding:14px 16px;"><table width="100%" cellpadding="0" cellspacing="0">{access_html}</table></td></tr></table>
+<pre style="margin:0 0 16px;padding:14px 16px;background:#0a0a0b;border:1px solid #3b4a44;border-radius:8px;font-family:ui-monospace,monospace;font-size:12px;color:#3afecf;line-height:1.6;white-space:pre-wrap;user-select:all;">{login}
+market</pre>
+<p style="margin:0 0 8px;font-size:12px;color:#889992;">Expected bar: tier pro · user {user}</p>
+<p style="margin:0 0 16px;font-size:12px;color:#889992;">No CLI yet? Once: <code style="color:#3afecf;">pip install cli-market-world</code></p>
+</td></tr>
+<tr><td style="padding:16px 32px;border-top:1px solid #3b4a44;">
+<p style="margin:0;font-size:12px;color:#b9cac2;">Questions? Reply — Ricardo · CLI Market</p>
+</td></tr>
+</table></td></tr></table>
+</body></html>"""
+    return {"subject": subject, "text": text.strip(), "html": html}
+
+
+def _pro_activation_quickstart_text(**kwargs) -> str:
+    """Backward-compat shim for tests."""
+    composed = compose_pro_welcome_email(**kwargs)
+    return composed["text"]
+
+
+def _pro_activation_quickstart_html(**kwargs) -> str:
+    composed = compose_pro_welcome_email(**kwargs)
+    return composed["html"]
 
 
 def format_pro_activated_reply_draft(
@@ -563,42 +643,22 @@ def format_pro_activated_reply_draft(
     lang: str = "es",
     payment_method: str = "paypal",
     request_id: str = "",
+    password: str = "",
+    email: str = "",
+    display_name: str = "",
 ) -> dict[str, str]:
     """Ready-to-send reply draft for hello@cli-market.dev (ops copy/paste)."""
-    ref_es = f"\nReferencia: {request_id}" if request_id else ""
-    ref_en = f"\nReference: {request_id}" if request_id else ""
-    intro = _pro_activation_intro(username=username, lang=lang, payment_method=payment_method)
-    quickstart = _pro_activation_quickstart_text(username=username, lang=lang)
-
-    if lang == "es":
-        subject = "RE: CLI Market Pro — cuenta activa"
-        text = f"""Hola,
-
-{intro}
-
-{quickstart}
-{ref_es}
-
-¿Dudas? Responde este correo.
-
-— Ricardo · CLI Market
-hello@cli-market.dev
-"""
-    else:
-        subject = "RE: CLI Market Pro — account active"
-        text = f"""Hi,
-
-{intro}
-
-{quickstart}
-{ref_en}
-
-Questions? Reply to this email.
-
-— Ricardo · CLI Market
-hello@cli-market.dev
-"""
-    return {"subject": subject, "text": text}
+    composed = compose_pro_welcome_email(
+        display_name=display_name or username,
+        username=username,
+        email=email,
+        password=password,
+        lang=lang,
+        payment_method=payment_method,
+        request_id=request_id,
+    )
+    subject = f"RE: {composed['subject']}"
+    return {"subject": subject, "text": composed["text"]}
 
 
 def send_pro_activated_notify(
@@ -610,6 +670,8 @@ def send_pro_activated_notify(
     request_id: str = "",
     subscription_id: str = "",
     source: str = "",
+    password: str = "",
+    display_name: str = "",
 ) -> dict:
     """Create a Gmail draft reply for the customer (fallback: ops copy/paste email)."""
     draft = format_pro_activated_reply_draft(
@@ -617,6 +679,9 @@ def send_pro_activated_notify(
         lang=lang,
         payment_method=payment_method,
         request_id=request_id or subscription_id,
+        password=password,
+        email=subscriber_email,
+        display_name=display_name,
     )
     method = (payment_method or "paypal").strip().lower()
 
@@ -690,114 +755,22 @@ def send_pro_activated_email(
     request_id: str = "",
     source: str = "",
     notify_ops: bool = True,
+    password: str = "",
+    display_name: str = "",
 ) -> dict:
     """Confirm Pro activation (PayPal webhook, MP, or manual Yape/Plin)."""
     method = (payment_method or "paypal").strip().lower()
-    sub_line = f"\nSuscripción PayPal: {subscription_id}" if subscription_id else ""
-    sub_line_en = f"\nPayPal subscription: {subscription_id}" if subscription_id else ""
-    ref_line_es = f"\nReferencia: {request_id}" if request_id else ""
-    ref_line_en = f"\nReference: {request_id}" if request_id else ""
-
-    quickstart_text = _pro_activation_quickstart_text(username=username, lang=lang)
-    quickstart_html = _pro_activation_quickstart_html(username=username, lang=lang)
-
-    if lang == "es":
-        subject = "CLI Market Pro activo — pasos para empezar"
-        activation_note = _pro_activation_intro(
-            username=username, lang="es", payment_method=method,
-        )
-        text = f"""Hola {username},
-
-{activation_note}
-
-{quickstart_text}
-
-Límites Pro:
-• 10,000 consultas API / día
-• 10 claves API (lectura + escritura)
-• Exportación JSON/CSV
-• Checkout con PayPal + Yape/Plin
-{sub_line}{ref_line_es}
-
-¿Preguntas? Responda este correo — contestamos el mismo día.
-
-— Ricardo · CLI Market
-hello@cli-market.dev
-"""
-        html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#0a0a0b;font-family:ui-sans-serif,system-ui,sans-serif;color:#e5e2e3;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0b;padding:40px 0;">
-<tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#131314;border:1px solid #3b4a44;border-radius:12px;max-width:560px;">
-<tr><td style="padding:32px 36px;">
-<p style="margin:0 0 4px;font-family:monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#3afecf;">CLI MARKET PRO</p>
-<h1 style="margin:0 0 16px;font-size:22px;color:#fff;">Su plan Pro está activo</h1>
-<p style="margin:0 0 20px;font-size:14px;color:#b9cac2;line-height:1.6;">
-Hola <strong style="color:#fff">{username}</strong>,<br><br>
-{activation_note}
-</p>
-<table width="100%" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:6px;margin-bottom:20px;">
-<tr><td style="padding:14px 18px;">{quickstart_html}</td></tr></table>
-<p style="margin:0 0 12px;font-size:13px;color:#b9cac2;line-height:1.6;">
-Límites Pro: 10.000 consultas/día · 10 claves API · export CSV/JSON · checkout Yape/Plin/PayPal
-</p>
-<p style="margin:0;font-size:13px;color:#b9cac2;">Guía: <a href="https://cli-market.dev/docs#quickstart" style="color:#3afecf;">cli-market.dev/docs</a> · MCP: <a href="https://cli-market.dev/tools" style="color:#3afecf;">cli-market.dev/tools</a></p>
-</td></tr>
-<tr><td style="padding:20px 36px;border-top:1px solid #3b4a44;">
-<p style="margin:0;font-size:12px;color:#b9cac2;">— Ricardo · CLI Market</p>
-</td></tr>
-</table></td></tr></table>
-</body></html>"""
-    else:
-        subject = "CLI Market Pro is active — getting started"
-        activation_note_en = _pro_activation_intro(
-            username=username, lang="en", payment_method=method,
-        )
-        text = f"""Hi {username},
-
-{activation_note_en}
-
-{quickstart_text}
-
-Pro limits:
-• 10,000 API requests / day
-• 10 API keys (read + write)
-• JSON/CSV export
-• Checkout with PayPal + Yape/Plin
-{sub_line_en}{ref_line_en}
-
-Questions? Reply to this email — we respond same day.
-
-— Ricardo · CLI Market
-hello@cli-market.dev
-"""
-        html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#0a0a0b;font-family:ui-sans-serif,system-ui,sans-serif;color:#e5e2e3;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0b;padding:40px 0;">
-<tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#131314;border:1px solid #3b4a44;border-radius:12px;max-width:560px;">
-<tr><td style="padding:32px 36px;">
-<p style="margin:0 0 4px;font-family:monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#3afecf;">CLI MARKET PRO</p>
-<h1 style="margin:0 0 16px;font-size:22px;color:#fff;">Your Pro plan is active</h1>
-<p style="margin:0 0 20px;font-size:14px;color:#b9cac2;line-height:1.6;">
-Hi <strong style="color:#fff">{username}</strong>,<br><br>
-{activation_note_en}
-</p>
-<table width="100%" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:6px;margin-bottom:20px;">
-<tr><td style="padding:14px 18px;">{quickstart_html}</td></tr></table>
-<p style="margin:0 0 12px;font-size:13px;color:#b9cac2;line-height:1.6;">
-Pro limits: 10,000 requests/day · 10 API keys · CSV/JSON export · Yape/Plin/PayPal checkout
-</p>
-<p style="margin:0;font-size:13px;color:#b9cac2;">Guide: <a href="https://cli-market.dev/docs#quickstart" style="color:#3afecf;">cli-market.dev/docs</a> · MCP: <a href="https://cli-market.dev/tools" style="color:#3afecf;">cli-market.dev/tools</a></p>
-</td></tr>
-<tr><td style="padding:20px 36px;border-top:1px solid #3b4a44;">
-<p style="margin:0;font-size:12px;color:#b9cac2;">— Ricardo · CLI Market</p>
-</td></tr>
-</table></td></tr></table>
-</body></html>"""
-    result = _send(to_email, subject, text, html)
+    rid = request_id or subscription_id
+    composed = compose_pro_welcome_email(
+        display_name=display_name or username,
+        username=username,
+        email=to_email,
+        password=password,
+        lang=lang,
+        payment_method=method,
+        request_id=rid,
+    )
+    result = _send(to_email, composed["subject"], composed["text"], composed["html"])
     if notify_ops and result.get("sent"):
         try:
             ops = send_pro_activated_notify(
@@ -808,6 +781,8 @@ Pro limits: 10,000 requests/day · 10 API keys · CSV/JSON export · Yape/Plin/P
                 request_id=request_id,
                 subscription_id=subscription_id,
                 source=source,
+                password=password,
+                display_name=display_name,
             )
             result["ops_notified"] = ops.get("sent", False)
             result["gmail_draft"] = ops.get("gmail_draft", False)
