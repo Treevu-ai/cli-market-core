@@ -162,16 +162,16 @@ SECTIONS: dict[str, SECTION] = {
             "aparecen solo en dispersión/brechas."
         ),
         "metrics": {
-            "count": _m("Cantidad de precios", "Registros en esa categoría."),
+            "count": _m("Cantidad de precios", "Registros en esa línea de negocio."),
             "avg_price": _m("Precio promedio", "Suma de precios dividida entre cuántos hay. No es «el precio justo», solo el centro del rango."),
-            "min_price": _m("Precio mínimo", "El más barato registrado en esa categoría."),
-            "max_price": _m("Precio máximo", "El más caro registrado en esa categoría."),
+            "min_price": _m("Precio mínimo", "El más barato registrado en esa línea."),
+            "max_price": _m("Precio máximo", "El más caro registrado en esa línea."),
         },
     },
     "cheapest_by_line": {
-        "title": "Tienda más barata por categoría",
+        "title": "Tienda más barata por línea de negocio",
         "summary": (
-            "Para cada tipo de negocio, qué tienda tiene el precio promedio más bajo en nuestros datos. "
+            "Para cada línea de negocio, qué tienda tiene el precio promedio más bajo en nuestros datos. "
             "Útil para ver quién suele ser más económico, no para un producto específico."
         ),
     },

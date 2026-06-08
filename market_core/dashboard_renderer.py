@@ -344,7 +344,8 @@ def _render_exploration(view: dict) -> str:
         for r in expl.get("dispersion_sample") or []
     )
     expl_intro = expl.get("subtitle") or (
-        "Cada fila = línea de negocio + moneda. Subcategorías (arroz, leche…) solo en dispersión."
+        "Cada fila combina línea de negocio y moneda. "
+        "Las subcategorías de producto (arroz, leche…) solo aparecen en dispersión."
     )
     disp_block = f"""
 <details class="dirty-section dirty-collapsed">
@@ -354,11 +355,11 @@ def _render_exploration(view: dict) -> str:
     return f"""
 <section class="exploration-layer">
   <div class="filter-bar">
-    <label class="toggle-clean"><input type="checkbox" id="clean-toggle" checked> solo dato limpio</label>
+    <label class="toggle-clean"><input type="checkbox" id="clean-toggle" checked> Solo datos limpios</label>
   </div>
   <div class="section clean-section">[ {_esc((expl.get('title') or 'PRECIOS POR LÍNEA DE NEGOCIO').upper())} ]</div>
   <p class="section-intro">{_esc(expl_intro)}</p>
-  <table><tr><th>Línea · Moneda</th><th>Precios</th><th>P25</th><th>Mediana</th><th>P75</th><th>Unidad</th><th>Normalizable</th></tr>{by_line_rows or '<tr><td colspan=7>sin datos</td></tr>'}</table>
+  <table><tr><th>Línea · Moneda</th><th>Precios</th><th>P25</th><th>Mediana</th><th>P75</th><th>Unidad</th><th>Normalizable</th></tr>{by_line_rows or '<tr><td colspan=7>Sin datos</td></tr>'}</table>
   {disp_block if dispersion_rows else ''}
 </section>
 """

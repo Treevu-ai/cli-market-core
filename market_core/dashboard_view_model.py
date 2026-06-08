@@ -276,7 +276,7 @@ def build_dashboard_view_model(data: dict) -> dict:
             "line_key": row.get("line"),
             "store": store_name,
             "copy": f"{line_name} → más barato en {store_name}",
-            "microcopy": "Promedio más bajo de la categoría.",
+            "microcopy": "Promedio más bajo de la línea de negocio.",
             "avg_price": row.get("avg_price"),
             "currency": row.get("currency"),
             "source": "cheapest_by_line",
@@ -520,8 +520,8 @@ def build_dashboard_view_model(data: dict) -> dict:
         "clean_default": True,
         "title": "Precios por línea de negocio",
         "subtitle": (
-            "Cada fila es una línea de negocio en una moneda (ej. Supermercados · PEN). "
-            "No confundir con subcategoría de producto (arroz, leche…) — esas aparecen en brechas de dispersión."
+            "Cada fila es una línea de negocio en una moneda (p. ej. Supermercados · PEN). "
+            "No la confundas con la subcategoría de producto (arroz, leche…): esas aparecen en las brechas de dispersión."
         ),
         "by_line_currency": [
             {
