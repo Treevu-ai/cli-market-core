@@ -75,7 +75,7 @@ PEPY_BADGE_URL = (
     "?label=downloads&color=00d75f&logo=pypi"
 )
 PIP_INSTALL_CMD = f"pip install {PYPI_PACKAGE_NAME}"
-PAYMENTS_LABEL = "PayPal · Mercado Pago · QR (Yape/Plin)"
+PAYMENTS_LABEL = "PayPal · Mercado Pago · Yape/Plin"
 BUSINESS_LINES = 6
 PLATFORM_LIST_EN = "VTEX · Shopify · Magento · WooCommerce"
 PLATFORM_LIST_ES = "VTEX · Shopify · Magento · WooCommerce"
