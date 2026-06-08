@@ -1,3 +1,10 @@
+<!-- readme-hero -->
+<div align="center">
+
+<img src="assets/readme-hero.gif" alt="CLI MARKET CORE" width="100%" />
+
+</div>
+
 # cli-market-core
 
 > **Intelligence Layer** — Indicators, billing, connectors, and MCP tools for CLI Market
