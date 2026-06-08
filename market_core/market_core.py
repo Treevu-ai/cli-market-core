@@ -85,6 +85,18 @@ LINES = {
     "automotriz":      {"name": "Automotriz",           "emoji": "🚗", "description": "Repuestos, accesorios y servicios automotrices"},
 }
 
+
+def canonical_line_name(line_id: str | None) -> str:
+    """Display name for a business line — ignores legacy line_name in snapshots."""
+    key = (line_id or "").strip()
+    if not key:
+        return "Sin categoría"
+    meta = LINES.get(key)
+    if meta:
+        return str(meta.get("name") or key)
+    return key.replace("_", " ").title()
+
+
 COUNTRIES: dict[str, dict] = {}
 for _sk, _sv in STORES.items():
     _cc = _sv["country"]

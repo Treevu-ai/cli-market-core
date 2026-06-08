@@ -327,7 +327,7 @@ def _render_exploration(view: dict) -> str:
     if not expl:
         return ""
     by_line_rows = "".join(
-        f"<tr><td>{_esc(r.get('line_name', ''))}</td>"
+        f"<tr><td>{_esc(r.get('category_label') or r.get('line_name', ''))}</td>"
         f"<td class='num'>{r.get('count', 0):,}</td>"
         f"<td class='num'>{_esc(r.get('currency', ''))} {(r.get('p25') or 0):.2f}</td>"
         f"<td class='num'>{(r.get('p50') or 0):.2f}</td>"
@@ -343,18 +343,22 @@ def _render_exploration(view: dict) -> str:
         f"<td class='num'>{(r.get('spread_ratio') or 0):.1f}x</td></tr>"
         for r in expl.get("dispersion_sample") or []
     )
+    expl_intro = expl.get("subtitle") or (
+        "Cada fila = línea de negocio + moneda. Subcategorías (arroz, leche…) solo en dispersión."
+    )
     disp_block = f"""
 <details class="dirty-section dirty-collapsed">
   <summary>Brechas sospechosas (dispersion crit) — colapsado</summary>
-  <table><tr><th>Categoría</th><th>Subcat</th><th>Moneda</th><th>Brecha</th></tr>{dispersion_rows}</table>
+  <table><tr><th>Línea</th><th>Subcategoría producto</th><th>Moneda</th><th>Brecha</th></tr>{dispersion_rows}</table>
 </details>"""
     return f"""
 <section class="exploration-layer">
   <div class="filter-bar">
     <label class="toggle-clean"><input type="checkbox" id="clean-toggle" checked> solo dato limpio</label>
   </div>
-  <div class="section clean-section">[ PRECIOS POR CATEGORÍA ]</div>
-  <table><tr><th>Categoría</th><th>Precios</th><th>P25</th><th>Mediana</th><th>P75</th><th>Unidad</th><th>Normalizable</th></tr>{by_line_rows or '<tr><td colspan=7>sin datos</td></tr>'}</table>
+  <div class="section clean-section">[ {_esc((expl.get('title') or 'PRECIOS POR LÍNEA DE NEGOCIO').upper())} ]</div>
+  <p class="section-intro">{_esc(expl_intro)}</p>
+  <table><tr><th>Línea · Moneda</th><th>Precios</th><th>P25</th><th>Mediana</th><th>P75</th><th>Unidad</th><th>Normalizable</th></tr>{by_line_rows or '<tr><td colspan=7>sin datos</td></tr>'}</table>
   {disp_block if dispersion_rows else ''}
 </section>
 """

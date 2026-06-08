@@ -6,6 +6,7 @@ import difflib
 import re
 from collections import defaultdict
 
+from .market_core import canonical_line_name
 from .market_units import is_standard_canasta_pack, price_per_base_unit
 from .price_confidence import spread_public_ok
 
@@ -239,13 +240,13 @@ def compute_dispersion(products: list[dict]) -> list[dict]:
         currency = row.get("currency") or "???"
         if line in WIDE_LINES:
             sub = infer_subcategory(line, row.get("name") or "", row.get("category") or "")
-            key = (line, row.get("line_name") or line, currency, sub)
+            key = (line, currency, sub)
         else:
-            key = (line, row.get("line_name") or line, currency, "")
+            key = (line, currency, "")
         groups[key].append(row)
 
     out: list[dict] = []
-    for (line, line_name, currency, sub), rows in groups.items():
+    for (line, currency, sub), rows in groups.items():
         if len(rows) < 3:
             continue
         by_basis: dict[str, list[float]] = defaultdict(list)
@@ -269,7 +270,7 @@ def compute_dispersion(products: list[dict]) -> list[dict]:
 
         stats = _spread_from_prices(prices)
         out.append({
-            "line": line_name,
+            "line": canonical_line_name(line),
             "line_key": line,
             "currency": currency,
             "subcategory": sub or None,
@@ -338,7 +339,7 @@ def find_median_outliers(
                 "store": r.get("store"),
                 "price": r.get("price"),
                 "currency": currency,
-                "line_name": r.get("line_name") or r.get("line"),
+                "line_name": canonical_line_name(_line),
                 "line_key": _line,
                 "subcategory": sub or None,
                 "price_basis": basis_pick,
@@ -444,7 +445,8 @@ def compute_marketing_spreads(products: list[dict]) -> list[dict]:
             rep = min(store_best.values(), key=lambda x: x["_val"])
             out.append({
                 "seed": item,
-                "line": rep.get("line_name") or rep.get("line"),
+                "line": canonical_line_name(rep.get("line")),
+                "line_key": rep.get("line"),
                 "currency": currency,
                 "subcategory": item,
                 "price_basis": bases.pop(),
@@ -499,7 +501,8 @@ def compute_marketing_spreads(products: list[dict]) -> list[dict]:
                 rep = next(iter(store_rows.values()))
                 out.append({
                     "seed": seed,
-                    "line": rep.get("line_name") or rep.get("line"),
+                    "line": canonical_line_name(rep.get("line") or line_hint),
+                    "line_key": rep.get("line") or line_hint,
                     "currency": currency,
                     "subcategory": infer_subcategory(rep.get("line") or "", rep.get("name") or ""),
                     "price_basis": bases.pop(),

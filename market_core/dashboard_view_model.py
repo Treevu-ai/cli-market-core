@@ -269,10 +269,11 @@ def build_dashboard_view_model(data: dict) -> dict:
 
     cheapest_rows = []
     for row in data.get("cheapest_by_line") or []:
-        line_name = row.get("line_name") or "?"
+        line_name = row.get("line_name") or row.get("line") or "?"
         store_name = row.get("store_name") or "?"
         cheapest_rows.append({
             "line": line_name,
+            "line_key": row.get("line"),
             "store": store_name,
             "copy": f"{line_name} → más barato en {store_name}",
             "microcopy": "Promedio más bajo de la categoría.",
@@ -517,9 +518,17 @@ def build_dashboard_view_model(data: dict) -> dict:
     block_exploration = {
         "id": "exploration",
         "clean_default": True,
+        "title": "Precios por línea de negocio",
+        "subtitle": (
+            "Cada fila es una línea de negocio en una moneda (ej. Supermercados · PEN). "
+            "No confundir con subcategoría de producto (arroz, leche…) — esas aparecen en brechas de dispersión."
+        ),
         "by_line_currency": [
             {
+                "line_key": r.get("line"),
                 "line_name": r.get("line_name") or r.get("line"),
+                "category_label": r.get("category_label")
+                or f"{r.get('line_name') or r.get('line')} · {r.get('currency', '')}",
                 "currency": r.get("currency"),
                 "count": int(r.get("count") or 0),
                 "p25": float(r.get("p25") or 0),

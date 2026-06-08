@@ -153,11 +153,13 @@ SECTIONS: dict[str, SECTION] = {
         },
     },
     "by_line": {
-        "title": "Precios por categoría (línea)",
+        "title": "Precios por línea de negocio",
         "summary": (
-            "Agrupa productos por tipo de negocio: supermercados, farmacias, electro, etc. "
-            "Muestra cuántos precios hay y el precio típico (promedio), el más bajo y el más alto "
-            "dentro de esa categoría — sin mezclar monedas distintas en un solo número."
+            "Una fila por tipo de negocio (supermercados, farmacias, electro, hogar, etc.) — "
+            "nombres canónicos del catálogo VTEX, no etiquetas legacy del collector. "
+            "En la tabla exploratoria cada línea se desglosa por moneda (Supermercados · PEN vs · ARS); "
+            "eso no es duplicado, son mercados distintos. Subcategorías de producto (arroz, leche) "
+            "aparecen solo en dispersión/brechas."
         ),
         "metrics": {
             "count": _m("Cantidad de precios", "Registros en esa categoría."),
