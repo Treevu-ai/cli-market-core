@@ -433,6 +433,130 @@ hello@cli-market.dev
     return _send(to_email, subject, text, html)
 
 
+def _pro_activation_intro(
+    *,
+    username: str,
+    lang: str,
+    payment_method: str,
+) -> str:
+    method = (payment_method or "paypal").strip().lower()
+    if lang == "es":
+        if method in ("yape", "plin"):
+            return (
+                f"Confirmamos tu pago ({method.upper()}) y activamos Build Pro "
+                f"en la cuenta {username}."
+            )
+        if method == "mercadopago":
+            return (
+                f"Confirmamos tu pago en Mercado Pago y activamos Build Pro "
+                f"en la cuenta {username}."
+            )
+        return (
+            f"Tu suscripción Build Pro quedó activa en la cuenta {username} "
+            f"(activación automática tras PayPal)."
+        )
+    if method in ("yape", "plin"):
+        return (
+            f"We confirmed your {method.upper()} payment and activated Build Pro "
+            f"on account {username}."
+        )
+    if method == "mercadopago":
+        return (
+            f"We confirmed your Mercado Pago payment and activated Build Pro "
+            f"on account {username}."
+        )
+    return (
+        f"Your Build Pro subscription is active on account {username} "
+        f"(automatic activation after PayPal)."
+    )
+
+
+def _pro_activation_quickstart_text(*, username: str, lang: str) -> str:
+    if lang == "es":
+        return f"""CÓMO EMPEZAR (copia y pega en tu terminal, línea por línea)
+
+1) Instalar CLI (solo la primera vez)
+   pip install cli-market-world
+
+2) Iniciar sesión con tu cuenta Pro
+   market login --username {username}
+   (te pedirá tu contraseña — la misma del registro)
+
+3) Verificar que Pro está activo
+   market whoami
+   → debe mostrar: tier: pro
+
+4) Probar una búsqueda
+   market search "arroz" --country PE
+
+5) (Opcional) Revisar que todo está bien
+   market doctor
+
+Guía paso a paso: https://cli-market.dev/docs#quickstart
+Herramientas MCP (Cursor, Claude): https://cli-market.dev/tools"""
+    return f"""GET STARTED (copy-paste into your terminal, one line at a time)
+
+1) Install the CLI (first time only)
+   pip install cli-market-world
+
+2) Log in with your Pro account
+   market login --username {username}
+   (you will be prompted for your password)
+
+3) Verify Pro is active
+   market whoami
+   → should show: tier: pro
+
+4) Try a search
+   market search "rice" --country PE
+
+5) (Optional) Run a health check
+   market doctor
+
+Step-by-step guide: https://cli-market.dev/docs#quickstart
+MCP tools (Cursor, Claude): https://cli-market.dev/tools"""
+
+
+def _pro_activation_quickstart_html(*, username: str, lang: str) -> str:
+    if lang == "es":
+        title = "Cómo empezar"
+        steps = (
+            f"<strong>1)</strong> Instalar CLI (solo la primera vez)<br>"
+            f"<code style='color:#3afecf;'>pip install cli-market-world</code><br><br>"
+            f"<strong>2)</strong> Iniciar sesión con tu cuenta Pro<br>"
+            f"<code style='color:#3afecf;'>market login --username {username}</code><br>"
+            f"<span style='color:#889992;font-size:12px;'>Te pedirá tu contraseña del registro.</span><br><br>"
+            f"<strong>3)</strong> Verificar que Pro está activo<br>"
+            f"<code style='color:#3afecf;'>market whoami</code><br>"
+            f"<span style='color:#889992;font-size:12px;'>Debe mostrar: tier: pro</span><br><br>"
+            f"<strong>4)</strong> Probar una búsqueda<br>"
+            f"<code style='color:#3afecf;'>market search \"arroz\" --country PE</code><br><br>"
+            f"<strong>5)</strong> (Opcional) Revisar estado<br>"
+            f"<code style='color:#3afecf;'>market doctor</code>"
+        )
+    else:
+        title = "Get started"
+        steps = (
+            f"<strong>1)</strong> Install the CLI (first time only)<br>"
+            f"<code style='color:#3afecf;'>pip install cli-market-world</code><br><br>"
+            f"<strong>2)</strong> Log in with your Pro account<br>"
+            f"<code style='color:#3afecf;'>market login --username {username}</code><br>"
+            f"<span style='color:#889992;font-size:12px;'>You will be prompted for your password.</span><br><br>"
+            f"<strong>3)</strong> Verify Pro is active<br>"
+            f"<code style='color:#3afecf;'>market whoami</code><br>"
+            f"<span style='color:#889992;font-size:12px;'>Should show: tier: pro</span><br><br>"
+            f"<strong>4)</strong> Try a search<br>"
+            f"<code style='color:#3afecf;'>market search \"rice\" --country PE</code><br><br>"
+            f"<strong>5)</strong> (Optional) Health check<br>"
+            f"<code style='color:#3afecf;'>market doctor</code>"
+        )
+    return (
+        f"<p style='margin:0 0 10px;font-size:13px;color:#3afecf;"
+        f"font-family:monospace;letter-spacing:0.08em;text-transform:uppercase;'>{title}</p>"
+        f"<p style='margin:0;font-family:monospace;font-size:12px;color:#b9cac2;line-height:2.0;'>{steps}</p>"
+    )
+
+
 def format_pro_activated_reply_draft(
     *,
     username: str,
@@ -441,44 +565,18 @@ def format_pro_activated_reply_draft(
     request_id: str = "",
 ) -> dict[str, str]:
     """Ready-to-send reply draft for hello@cli-market.dev (ops copy/paste)."""
-    method = (payment_method or "paypal").strip().lower()
     ref_es = f"\nReferencia: {request_id}" if request_id else ""
     ref_en = f"\nReference: {request_id}" if request_id else ""
+    intro = _pro_activation_intro(username=username, lang=lang, payment_method=payment_method)
+    quickstart = _pro_activation_quickstart_text(username=username, lang=lang)
 
     if lang == "es":
-        if method in ("yape", "plin"):
-            intro = (
-                f"Confirmamos tu pago ({method.upper()}) y activamos Build Pro "
-                f"en la cuenta {username}."
-            )
-        elif method == "mercadopago":
-            intro = (
-                f"Confirmamos tu pago en Mercado Pago y activamos Build Pro "
-                f"en la cuenta {username}."
-            )
-        else:
-            intro = (
-                f"Tu suscripción Build Pro quedó activa en la cuenta {username} "
-                f"(activación automática tras PayPal)."
-            )
         subject = "RE: CLI Market Pro — cuenta activa"
         text = f"""Hola,
 
 {intro}
 
-Verifica en terminal:
-
-  pip install cli-market-world
-  market login
-  market whoami          → tier: pro
-
-Siguiente paso:
-
-  market search "arroz" --country PE
-  market checkout --payment yape
-
-Documentación: https://cli-market.dev/docs
-Herramientas MCP: https://cli-market.dev/tools
+{quickstart}
 {ref_es}
 
 ¿Dudas? Responde este correo.
@@ -487,39 +585,12 @@ Herramientas MCP: https://cli-market.dev/tools
 hello@cli-market.dev
 """
     else:
-        if method in ("yape", "plin"):
-            intro = (
-                f"We confirmed your {method.upper()} payment and activated Build Pro "
-                f"on account {username}."
-            )
-        elif method == "mercadopago":
-            intro = (
-                f"We confirmed your Mercado Pago payment and activated Build Pro "
-                f"on account {username}."
-            )
-        else:
-            intro = (
-                f"Your Build Pro subscription is active on account {username} "
-                f"(automatic activation after PayPal)."
-            )
         subject = "RE: CLI Market Pro — account active"
         text = f"""Hi,
 
 {intro}
 
-Verify in your terminal:
-
-  pip install cli-market-world
-  market login
-  market whoami          → tier: pro
-
-Next steps:
-
-  market search "rice" --country PE
-  market checkout --payment yape
-
-Docs: https://cli-market.dev/docs
-MCP tools: https://cli-market.dev/tools
+{quickstart}
 {ref_en}
 
 Questions? Reply to this email.
@@ -627,40 +698,26 @@ def send_pro_activated_email(
     ref_line_es = f"\nReferencia: {request_id}" if request_id else ""
     ref_line_en = f"\nReference: {request_id}" if request_id else ""
 
+    quickstart_text = _pro_activation_quickstart_text(username=username, lang=lang)
+    quickstart_html = _pro_activation_quickstart_html(username=username, lang=lang)
+
     if lang == "es":
-        subject = "CLI Market Pro activo — ya puede usar su cuenta"
-        if method in ("yape", "plin"):
-            activation_note = (
-                f"Confirmamos tu pago ({method.upper()}) y activamos Pro en tu cuenta. "
-                "Ya puedes usar los límites Pro."
-            )
-        elif method == "mercadopago":
-            activation_note = (
-                "Confirmamos tu pago en Mercado Pago. Pro quedó activo en tu cuenta."
-            )
-        else:
-            activation_note = (
-                "Su plan Pro quedó activo. La activación fue automática tras confirmar en PayPal."
-            )
+        subject = "CLI Market Pro activo — pasos para empezar"
+        activation_note = _pro_activation_intro(
+            username=username, lang="es", payment_method=method,
+        )
         text = f"""Hola {username},
 
 {activation_note}
 
-──────────────────────────────
-Siguiente paso en terminal:
-  market whoami
-  market doctor
+{quickstart_text}
 
 Límites Pro:
 • 10,000 consultas API / día
 • 10 claves API (lectura + escritura)
 • Exportación JSON/CSV
 • Checkout con PayPal + Yape/Plin
-──────────────────────────────
 {sub_line}{ref_line_es}
-
-Docs: https://cli-market.dev/docs#quickstart
-Herramientas MCP: https://cli-market.dev/tools
 
 ¿Preguntas? Responda este correo — contestamos el mismo día.
 
@@ -681,11 +738,11 @@ Hola <strong style="color:#fff">{username}</strong>,<br><br>
 {activation_note}
 </p>
 <table width="100%" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:6px;margin-bottom:20px;">
-<tr><td style="padding:14px 18px;font-family:monospace;font-size:12px;color:#b9cac2;line-height:1.8;">
-market whoami<br>
-market doctor
-</td></tr></table>
-<p style="margin:0;font-size:13px;color:#b9cac2;">Docs: <a href="https://cli-market.dev/docs#quickstart" style="color:#3afecf;">cli-market.dev/docs</a> · MCP: <a href="https://cli-market.dev/tools" style="color:#3afecf;">cli-market.dev/tools</a></p>
+<tr><td style="padding:14px 18px;">{quickstart_html}</td></tr></table>
+<p style="margin:0 0 12px;font-size:13px;color:#b9cac2;line-height:1.6;">
+Límites Pro: 10.000 consultas/día · 10 claves API · export CSV/JSON · checkout Yape/Plin/PayPal
+</p>
+<p style="margin:0;font-size:13px;color:#b9cac2;">Guía: <a href="https://cli-market.dev/docs#quickstart" style="color:#3afecf;">cli-market.dev/docs</a> · MCP: <a href="https://cli-market.dev/tools" style="color:#3afecf;">cli-market.dev/tools</a></p>
 </td></tr>
 <tr><td style="padding:20px 36px;border-top:1px solid #3b4a44;">
 <p style="margin:0;font-size:12px;color:#b9cac2;">— Ricardo · CLI Market</p>
@@ -693,39 +750,22 @@ market doctor
 </table></td></tr></table>
 </body></html>"""
     else:
-        subject = "CLI Market Pro is active — your account is ready"
-        if method in ("yape", "plin"):
-            activation_note_en = (
-                f"We confirmed your {method.upper()} payment and activated Pro on your account. "
-                "Pro limits are available now."
-            )
-        elif method == "mercadopago":
-            activation_note_en = (
-                "We confirmed your Mercado Pago payment. Pro is active on your account."
-            )
-        else:
-            activation_note_en = (
-                "Your Pro plan is active. Activation was automatic after PayPal confirmation."
-            )
+        subject = "CLI Market Pro is active — getting started"
+        activation_note_en = _pro_activation_intro(
+            username=username, lang="en", payment_method=method,
+        )
         text = f"""Hi {username},
 
 {activation_note_en}
 
-──────────────────────────────
-Next in your terminal:
-  market whoami
-  market doctor
+{quickstart_text}
 
 Pro limits:
 • 10,000 API requests / day
 • 10 API keys (read + write)
 • JSON/CSV export
 • Checkout with PayPal + Yape/Plin
-──────────────────────────────
 {sub_line_en}{ref_line_en}
-
-Docs: https://cli-market.dev/docs#quickstart
-MCP tools: https://cli-market.dev/tools
 
 Questions? Reply to this email — we respond same day.
 
@@ -746,11 +786,11 @@ Hi <strong style="color:#fff">{username}</strong>,<br><br>
 {activation_note_en}
 </p>
 <table width="100%" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:6px;margin-bottom:20px;">
-<tr><td style="padding:14px 18px;font-family:monospace;font-size:12px;color:#b9cac2;line-height:1.8;">
-market whoami<br>
-market doctor
-</td></tr></table>
-<p style="margin:0;font-size:13px;color:#b9cac2;">Docs: <a href="https://cli-market.dev/docs#quickstart" style="color:#3afecf;">cli-market.dev/docs</a> · MCP: <a href="https://cli-market.dev/tools" style="color:#3afecf;">cli-market.dev/tools</a></p>
+<tr><td style="padding:14px 18px;">{quickstart_html}</td></tr></table>
+<p style="margin:0 0 12px;font-size:13px;color:#b9cac2;line-height:1.6;">
+Pro limits: 10,000 requests/day · 10 API keys · CSV/JSON export · Yape/Plin/PayPal checkout
+</p>
+<p style="margin:0;font-size:13px;color:#b9cac2;">Guide: <a href="https://cli-market.dev/docs#quickstart" style="color:#3afecf;">cli-market.dev/docs</a> · MCP: <a href="https://cli-market.dev/tools" style="color:#3afecf;">cli-market.dev/tools</a></p>
 </td></tr>
 <tr><td style="padding:20px 36px;border-top:1px solid #3b4a44;">
 <p style="margin:0;font-size:12px;color:#b9cac2;">— Ricardo · CLI Market</p>

@@ -54,3 +54,25 @@ class TestGmailDrafts:
         args = mock_imap.append.call_args[0]
         assert args[0] == "[Gmail]/Borradores"
         assert args[1] == "\\Draft"
+
+
+class TestProActivationEmail:
+    def test_quickstart_includes_username_and_login(self):
+        from market_connectors.email_outbound import (
+            _pro_activation_quickstart_text,
+            format_pro_activated_reply_draft,
+        )
+
+        text = _pro_activation_quickstart_text(username="acubatruweb", lang="es")
+        assert "pip install cli-market-world" in text
+        assert "market login --username acubatruweb" in text
+        assert "tier: pro" in text
+
+        draft = format_pro_activated_reply_draft(
+            username="acubatruweb",
+            lang="es",
+            payment_method="yape",
+            request_id="PRO-3E2A9E04",
+        )
+        assert "market login --username acubatruweb" in draft["text"]
+        assert "PRO-3E2A9E04" in draft["text"]
