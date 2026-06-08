@@ -433,22 +433,188 @@ hello@cli-market.dev
     return _send(to_email, subject, text, html)
 
 
+def format_pro_activated_reply_draft(
+    *,
+    username: str,
+    lang: str = "es",
+    payment_method: str = "paypal",
+    request_id: str = "",
+) -> dict[str, str]:
+    """Ready-to-send reply draft for hello@cli-market.dev (ops copy/paste)."""
+    method = (payment_method or "paypal").strip().lower()
+    ref_es = f"\nReferencia: {request_id}" if request_id else ""
+    ref_en = f"\nReference: {request_id}" if request_id else ""
+
+    if lang == "es":
+        if method in ("yape", "plin"):
+            intro = (
+                f"Confirmamos tu pago ({method.upper()}) y activamos Build Pro "
+                f"en la cuenta {username}."
+            )
+        elif method == "mercadopago":
+            intro = (
+                f"Confirmamos tu pago en Mercado Pago y activamos Build Pro "
+                f"en la cuenta {username}."
+            )
+        else:
+            intro = (
+                f"Tu suscripción Build Pro quedó activa en la cuenta {username} "
+                f"(activación automática tras PayPal)."
+            )
+        subject = "RE: CLI Market Pro — cuenta activa"
+        text = f"""Hola,
+
+{intro}
+
+Verifica en terminal:
+
+  pip install cli-market-world
+  market login
+  market whoami          → tier: pro
+
+Siguiente paso:
+
+  market search "arroz" --country PE
+  market checkout --payment yape
+
+Documentación: https://cli-market.dev/docs
+Herramientas MCP: https://cli-market.dev/tools
+{ref_es}
+
+¿Dudas? Responde este correo.
+
+— Ricardo · CLI Market
+hello@cli-market.dev
+"""
+    else:
+        if method in ("yape", "plin"):
+            intro = (
+                f"We confirmed your {method.upper()} payment and activated Build Pro "
+                f"on account {username}."
+            )
+        elif method == "mercadopago":
+            intro = (
+                f"We confirmed your Mercado Pago payment and activated Build Pro "
+                f"on account {username}."
+            )
+        else:
+            intro = (
+                f"Your Build Pro subscription is active on account {username} "
+                f"(automatic activation after PayPal)."
+            )
+        subject = "RE: CLI Market Pro — account active"
+        text = f"""Hi,
+
+{intro}
+
+Verify in your terminal:
+
+  pip install cli-market-world
+  market login
+  market whoami          → tier: pro
+
+Next steps:
+
+  market search "rice" --country PE
+  market checkout --payment yape
+
+Docs: https://cli-market.dev/docs
+MCP tools: https://cli-market.dev/tools
+{ref_en}
+
+Questions? Reply to this email.
+
+— Ricardo · CLI Market
+hello@cli-market.dev
+"""
+    return {"subject": subject, "text": text}
+
+
+def send_pro_activated_notify(
+    *,
+    subscriber_email: str,
+    username: str,
+    lang: str = "es",
+    payment_method: str = "paypal",
+    request_id: str = "",
+    subscription_id: str = "",
+    source: str = "",
+) -> dict:
+    """Email hello@cli-market.dev with a copy/paste reply draft for the customer."""
+    draft = format_pro_activated_reply_draft(
+        username=username,
+        lang=lang,
+        payment_method=payment_method,
+        request_id=request_id or subscription_id,
+    )
+    method = (payment_method or "paypal").strip().lower()
+    ops_subject = f"[Pro activado — borrador] {username} — {subscriber_email}"
+    text = (
+        "Build Pro activado — borrador de respuesta listo\n\n"
+        f"Usuario CLI: {username}\n"
+        f"Email cliente: {subscriber_email}\n"
+        f"Método: {method}\n"
+    )
+    if request_id:
+        text += f"Referencia: {request_id}\n"
+    if subscription_id:
+        text += f"PayPal subscription: {subscription_id}\n"
+    if source:
+        text += f"Fuente: {source}\n"
+    text += (
+        "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "BORRADOR (revisar y enviar al cliente)\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"Para: {subscriber_email}\n"
+        f"Asunto: {draft['subject']}\n\n"
+        f"{draft['text']}\n"
+    )
+    html = (
+        f"<pre style='font-family:monospace;font-size:13px;white-space:pre-wrap;'>{text}</pre>"
+    )
+    msg = _send(NOTIFY_EMAIL, ops_subject, text, html)
+    if msg.get("sent"):
+        msg["draft_subject"] = draft["subject"]
+        msg["draft_to"] = subscriber_email
+    return msg
+
+
 def send_pro_activated_email(
     *,
     to_email: str,
     username: str,
     lang: str = "en",
     subscription_id: str = "",
+    payment_method: str = "paypal",
+    request_id: str = "",
+    source: str = "",
+    notify_ops: bool = True,
 ) -> dict:
-    """Confirm Pro activation after PayPal subscription webhook (auto-activate)."""
+    """Confirm Pro activation (PayPal webhook, MP, or manual Yape/Plin)."""
+    method = (payment_method or "paypal").strip().lower()
     sub_line = f"\nSuscripción PayPal: {subscription_id}" if subscription_id else ""
     sub_line_en = f"\nPayPal subscription: {subscription_id}" if subscription_id else ""
+    ref_line_es = f"\nReferencia: {request_id}" if request_id else ""
+    ref_line_en = f"\nReference: {request_id}" if request_id else ""
 
     if lang == "es":
         subject = "CLI Market Pro activo — ya puede usar su cuenta"
+        if method in ("yape", "plin"):
+            activation_note = (
+                f"Confirmamos tu pago ({method.upper()}) y activamos Pro en tu cuenta. "
+                "Ya puedes usar los límites Pro."
+            )
+        elif method == "mercadopago":
+            activation_note = (
+                "Confirmamos tu pago en Mercado Pago. Pro quedó activo en tu cuenta."
+            )
+        else:
+            activation_note = (
+                "Su plan Pro quedó activo. La activación fue automática tras confirmar en PayPal."
+            )
         text = f"""Hola {username},
 
-Su plan Pro quedó activo. No necesita esperar activación manual.
+{activation_note}
 
 ──────────────────────────────
 Siguiente paso en terminal:
@@ -461,7 +627,7 @@ Límites Pro:
 • Exportación JSON/CSV
 • Checkout con PayPal + Yape/Plin
 ──────────────────────────────
-{sub_line}
+{sub_line}{ref_line_es}
 
 Docs: https://cli-market.dev/docs#quickstart
 Herramientas MCP: https://cli-market.dev/tools
@@ -482,7 +648,7 @@ hello@cli-market.dev
 <h1 style="margin:0 0 16px;font-size:22px;color:#fff;">Su plan Pro está activo</h1>
 <p style="margin:0 0 20px;font-size:14px;color:#b9cac2;line-height:1.6;">
 Hola <strong style="color:#fff">{username}</strong>,<br><br>
-Confirmamos la activación automática tras su pago en PayPal. Ya puede usar los límites Pro.
+{activation_note}
 </p>
 <table width="100%" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:6px;margin-bottom:20px;">
 <tr><td style="padding:14px 18px;font-family:monospace;font-size:12px;color:#b9cac2;line-height:1.8;">
@@ -498,9 +664,22 @@ market doctor
 </body></html>"""
     else:
         subject = "CLI Market Pro is active — your account is ready"
+        if method in ("yape", "plin"):
+            activation_note_en = (
+                f"We confirmed your {method.upper()} payment and activated Pro on your account. "
+                "Pro limits are available now."
+            )
+        elif method == "mercadopago":
+            activation_note_en = (
+                "We confirmed your Mercado Pago payment. Pro is active on your account."
+            )
+        else:
+            activation_note_en = (
+                "Your Pro plan is active. Activation was automatic after PayPal confirmation."
+            )
         text = f"""Hi {username},
 
-Your Pro plan is now active. No manual activation wait is required.
+{activation_note_en}
 
 ──────────────────────────────
 Next in your terminal:
@@ -513,7 +692,7 @@ Pro limits:
 • JSON/CSV export
 • Checkout with PayPal + Yape/Plin
 ──────────────────────────────
-{sub_line_en}
+{sub_line_en}{ref_line_en}
 
 Docs: https://cli-market.dev/docs#quickstart
 MCP tools: https://cli-market.dev/tools
@@ -534,7 +713,7 @@ hello@cli-market.dev
 <h1 style="margin:0 0 16px;font-size:22px;color:#fff;">Your Pro plan is active</h1>
 <p style="margin:0 0 20px;font-size:14px;color:#b9cac2;line-height:1.6;">
 Hi <strong style="color:#fff">{username}</strong>,<br><br>
-We confirmed automatic activation after your PayPal payment. Pro limits are available now.
+{activation_note_en}
 </p>
 <table width="100%" style="background:#0a0a0b;border:1px solid #3b4a44;border-radius:6px;margin-bottom:20px;">
 <tr><td style="padding:14px 18px;font-family:monospace;font-size:12px;color:#b9cac2;line-height:1.8;">
@@ -548,7 +727,25 @@ market doctor
 </td></tr>
 </table></td></tr></table>
 </body></html>"""
-    return _send(to_email, subject, text, html)
+    result = _send(to_email, subject, text, html)
+    if notify_ops and result.get("sent"):
+        try:
+            ops = send_pro_activated_notify(
+                subscriber_email=to_email,
+                username=username,
+                lang=lang,
+                payment_method=method,
+                request_id=request_id,
+                subscription_id=subscription_id,
+                source=source,
+            )
+            result["ops_notified"] = ops.get("sent", False)
+            if ops.get("draft_to"):
+                result["draft_to"] = ops["draft_to"]
+        except Exception:
+            logger.exception("Pro activated ops notify failed for %s", username)
+            result["ops_notified"] = False
+    return result
 
 
 def send_starter_subscribe_pending_email(
