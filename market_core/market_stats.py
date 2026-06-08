@@ -62,7 +62,7 @@ def _live_price_label(fallback: str = "45,000+") -> str:
 
 PRICES_VERIFIED_LABEL = _live_price_label()
 PYPI_PACKAGE_NAME = "cli-market-world"
-PACKAGE_VERSION = "1.9.6"
+PACKAGE_VERSION = "1.9.12"
 LICENSE = "MIT"
 PYPI_URL = f"https://pypi.org/project/{PYPI_PACKAGE_NAME}/"
 PEPY_PROJECT_URL = f"https://pepy.tech/projects/{PYPI_PACKAGE_NAME}"
@@ -75,7 +75,7 @@ PEPY_BADGE_URL = (
     "?label=downloads&color=00d75f&logo=pypi"
 )
 PIP_INSTALL_CMD = f"pip install {PYPI_PACKAGE_NAME}"
-PAYMENTS_LABEL = "PayPal · Mercado Pago · Yape/Plin"
+PAYMENTS_LABEL = "PayPal · Soles (Yape · Plin · tarjeta vía Mercado Pago)"
 BUSINESS_LINES = 6
 PLATFORM_LIST_EN = "VTEX · Shopify · Magento · WooCommerce"
 PLATFORM_LIST_ES = "VTEX · Shopify · Magento · WooCommerce"

@@ -344,6 +344,7 @@ from .market_billing import (  # noqa: E402, F401
     db_mark_subscription_request_activated,
     db_mark_subscription_requests_activated_for_user,
     db_mark_subscription_request_emailed,
+    db_update_subscription_request_payment_link,
     db_recent_subscription_request,
     db_save_billing_pending,
     db_set_order_gateway_ref,

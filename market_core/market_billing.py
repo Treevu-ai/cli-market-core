@@ -329,6 +329,19 @@ def db_mark_subscription_request_emailed(request_id: str) -> None:
     db.close()
 
 
+def db_update_subscription_request_payment_link(request_id: str, payment_link: str) -> bool:
+    """Persist checkout URL or payment note on a pending subscription request."""
+    db = market_core.get_db()
+    cur = db.execute(
+        "UPDATE subscription_requests SET payment_link=? WHERE id=? AND status='pending'",
+        (payment_link.strip(), request_id),
+    )
+    db.commit()
+    updated = cur.rowcount > 0
+    db.close()
+    return updated
+
+
 def db_recent_subscription_request(email: str, hours: int = 24) -> dict | None:
     db = market_core.get_db()
     row = db.execute(
