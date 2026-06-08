@@ -21,6 +21,10 @@ class _PgCursor:
         self._cur = cur
         self.lastrowid = None
 
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
     def fetchall(self):
         return [dict(r) for r in self._cur.fetchall()]
 

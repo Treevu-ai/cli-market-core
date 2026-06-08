@@ -540,7 +540,7 @@ def send_pro_activated_notify(
     subscription_id: str = "",
     source: str = "",
 ) -> dict:
-    """Email hello@cli-market.dev with a copy/paste reply draft for the customer."""
+    """Create a Gmail draft reply for the customer (fallback: ops copy/paste email)."""
     draft = format_pro_activated_reply_draft(
         username=username,
         lang=lang,
@@ -548,6 +548,35 @@ def send_pro_activated_notify(
         request_id=request_id or subscription_id,
     )
     method = (payment_method or "paypal").strip().lower()
+
+    try:
+        from .gmail_drafts import create_gmail_draft, gmail_drafts_enabled
+
+        if gmail_drafts_enabled():
+            gmail = create_gmail_draft(
+                to_email=subscriber_email,
+                subject=draft["subject"],
+                body_text=draft["text"],
+                from_email=FROM_EMAIL,
+                from_name=FROM_NAME,
+            )
+            if gmail.get("created"):
+                return {
+                    "sent": True,
+                    "gmail_draft": True,
+                    "draft_subject": draft["subject"],
+                    "draft_to": subscriber_email,
+                    "draft_folder": gmail.get("folder"),
+                    "draft_uid": gmail.get("draft_uid"),
+                }
+            logger.warning(
+                "Gmail draft failed for %s (%s), falling back to ops email",
+                subscriber_email,
+                gmail.get("reason"),
+            )
+    except Exception:
+        logger.exception("Gmail draft integration error for %s", subscriber_email)
+
     ops_subject = f"[Pro activado — borrador] {username} — {subscriber_email}"
     text = (
         "Build Pro activado — borrador de respuesta listo\n\n"
@@ -576,6 +605,7 @@ def send_pro_activated_notify(
     if msg.get("sent"):
         msg["draft_subject"] = draft["subject"]
         msg["draft_to"] = subscriber_email
+        msg["gmail_draft"] = False
     return msg
 
 
@@ -740,6 +770,7 @@ market doctor
                 source=source,
             )
             result["ops_notified"] = ops.get("sent", False)
+            result["gmail_draft"] = ops.get("gmail_draft", False)
             if ops.get("draft_to"):
                 result["draft_to"] = ops["draft_to"]
         except Exception:
