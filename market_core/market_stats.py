@@ -62,7 +62,7 @@ def _live_price_label(fallback: str = "45,000+") -> str:
 
 PRICES_VERIFIED_LABEL = _live_price_label()
 PYPI_PACKAGE_NAME = "cli-market-world"
-PACKAGE_VERSION = "1.9.12"
+PACKAGE_VERSION = "1.9.16"
 LICENSE = "MIT"
 PYPI_URL = f"https://pypi.org/project/{PYPI_PACKAGE_NAME}/"
 PEPY_PROJECT_URL = f"https://pepy.tech/projects/{PYPI_PACKAGE_NAME}"
