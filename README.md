@@ -1,7 +1,7 @@
 <!-- readme-hero -->
 <div align="center">
 
-<img src="assets/readme-hero.gif" alt="CLI MARKET CORE" width="100%" />
+<img src="https://cli-market.dev/demo.gif" alt="CLI MARKET CORE" width="100%" />
 
 </div>
 
@@ -10,24 +10,35 @@
 > **Intelligence Layer** — Indicators, billing, connectors, and MCP tools for CLI Market
 
 ```bash
-pip install cli-market-core
+pip install cli-market-world
 ```
+
+Install **`cli-market-world`** for the full CLI + MCP experience. This package is the intelligence dependency pulled in automatically.
 
 ---
 
 ## What is this?
 
-`cli-market-core` is the intelligence engine of the CLI Market ecosystem. It takes canonical product data from `cli-market-index` and adds market intelligence: price indicators, spread analysis, billing/payments, retailer connectors, and 43 MCP tools.
+`cli-market-core` is the intelligence engine of the CLI Market ecosystem: price indicators, spread analysis, billing/payments, retailer connectors, and MCP tool definitions.
+
+---
+
+## Links
+
+- 🌐 [cli-market.dev](https://cli-market.dev)
+- 📚 [Docs](https://cli-market.dev/docs)
+- 🔧 [MCP /tools](https://cli-market.dev/tools)
+- 📦 [PyPI — cli-market-world](https://pypi.org/project/cli-market-world/)
 
 ---
 
 ## Ecosystem
 
 ```
-cli-market-backend  ->  Data ingestion (scrapers, FastAPI)
-cli-market-index    ->  Semantic Refinery (entity resolution, Golden Records)
-cli-market-core     ->  Intelligence (THIS REPO)
-cli-market-world    ->  Exposure (landing, docs, MCP registry)
+cli-market-backend  →  Data ingestion (scrapers, FastAPI)
+cli-market-index    →  Semantic refinery (Golden Records)
+cli-market-core     →  Intelligence (THIS PACKAGE)
+cli-market-world    →  CLI + MCP exposure (pip install target)
 ```
 
 ---
@@ -36,48 +47,16 @@ cli-market-world    ->  Exposure (landing, docs, MCP registry)
 
 | Module | Role |
 |---|---|
-| `market_core.py` | Core service orchestrator |
-| `market_indicators.py` | 34 market indicators from shelf data |
-| `market_spread.py` | Cross-retailer price spreads |
-| `market_stats.py` | Platform statistics and version |
-| `market_db.py` | Database access layer |
-| `market_mcp.py` | 43 MCP tool definitions |
-| `market_basket.py` | Basket comparison logic |
-| `market_billing.py` | Subscription and billing |
-| `market_alerts.py` | Price alert engine |
-| `market_security.py` | Auth and webhook validation |
-| `market_intel_agent.py` | AI agent intelligence queries |
-| `market_enrich_sources.py` | External data enrichment (OFF, IMF, World Bank) |
-| `market_enrich_subcategory.py` | Subcategory classification |
-| `market_health_alert.py` | System health monitoring |
-| `source_health.py` | Scraper health tracking |
-| `price_confidence.py` | Price quality heuristics |
-| `store_credentials.py` | Retailer credential management |
-| `market_units.py` | Unit conversion utilities |
-| `market_stores.py` | Retailer catalog |
-| `retailer_onboarding.py` | Retailer onboarding workflow |
-| `dashboard_glossary.py` | Dashboard metric definitions |
-| `dashboard_quality.py` | Dashboard quality indicators |
-| `dashboard_renderer.py` | Dashboard HTML renderer |
-| `dashboard_view_model.py` | Dashboard data model |
-| `data_v1_service.py` | Core data API endpoints |
-| `market_connectors/` | PayPal, Mercado Pago, WooCommerce, VTEX, Shopify, SUNAT, etc. |
-| `market_stats.py` | Canonical figures for README, PyPI, landing (run `sync_market_stats.py` in world) |
+| `market_core` | Core service orchestrator |
+| `market_indicators` | 34 market indicators from shelf data |
+| `market_spread` | Cross-retailer price spreads |
+| `market_mcp` | MCP tool definitions |
+| `market_basket` | Basket comparison logic |
+| `market_billing` | Subscription and billing |
+| `market_connectors/` | PayPal, Mercado Pago, VTEX, Shopify, etc. |
+
+Canonical stats: run `python ops/sync_market_stats.py` in **cli-market-world**.
 
 ---
-
-## Version
-
-Current: **1.9.5** — 68 retailers, 4 platforms (incl. WooCommerce FMCG pilot `nunaorganica_pe`)
-
----
-
-## Dev setup
-
-```bash
-pip install -e .
-```
-
-No external dependencies required in creation phase.
 
 MIT License · [SINAPSIS INNOVADORA S.A.C.](https://cli-market.dev) · Lima, Peru
