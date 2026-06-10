@@ -28,7 +28,7 @@ Homepage = "https://cli-market.dev"
 Documentation = "https://cli-market.dev/docs"
 "MCP Tools" = "https://cli-market.dev/tools"
 PyPI = "https://pypi.org/project/cli-market-world/"
-"Bug Reports" = "mailto:hello@cli-market.dev"
+Support = "https://cli-market.dev/docs"
 
 [tool.setuptools]
 py-modules = [
