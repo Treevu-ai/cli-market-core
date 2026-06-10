@@ -132,7 +132,8 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         _tool(
             "market_login",
             f"[Shop] Authenticate in CLI Market. Call before cart, checkout, or orders. "
-            "Returns a session token persisted locally. On 401 errors, re-run this tool.",
+            "Returns access + refresh tokens (access default 90d, refresh 365d) persisted locally. "
+            "On 401 with expired access, CLI auto-calls POST /auth/refresh; agents may re-login or refresh.",
             _schema_object({"username": {"type": "string"}, "password": {"type": "string"}}),
             meta=_meta(bundle="shop", order=1, requires_auth="setup"),
         ),
@@ -233,8 +234,9 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         ),
         _tool(
             "market_checkout",
-            "[Shop] Complete purchase. Requires items in cart (market_cart first). "
-            "payment_method: yape, plin, paypal, tarjeta. Sandbox checkout — not a live charge unless Pro tier.",
+            "[Shop] Pay for cart via CLI Market (Yape/Plin/PayPal) — creates internal order, "
+            "not checkout on retailer sites. Requires Pro tier for live charge. "
+            "payment_method: yape, plin, paypal, tarjeta. See GET /v1/capabilities.",
             _schema_object(
                 {"payment_method": {"type": "string", "default": "yape", "description": "yape | plin | paypal | tarjeta"}},
             ),

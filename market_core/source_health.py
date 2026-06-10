@@ -144,3 +144,18 @@ def build_sources_health(
         "summary": summary,
         "stores": stores_out,
     }
+
+
+def health_for_stores(db, store_ids: list[str]) -> dict:
+    """Subset of build_sources_health for stores touched by search/compare."""
+    unique = list(dict.fromkeys(store_ids))
+    if not unique:
+        return {"summary": {"ok": 0, "partial": 0, "dead": 0, "total": 0}, "stores": []}
+
+    full = build_sources_health(db, catalog_only=False)
+    by_store = {s["store"]: s for s in full["stores"]}
+    stores_out = [by_store[sid] for sid in unique if sid in by_store]
+    summary = {"ok": 0, "partial": 0, "dead": 0, "total": len(stores_out)}
+    for item in stores_out:
+        summary[item["state"]] += 1
+    return {"summary": summary, "stores": stores_out}

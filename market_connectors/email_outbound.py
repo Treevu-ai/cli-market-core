@@ -1129,6 +1129,48 @@ def send_contact_notify(
     return _send(NOTIFY_EMAIL, subject, text, f"<pre>{text}</pre>")
 
 
+def send_session_expiry_reminder(
+    *,
+    to_email: str,
+    username: str,
+    expires_at: str,
+    days_remaining: int,
+    lang: str = "es",
+) -> dict:
+    """Remind password-login users to refresh before access token expires (P1-D)."""
+    if lang == "es":
+        subject = "Tu sesión CLI Market expira pronto"
+        text = f"""Hola {username},
+
+Tu token de acceso CLI Market expira en {days_remaining} día(s) ({expires_at} UTC).
+
+Renová la sesión sin cambiar contraseña:
+  market login
+  (o POST /auth/refresh con tu refresh_token guardado en ~/.cli-market/session.json)
+
+Si no renovás, las llamadas API devolverán 401 hasta que vuelvas a iniciar sesión.
+
+— CLI Market
+hello@cli-market.dev
+"""
+        html = f"""<pre style="font-family:monospace;font-size:13px;">{text}</pre>"""
+    else:
+        subject = "Your CLI Market session expires soon"
+        text = f"""Hi {username},
+
+Your CLI Market access token expires in {days_remaining} day(s) ({expires_at} UTC).
+
+Refresh without changing your password:
+  market login
+  (or POST /auth/refresh with the refresh_token in ~/.cli-market/session.json)
+
+— CLI Market
+hello@cli-market.dev
+"""
+        html = f"""<pre style="font-family:monospace;font-size:13px;">{text}</pre>"""
+    return _send(to_email, subject, text, html)
+
+
 def _send(to_email: str, subject: str, text: str, html: str) -> dict:
     if not _smtp_configured():
         logger.warning("SMTP not configured — email not sent to %s", to_email)

@@ -217,6 +217,15 @@ def resolve_agent_identity(
     if authorization:
         token = authorization.replace("Bearer ", "").strip()
 
+    if token.startswith("demo-"):
+        return {
+            "agent_id": f"demo_{hashlib.sha256(token.encode()).hexdigest()[:20]}",
+            "identity_source": "demo",
+            "linked_username": None,
+            "organization_id": None,
+            "identity_confidence": "medium",
+        }
+
     if token and api_key_fn and token.startswith("sk-"):
         key_data = api_key_fn(token)
         if key_data:
@@ -434,6 +443,9 @@ def _since_sql(days: int) -> str:
     return since.strftime("%Y-%m-%d %H:%M:%S")
 
 
+MAA_PUBLIC_THRESHOLD = 10
+
+
 def count_maa(*, days: int = 30, exclude_noise: bool = True) -> int:
     ensure_observatory_schema()
     since = _since_sql(days)
@@ -453,6 +465,36 @@ def count_maa(*, days: int = 30, exclude_noise: bool = True) -> int:
             continue
         agents.add(aid)
     return len(agents)
+
+
+def count_maa_proxy(*, days: int = 30) -> int:
+    """Proxy when MAA < threshold: distinct API key owners active in window."""
+    since = _since_sql(days)
+    db = get_db()
+    try:
+        row = db.execute(
+            """
+            SELECT COUNT(DISTINCT username) AS n FROM api_keys
+            WHERE last_used_at IS NOT NULL AND last_used_at != '' AND last_used_at >= ?
+            """,
+            (since,),
+        ).fetchone()
+        n = int(row["n"] or 0) if row else 0
+        if n > 0:
+            db.close()
+            return n
+        row2 = db.execute(
+            """
+            SELECT COUNT(DISTINCT linked_username) AS n FROM agent_events
+            WHERE linked_username IS NOT NULL AND linked_username != '' AND occurred_at >= ?
+            """,
+            (since,),
+        ).fetchone()
+        db.close()
+        return int(row2["n"] or 0) if row2 else 0
+    except Exception:
+        db.close()
+        return 0
 
 
 def mcp_retention_summary(*, days: int = 30, return_within_days: int = 7) -> dict[str, Any]:
@@ -547,6 +589,8 @@ def observatory_summary(*, days: int = 30) -> dict[str, Any]:
             day_agents.setdefault(day_key, set()).add(aid)
 
     maa = len(agents)
+    maa_proxy = count_maa_proxy(days=days)
+    telemetry_maturity = "established" if maa >= MAA_PUBLIC_THRESHOLD else "early"
     success_rate = round(calls_success / calls_total, 4) if calls_total else None
     retention_7 = mcp_retention_summary(days=days, return_within_days=7)
     retention_30 = mcp_retention_summary(days=days, return_within_days=30)
@@ -567,6 +611,10 @@ def observatory_summary(*, days: int = 30) -> dict[str, Any]:
     return {
         "window_days": days,
         "maa": maa,
+        "maa_proxy": maa_proxy,
+        "maa_display": maa if maa >= MAA_PUBLIC_THRESHOLD else maa_proxy,
+        "telemetry_maturity": telemetry_maturity,
+        "maa_public_threshold": MAA_PUBLIC_THRESHOLD,
         "unique_agents": maa,
         "calls_total": calls_total,
         "calls_success": calls_success,

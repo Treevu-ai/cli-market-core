@@ -191,18 +191,26 @@ def store_emoji(store: str) -> str:
 
 # ── Session / auth helpers ────────────────────────────────────────────────────
 
-_AUTH_PUBLIC_PATHS = {"/", "/auth/login", "/auth/register"}
+_AUTH_PUBLIC_PATHS = {"/", "/auth/login", "/auth/register", "/auth/refresh"}
 
 
-def save_session(username: str, token: str) -> None:
+def save_session(
+    username: str,
+    token: str,
+    *,
+    refresh_token: str | None = None,
+    expires_at: str | None = None,
+) -> None:
     """Persist bearer token locally for CLI and MCP clients."""
     if not token:
         return
     SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SESSION_FILE.write_text(
-        json.dumps({"username": username, "token": token}, indent=2),
-        encoding="utf-8",
-    )
+    payload: dict = {"username": username, "token": token}
+    if refresh_token:
+        payload["refresh_token"] = refresh_token
+    if expires_at:
+        payload["expires_at"] = expires_at
+    SESSION_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def get_token() -> str:
@@ -218,30 +226,84 @@ def get_session_username() -> str:
     data = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
     return data.get("username", "")
 
+
+def get_refresh_token() -> str:
+    if not SESSION_FILE.exists():
+        return ""
+    data = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
+    return data.get("refresh_token", "")
+
 # ── API client (sync — used by CLI and MCP) ───────────────────────────────────
+
+def _refresh_access_token() -> str | None:
+    refresh = get_refresh_token()
+    if not refresh:
+        return None
+    try:
+        resp = httpx.post(f"{API}/auth/refresh", json={"refresh_token": refresh}, timeout=15)
+        if resp.status_code >= 400:
+            return None
+        data = resp.json()
+        new_token = data.get("token")
+        if not new_token:
+            return None
+        save_session(
+            get_session_username() or data.get("username", ""),
+            new_token,
+            refresh_token=data.get("refresh_token") or refresh,
+            expires_at=data.get("expires_at"),
+        )
+        return new_token
+    except Exception:
+        return None
+
 
 def api(method: str, path: str, json_data: dict | None = None) -> dict:
     token = None
     if path not in _AUTH_PUBLIC_PATHS:
         token = get_token()
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    try:
+
+    def _request(hdrs: dict) -> httpx.Response:
         if method == "GET":
-            resp = httpx.get(f"{API}{path}", headers=headers, timeout=30)
-        elif method == "POST":
-            resp = httpx.post(f"{API}{path}", headers=headers, json=json_data, timeout=30)
-        elif method == "PUT":
-            resp = httpx.put(f"{API}{path}", headers=headers, json=json_data, timeout=30)
-        elif method == "DELETE":
-            resp = httpx.delete(f"{API}{path}", headers=headers, timeout=30)
-        else:
-            raise ValueError(f"Unknown method: {method}")
+            return httpx.get(f"{API}{path}", headers=hdrs, timeout=30)
+        if method == "POST":
+            return httpx.post(f"{API}{path}", headers=hdrs, json=json_data, timeout=30)
+        if method == "PUT":
+            return httpx.put(f"{API}{path}", headers=hdrs, json=json_data, timeout=30)
+        if method == "DELETE":
+            return httpx.delete(f"{API}{path}", headers=hdrs, timeout=30)
+        raise ValueError(f"Unknown method: {method}")
+
+    try:
+        resp = _request(headers)
+        if (
+            resp.status_code == 401
+            and resp.headers.get("x-token-expired", "").lower() == "true"
+            and path not in _AUTH_PUBLIC_PATHS
+        ):
+            new_token = _refresh_access_token()
+            if new_token:
+                headers = {"Authorization": f"Bearer {new_token}"}
+                resp = _request(headers)
         if resp.status_code >= 400:
             detail = resp.json().get("detail", resp.text)
             return {"error": detail, "status": resp.status_code}
         data = resp.json()
         if path == "/auth/login" and data.get("token"):
-            save_session(data.get("username", ""), data["token"])
+            save_session(
+                data.get("username", ""),
+                data["token"],
+                refresh_token=data.get("refresh_token"),
+                expires_at=data.get("expires_at"),
+            )
+        elif path == "/auth/refresh" and data.get("token"):
+            save_session(
+                get_session_username() or data.get("username", ""),
+                data["token"],
+                refresh_token=data.get("refresh_token"),
+                expires_at=data.get("expires_at"),
+            )
         elif path == "/auth/register":
             key = data.get("api_key") or data.get("key")
             if key:
@@ -333,10 +395,12 @@ from .market_db import (  # noqa: E402, F401
 from .market_billing import (  # noqa: E402, F401
     TIERS,
     _migrate_payment_schema,
+    db_claim_webhook_event,
     db_create_subscription_request,
     db_delete_billing_pending,
     db_find_order_by_gateway_ref,
     db_find_order_by_id,
+    db_find_order_by_idempotency_key,
     db_find_subscription_request,
     db_get_billing_pending,
     db_get_subscription,
@@ -350,6 +414,7 @@ from .market_billing import (  # noqa: E402, F401
     db_recent_subscription_request,
     db_save_billing_pending,
     db_set_order_gateway_ref,
+    db_set_order_status,
     db_set_subscription,
     db_update_order_status,
     user_can_checkout,
@@ -640,17 +705,48 @@ def db_get_orders(username: str) -> list[dict]:
     db.close()
     return result
 
+def _load_order_with_items(order_id: str) -> dict | None:
+    db = get_db()
+    row = db.execute(
+        "SELECT order_id, username, payment_method, total, status, gateway_ref, idempotency_key "
+        "FROM app_orders WHERE order_id=?",
+        (order_id,),
+    ).fetchone()
+    if not row:
+        db.close()
+        return None
+    items = db.execute(
+        "SELECT product_id, name, price, store, store_name, quantity, url "
+        "FROM app_order_items WHERE order_id=?",
+        (order_id,),
+    ).fetchall()
+    db.close()
+    result = dict(row)
+    result["items"] = [dict(i) for i in items]
+    return result
+
+
 def db_create_order(username: str, items: list[dict], payment_method: str, total: float,
                     status: str = "completed", order_id: str | None = None,
-                    gateway_ref: str = "") -> dict:
+                    gateway_ref: str = "", idempotency_key: str | None = None) -> dict:
     import uuid
+
+    idem = (idempotency_key or "").strip()
+    if idem:
+        existing = db_find_order_by_idempotency_key(username, idem)
+        if existing:
+            full = _load_order_with_items(existing["order_id"])
+            if full:
+                full["idempotent_replay"] = True
+                return full
+
     if order_id is None:
         order_id = str(uuid.uuid4())[:8]
     db = get_db()
     db.execute(
-        "INSERT INTO app_orders (order_id, username, payment_method, total, status, gateway_ref) "
-        "VALUES (?,?,?,?,?,?)",
-        (order_id, username, payment_method, total, status, gateway_ref or "")
+        "INSERT INTO app_orders (order_id, username, payment_method, total, status, gateway_ref, idempotency_key) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (order_id, username, payment_method, total, status, gateway_ref or "", idem)
     )
     for item in items:
         db.execute(
@@ -660,7 +756,14 @@ def db_create_order(username: str, items: list[dict], payment_method: str, total
         )
     db.commit()
     db.close()
-    return {"order_id": order_id, "username": username, "payment_method": payment_method, "total": total, "status": status}
+    return {
+        "order_id": order_id,
+        "username": username,
+        "payment_method": payment_method,
+        "total": total,
+        "status": status,
+        "idempotency_key": idem or None,
+    }
 
 def db_migrate_from_json() -> None:
     """One-time migration: import existing JSON data into SQLite tables."""
@@ -1086,6 +1189,13 @@ def ensure_db_initialized() -> None:
         db = get_db()
         db.begin_resilient_init()
         _migrate_payment_schema(db)
+        from .auth_tokens import ensure_auth_token_schema
+        from .demo_tokens import ensure_demo_schema
+        from .intel_jobs import ensure_intel_schema
+
+        ensure_auth_token_schema(db)
+        ensure_demo_schema(db)
+        ensure_intel_schema(db)
         _migrate_price_snapshots_v7(db)
         db.commit()
         db.close()

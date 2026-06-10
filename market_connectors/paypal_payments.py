@@ -12,6 +12,8 @@ import os
 
 import httpx
 
+from .http_retry import request_with_retry
+
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID", "")
 PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET", "")
 PAYPAL_SANDBOX = os.getenv("PAYPAL_SANDBOX", "true").lower() == "true"
@@ -32,18 +34,20 @@ async def _get_access_token() -> str:
     if not PAYPAL_CLIENT_ID or not PAYPAL_CLIENT_SECRET:
         raise ValueError("PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET not configured")
     auth = base64.b64encode(f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode()).decode()
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            f"{PAYPAL_API}/v1/oauth2/token",
-            data={"grant_type": "client_credentials"},
-            headers={
-                "Authorization": f"Basic {auth}",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-        )
-        if resp.status_code == 200:
-            return resp.json()["access_token"]
-        raise Exception(f"PayPal auth failed: {resp.text}")
+    resp = await request_with_retry(
+        "POST",
+        f"{PAYPAL_API}/v1/oauth2/token",
+        timeout=15.0,
+        label="paypal_auth",
+        data={"grant_type": "client_credentials"},
+        headers={
+            "Authorization": f"Basic {auth}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    if resp.status_code == 200:
+        return resp.json()["access_token"]
+    raise Exception(f"PayPal auth failed: {resp.text}")
 
 
 async def verify_webhook_signature(headers: dict, event: dict) -> bool:
@@ -60,15 +64,17 @@ async def verify_webhook_signature(headers: dict, event: dict) -> bool:
         "webhook_id": PAYPAL_WEBHOOK_ID,
         "webhook_event": event,
     }
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            f"{PAYPAL_API}/v1/notifications/verify-webhook-signature",
-            json=body,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        )
-        if resp.status_code != 200:
-            return False
-        return resp.json().get("verification_status") == "SUCCESS"
+    resp = await request_with_retry(
+        "POST",
+        f"{PAYPAL_API}/v1/notifications/verify-webhook-signature",
+        timeout=15.0,
+        label="paypal_webhook_verify",
+        json=body,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    if resp.status_code != 200:
+        return False
+    return resp.json().get("verification_status") == "SUCCESS"
 
 
 async def create_order(
@@ -95,34 +101,38 @@ async def create_order(
             "user_action": "PAY_NOW",
         },
     }
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            f"{PAYPAL_API}/v2/checkout/orders",
-            json=body,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    resp = await request_with_retry(
+        "POST",
+        f"{PAYPAL_API}/v2/checkout/orders",
+        timeout=15.0,
+        label="paypal_create_order",
+        json=body,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    if resp.status_code in (200, 201):
+        data = resp.json()
+        approve_link = next(
+            (l["href"] for l in data.get("links", []) if l["rel"] == "approve"),
+            None,
         )
-        if resp.status_code in (200, 201):
-            data = resp.json()
-            approve_link = next(
-                (l["href"] for l in data.get("links", []) if l["rel"] == "approve"),
-                None,
-            )
-            return {"order_id": data["id"], "status": data["status"], "approve_url": approve_link}
-        return {"error": f"PayPal order failed: {resp.text}", "status": resp.status_code}
+        return {"order_id": data["id"], "status": data["status"], "approve_url": approve_link}
+    return {"error": f"PayPal order failed: {resp.text}", "status": resp.status_code}
 
 
 async def capture_order(paypal_order_id: str) -> dict:
     """Capture funds after buyer approval."""
     token = await _get_access_token()
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            f"{PAYPAL_API}/v2/checkout/orders/{paypal_order_id}/capture",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        )
-        if resp.status_code in (200, 201):
-            data = resp.json()
-            return {"ok": True, "status": data.get("status"), "paypal_order_id": paypal_order_id}
-        return {"ok": False, "error": resp.text, "status": resp.status_code}
+    resp = await request_with_retry(
+        "POST",
+        f"{PAYPAL_API}/v2/checkout/orders/{paypal_order_id}/capture",
+        timeout=15.0,
+        label="paypal_capture_order",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    if resp.status_code in (200, 201):
+        data = resp.json()
+        return {"ok": True, "status": data.get("status"), "paypal_order_id": paypal_order_id}
+    return {"ok": False, "error": resp.text, "status": resp.status_code}
 
 
 async def _ensure_billing_plan(

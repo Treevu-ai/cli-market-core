@@ -3,7 +3,11 @@ Wise (TransferWise) payment integration for CLI Market.
 Sandbox-ready. Requires WISE_API_TOKEN, WISE_PROFILE_ID.
 """
 
-import os, hashlib, hmac, httpx
+import hashlib
+import hmac
+import os
+
+from .http_retry import request_with_retry
 
 WISE_API_URL = os.getenv("WISE_API_URL", "https://api.sandbox.transferwise.tech")
 WISE_API_TOKEN = os.getenv("WISE_API_TOKEN", "")
@@ -13,11 +17,15 @@ WISE_WEBHOOK_SECRET = os.getenv("WISE_WEBHOOK_SECRET", "")
 
 async def create_quote(src: str, tgt: str, amount: float) -> dict:
     if not WISE_API_TOKEN: return {"error": "WISE_API_TOKEN not set"}
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.post(f"{WISE_API_URL}/v1/quotes",
-            json={"sourceCurrency": src, "targetCurrency": tgt, "sourceAmount": amount},
-            headers={"Authorization": f"Bearer {WISE_API_TOKEN}"})
-        return resp.json() if resp.status_code == 200 else {"error": resp.text}
+    resp = await request_with_retry(
+        "POST",
+        f"{WISE_API_URL}/v1/quotes",
+        timeout=10.0,
+        label="wise_create_quote",
+        json={"sourceCurrency": src, "targetCurrency": tgt, "sourceAmount": amount},
+        headers={"Authorization": f"Bearer {WISE_API_TOKEN}"},
+    )
+    return resp.json() if resp.status_code == 200 else {"error": resp.text}
 
 
 def verify_signature(body: bytes, sig: str) -> bool:

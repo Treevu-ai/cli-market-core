@@ -372,6 +372,7 @@ def init_db_pg(db: _DB) -> None:
             finished_at TIMESTAMPTZ,
             stores_attempted INT DEFAULT 0,
             stores_succeeded INT DEFAULT 0,
+            stores_with_yield INT DEFAULT 0,
             prices_collected INT DEFAULT 0,
             errors TEXT
         )
@@ -608,6 +609,7 @@ _SQLITE_DDL = """\
             finished_at TEXT,
             stores_attempted INT DEFAULT 0,
             stores_succeeded INT DEFAULT 0,
+            stores_with_yield INT DEFAULT 0,
             prices_collected INT DEFAULT 0,
             errors TEXT
         );

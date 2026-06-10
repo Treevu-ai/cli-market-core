@@ -18,6 +18,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from . import market_core
+from .order_status import InvalidOrderTransition, validate_order_transition
 
 logger = market_core.logger
 
@@ -163,11 +164,19 @@ def _migrate_payment_schema(db) -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS webhook_events_processed (
+                event_key TEXT PRIMARY KEY,
+                source TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_promo_redemptions_code ON promo_redemptions(promo_code)"
         )
         for stmt in (
             "ALTER TABLE app_orders ADD COLUMN IF NOT EXISTS gateway_ref TEXT DEFAULT ''",
+            "ALTER TABLE app_orders ADD COLUMN IF NOT EXISTS idempotency_key TEXT DEFAULT ''",
             "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS paypal_subscription_id TEXT DEFAULT ''",
             "ALTER TABLE subscription_requests ADD COLUMN IF NOT EXISTS display_name TEXT DEFAULT ''",
         ):
@@ -175,6 +184,14 @@ def _migrate_payment_schema(db) -> None:
                 db.execute(stmt)
             except Exception as e:
                 logger.warning("PG migration skipped: %s", e)
+        try:
+            db.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_order_idempotency "
+                "ON app_orders(username, idempotency_key) "
+                "WHERE idempotency_key IS NOT NULL AND idempotency_key != ''"
+            )
+        except Exception as e:
+            logger.warning("PG idempotency index skipped: %s", e)
         return
     db.execute("""
         CREATE TABLE IF NOT EXISTS billing_pending (
@@ -194,11 +211,19 @@ def _migrate_payment_schema(db) -> None:
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS webhook_events_processed (
+            event_key TEXT PRIMARY KEY,
+            source TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
     db.execute(
         "CREATE INDEX IF NOT EXISTS idx_promo_redemptions_code ON promo_redemptions(promo_code)"
     )
     for stmt in (
         "ALTER TABLE app_orders ADD COLUMN gateway_ref TEXT DEFAULT ''",
+        "ALTER TABLE app_orders ADD COLUMN idempotency_key TEXT DEFAULT ''",
         "ALTER TABLE subscriptions ADD COLUMN paypal_subscription_id TEXT DEFAULT ''",
         "ALTER TABLE subscription_requests ADD COLUMN display_name TEXT DEFAULT ''",
     ):
@@ -206,6 +231,14 @@ def _migrate_payment_schema(db) -> None:
             db.execute(stmt)
         except Exception:
             pass
+    try:
+        db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_order_idempotency "
+            "ON app_orders(username, idempotency_key) "
+            "WHERE idempotency_key IS NOT NULL AND idempotency_key != ''"
+        )
+    except Exception:
+        pass
     db.execute("""
         CREATE TABLE IF NOT EXISTS subscription_requests (
             id TEXT PRIMARY KEY,
@@ -274,13 +307,70 @@ def db_set_subscription(
     return {"username": username, "tier": tier, "req_limit_day": day, "req_limit_min": mn}
 
 
-def db_update_order_status(order_id: str, status: str) -> bool:
+def db_claim_webhook_event(event_key: str, source: str = "") -> bool:
+    """Return True if this is the first time we process event_key."""
+    key = (event_key or "").strip()
+    if not key:
+        return True
     db = market_core.get_db()
+    if market_core.USE_PG:
+        cur = db.execute(
+            "INSERT INTO webhook_events_processed (event_key, source) VALUES (?,?) "
+            "ON CONFLICT (event_key) DO NOTHING",
+            (key, source),
+        )
+        db.commit()
+        claimed = cur.rowcount > 0
+    else:
+        cur = db.execute(
+            "INSERT OR IGNORE INTO webhook_events_processed (event_key, source) VALUES (?,?)",
+            (key, source),
+        )
+        db.commit()
+        claimed = cur.rowcount > 0
+    db.close()
+    return claimed
+
+
+def db_find_order_by_idempotency_key(username: str, idempotency_key: str) -> dict | None:
+    key = (idempotency_key or "").strip()
+    if not key:
+        return None
+    db = market_core.get_db()
+    row = db.execute(
+        "SELECT order_id, username, payment_method, total, status, gateway_ref, idempotency_key "
+        "FROM app_orders WHERE username=? AND idempotency_key=?",
+        (username, key),
+    ).fetchone()
+    db.close()
+    return dict(row) if row else None
+
+
+def db_set_order_status(order_id: str, status: str) -> bool:
+    """Update order status with canonical transition validation."""
+    db = market_core.get_db()
+    row = db.execute(
+        "SELECT status FROM app_orders WHERE order_id=?",
+        (order_id,),
+    ).fetchone()
+    if not row:
+        db.close()
+        return False
+    try:
+        validate_order_transition(row["status"], status)
+    except InvalidOrderTransition:
+        db.close()
+        raise
     cur = db.execute("UPDATE app_orders SET status=? WHERE order_id=?", (status, order_id))
     db.commit()
     affected = cur.rowcount
     db.close()
     return affected > 0
+
+
+def db_update_order_status(order_id: str, status: str) -> bool:
+    """Backward-compatible alias for db_set_order_status."""
+    return db_set_order_status(order_id, status)
 
 
 def db_set_order_gateway_ref(order_id: str, gateway_ref: str) -> None:
