@@ -18,7 +18,7 @@ PRO_PAYMENT_URL = os.getenv(
     "https://www.paypal.com/ncp/payment/PLB-K47XCNUKG24P",
 )
 PRO_PRICE_LABEL = os.getenv("PRO_PRICE_LABEL", "$39/month")
-STARTER_PRICE_LABEL = os.getenv("STARTER_PRICE_LABEL", "$29/month")
+STARTER_PRICE_LABEL = os.getenv("STARTER_PRICE_LABEL", "$24/month")
 
 
 def _smtp_configured() -> bool:

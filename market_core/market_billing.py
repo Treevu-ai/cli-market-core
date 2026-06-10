@@ -1,11 +1,14 @@
 """Billing, subscriptions, and payment schema migrations.
 
 Public pricing (landing + README, 2026-06):
-  free       $0   — 1,000 req/day (register + API key)
-  pro        $39/mo — 10,000 req/day, checkout, full MCP
-  enterprise custom
+  free          $0   — 1,000 req/day (register + API key)
+  starter       $24/mo — 5,000 req/day, export, alerts (no checkout)
+  pro           $39/mo — 10,000 req/day, checkout, full MCP
+  pro_founding  $29/mo — first 100 seats, Pro capabilities (locked 12m via PayPal plan)
+  pro_annual    $390/yr — Pro annual (−17%)
+  enterprise    custom
 
-Legacy tiers (starter, builder) remain for DB rows and PayPal plan IDs; not on landing.
+Legacy tier builder remains for DB rows; not on landing.
 """
 
 from __future__ import annotations
@@ -20,8 +23,51 @@ logger = market_core.logger
 
 # Canonical limits — propagate via ops/PRICING-CHANGE-CHECKLIST.md
 PUBLIC_FREE_REQ_DAY = 1_000
+PUBLIC_STARTER_REQ_DAY = 5_000
 PUBLIC_PRO_REQ_DAY = 10_000
-PUBLIC_PRO_PRICE_USD = 39.0
+PUBLIC_STARTER_PRICE_USD = float(os.getenv("STARTER_PRICE_USD", "24"))
+PUBLIC_PRO_PRICE_USD = float(os.getenv("PRO_PRICE_USD", "39"))
+PUBLIC_PRO_FOUNDING_PRICE_USD = float(os.getenv("PRO_FOUNDING_PRICE_USD", "29"))
+PUBLIC_PRO_ANNUAL_PRICE_USD = float(os.getenv("PRO_ANNUAL_PRICE_USD", "390"))
+FOUNDING_PROMO_CODE = os.getenv("FOUNDING_PROMO_CODE", "founding100")
+FOUNDING_SEAT_LIMIT = int(os.getenv("FOUNDING_SEAT_LIMIT", "100"))
+
+VALID_BILLING_PLANS = frozenset({"starter", "pro", "pro_founding", "pro_annual"})
+PLAN_ALIASES = {"founding": "pro_founding", "annual": "pro_annual", "pro-founding": "pro_founding"}
+
+
+def normalize_billing_plan(plan: str) -> str:
+    p = (plan or "pro").strip().lower().replace("-", "_")
+    p = PLAN_ALIASES.get(p, p)
+    return p if p in VALID_BILLING_PLANS else "pro"
+
+
+def tier_for_billing_plan(plan: str) -> str:
+    return "starter" if normalize_billing_plan(plan) == "starter" else "pro"
+
+
+def price_usd_for_plan(plan: str) -> float:
+    p = normalize_billing_plan(plan)
+    return {
+        "starter": PUBLIC_STARTER_PRICE_USD,
+        "pro": PUBLIC_PRO_PRICE_USD,
+        "pro_founding": PUBLIC_PRO_FOUNDING_PRICE_USD,
+        "pro_annual": PUBLIC_PRO_ANNUAL_PRICE_USD,
+    }[p]
+
+
+def price_label_for_plan(plan: str) -> str:
+    p = normalize_billing_plan(plan)
+    if p == "pro_annual":
+        return f"${PUBLIC_PRO_ANNUAL_PRICE_USD:.0f}/yr"
+    return f"${price_usd_for_plan(p):.0f}/mo"
+
+
+def checkout_upgrade_detail() -> str:
+    return (
+        f"Checkout requires CLI Market Pro ({price_label_for_plan('pro')}). "
+        "Run: market upgrade"
+    )
 
 TIERS = {
     "free": {
@@ -108,6 +154,18 @@ def _migrate_payment_schema(db) -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS promo_redemptions (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                promo_code TEXT NOT NULL,
+                plan_slug TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_promo_redemptions_code ON promo_redemptions(promo_code)"
+        )
         for stmt in (
             "ALTER TABLE app_orders ADD COLUMN IF NOT EXISTS gateway_ref TEXT DEFAULT ''",
             "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS paypal_subscription_id TEXT DEFAULT ''",
@@ -127,6 +185,18 @@ def _migrate_payment_schema(db) -> None:
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS promo_redemptions (
+            id TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            promo_code TEXT NOT NULL,
+            plan_slug TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_promo_redemptions_code ON promo_redemptions(promo_code)"
+    )
     for stmt in (
         "ALTER TABLE app_orders ADD COLUMN gateway_ref TEXT DEFAULT ''",
         "ALTER TABLE subscriptions ADD COLUMN paypal_subscription_id TEXT DEFAULT ''",
@@ -276,6 +346,56 @@ def db_delete_billing_pending(external_id: str) -> None:
     db.execute("DELETE FROM billing_pending WHERE external_id=?", (external_id,))
     db.commit()
     db.close()
+
+
+def db_count_promo_redemptions(promo_code: str) -> int:
+    db = market_core.get_db()
+    row = db.execute(
+        "SELECT COUNT(*) AS n FROM promo_redemptions WHERE promo_code=?",
+        (promo_code,),
+    ).fetchone()
+    db.close()
+    return int(row["n"] if row else 0)
+
+
+def db_has_promo_redemption(username: str, promo_code: str) -> bool:
+    db = market_core.get_db()
+    row = db.execute(
+        "SELECT 1 FROM promo_redemptions WHERE username=? AND promo_code=? LIMIT 1",
+        (username, promo_code),
+    ).fetchone()
+    db.close()
+    return row is not None
+
+
+def db_record_promo_redemption(username: str, promo_code: str, plan_slug: str) -> dict:
+    rid = f"PROMO-{uuid.uuid4().hex[:8].upper()}"
+    db = market_core.get_db()
+    db.execute(
+        "INSERT INTO promo_redemptions (id, username, promo_code, plan_slug) VALUES (?,?,?,?)",
+        (rid, username, promo_code, plan_slug),
+    )
+    db.commit()
+    db.close()
+    return {"id": rid, "username": username, "promo_code": promo_code, "plan_slug": plan_slug}
+
+
+def validate_founding_available(username: str, promo_code: str = "") -> tuple[bool, str]:
+    """Return (ok, error_message). founding100 promo required unless seats remain."""
+    code = (promo_code or FOUNDING_PROMO_CODE).strip().lower()
+    if code != FOUNDING_PROMO_CODE.lower():
+        return False, f"Invalid founding promo code (expected {FOUNDING_PROMO_CODE})"
+    if db_has_promo_redemption(username, code):
+        return True, ""
+    used = db_count_promo_redemptions(code)
+    if used >= FOUNDING_SEAT_LIMIT:
+        return False, f"Founding offer full ({FOUNDING_SEAT_LIMIT} seats)"
+    return True, ""
+
+
+def founding_seats_remaining() -> int:
+    used = db_count_promo_redemptions(FOUNDING_PROMO_CODE)
+    return max(0, FOUNDING_SEAT_LIMIT - used)
 
 
 def user_can_checkout(username: str) -> bool:

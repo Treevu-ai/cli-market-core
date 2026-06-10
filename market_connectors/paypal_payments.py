@@ -17,9 +17,13 @@ PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET", "")
 PAYPAL_SANDBOX = os.getenv("PAYPAL_SANDBOX", "true").lower() == "true"
 PAYPAL_PLAN_ID = os.getenv("PAYPAL_PLAN_ID", "")
 PAYPAL_STARTER_PLAN_ID = os.getenv("PAYPAL_STARTER_PLAN_ID", "")
+PAYPAL_PRO_FOUNDING_PLAN_ID = os.getenv("PAYPAL_PRO_FOUNDING_PLAN_ID", "")
+PAYPAL_PRO_ANNUAL_PLAN_ID = os.getenv("PAYPAL_PRO_ANNUAL_PLAN_ID", "")
 PAYPAL_WEBHOOK_ID = os.getenv("PAYPAL_WEBHOOK_ID", "")
 PRO_PRICE_USD = float(os.getenv("PRO_PRICE_USD", "39"))
-STARTER_PRICE_USD = float(os.getenv("STARTER_PRICE_USD", "29"))
+STARTER_PRICE_USD = float(os.getenv("STARTER_PRICE_USD", "24"))
+PRO_FOUNDING_PRICE_USD = float(os.getenv("PRO_FOUNDING_PRICE_USD", "29"))
+PRO_ANNUAL_PRICE_USD = float(os.getenv("PRO_ANNUAL_PRICE_USD", "390"))
 
 PAYPAL_API = "https://api-m.sandbox.paypal.com" if PAYPAL_SANDBOX else "https://api-m.paypal.com"
 
@@ -131,6 +135,8 @@ async def _ensure_billing_plan(
     product_name: str,
     plan_name: str,
     description: str,
+    interval_unit: str = "MONTH",
+    interval_count: int = 1,
 ) -> str:
     if env_plan_id:
         return env_plan_id
@@ -155,7 +161,7 @@ async def _ensure_billing_plan(
             "description": description,
             "status": "ACTIVE",
             "billing_cycles": [{
-                "frequency": {"interval_unit": "MONTH", "interval_count": 1},
+                "frequency": {"interval_unit": interval_unit, "interval_count": interval_count},
                 "tenure_type": "REGULAR",
                 "sequence": 1,
                 "total_cycles": 0,
@@ -180,6 +186,28 @@ def _plan_config(plan: str) -> dict:
             "product_name": "CLI Market Starter",
             "plan_name": "CLI Market Starter Monthly",
             "description": f"${STARTER_PRICE_USD:.0f}/month — alerts, CSV export, 5k req/day",
+            "interval_unit": "MONTH",
+            "interval_count": 1,
+        }
+    if plan == "pro_founding":
+        return {
+            "amount": PRO_FOUNDING_PRICE_USD,
+            "env_plan_id": PAYPAL_PRO_FOUNDING_PLAN_ID,
+            "product_name": "CLI Market Pro Founding",
+            "plan_name": "CLI Market Pro Founding Monthly",
+            "description": f"${PRO_FOUNDING_PRICE_USD:.0f}/month — founding member (Pro features)",
+            "interval_unit": "MONTH",
+            "interval_count": 1,
+        }
+    if plan == "pro_annual":
+        return {
+            "amount": PRO_ANNUAL_PRICE_USD,
+            "env_plan_id": PAYPAL_PRO_ANNUAL_PLAN_ID,
+            "product_name": "CLI Market Pro Annual",
+            "plan_name": "CLI Market Pro Annual",
+            "description": f"${PRO_ANNUAL_PRICE_USD:.0f}/year — checkout, export, 10k req/day",
+            "interval_unit": "YEAR",
+            "interval_count": 1,
         }
     return {
         "amount": PRO_PRICE_USD,
@@ -187,6 +215,8 @@ def _plan_config(plan: str) -> dict:
         "product_name": "CLI Market Pro",
         "plan_name": "CLI Market Pro Monthly",
         "description": f"${PRO_PRICE_USD:.0f}/month — checkout, export, 10k req/day",
+        "interval_unit": "MONTH",
+        "interval_count": 1,
     }
 
 
@@ -214,6 +244,8 @@ async def create_subscription(
             product_name=cfg["product_name"],
             plan_name=cfg["plan_name"],
             description=cfg["description"],
+            interval_unit=cfg.get("interval_unit", "MONTH"),
+            interval_count=int(cfg.get("interval_count", 1)),
         )
         p3 = await client.post(
             f"{PAYPAL_API}/v1/billing/subscriptions",
@@ -273,6 +305,8 @@ async def create_billing_plan(plan: str = "pro", amount: float | None = None, cu
             product_name=cfg["product_name"],
             plan_name=cfg["plan_name"],
             description=cfg["description"],
+            interval_unit=cfg.get("interval_unit", "MONTH"),
+            interval_count=int(cfg.get("interval_count", 1)),
         )
     return {"plan_id": plan_id, "plan": plan, "amount": amount, "currency": currency}
 
