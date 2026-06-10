@@ -1171,6 +1171,118 @@ hello@cli-market.dev
     return _send(to_email, subject, text, html)
 
 
+def send_retailer_application_received_email(
+    *,
+    to_email: str,
+    application_id: str,
+    store_name: str,
+    platform: str,
+    country: str,
+    lang: str = "en",
+    contact_name: str = "",
+) -> dict:
+    """Acknowledge retailer listing request — validate catalog access within 24h."""
+    greet = contact_name.strip() or to_email.split("@")[0]
+    platform_label = {
+        "vtex": "VTEX",
+        "shopify": "Shopify",
+        "magento": "Magento",
+        "woocommerce": "WooCommerce",
+        "other": "Other",
+    }.get(platform.lower(), platform)
+    if lang == "es":
+        subject = f"Solicitud retailer recibida — {application_id}"
+        text = f"""Hola {greet},
+
+Recibimos su solicitud para listar {store_name} en CLI Market.
+
+──────────────────────────────
+Referencia: {application_id}
+Tienda: {store_name}
+Plataforma: {platform_label}
+País: {country.upper()}
+──────────────────────────────
+
+Qué sigue:
+• Validamos acceso de solo lectura al catálogo (VTEX, Shopify, Magento o WooCommerce Store/REST API).
+• Le escribimos en ≤24 horas hábiles con el estado.
+• Listado gratis para siempre — licencia MIT.
+
+Si envió token/API key, lo usamos solo para validación de catálogo.
+
+— Ricardo · CLI Market
+hello@cli-market.dev
+"""
+        html = f"""<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0a0b;color:#e5e2e3;padding:24px;">
+<h2 style="color:#3afecf;">Solicitud retailer recibida</h2>
+<p>Hola {greet},</p>
+<p>Referencia: <code style="color:#3afecf;">{application_id}</code></p>
+<p><strong>{store_name}</strong> · {platform_label} · {country.upper()}</p>
+<p>Validamos catálogo de solo lectura y respondemos en <strong>≤24h hábiles</strong>. Gratis para siempre.</p>
+</body></html>"""
+    else:
+        subject = f"Retailer listing request received — {application_id}"
+        text = f"""Hi {greet},
+
+We received your request to list {store_name} on CLI Market.
+
+──────────────────────────────
+Reference: {application_id}
+Store: {store_name}
+Platform: {platform_label}
+Country: {country.upper()}
+──────────────────────────────
+
+What's next:
+• We validate read-only catalog access (VTEX, Shopify, Magento, or WooCommerce Store/REST API).
+• We email you within 24 business hours with status.
+• Free listing forever — MIT license.
+
+If you sent an API token, we use it only for catalog validation.
+
+— Ricardo · CLI Market
+hello@cli-market.dev
+"""
+        html = f"""<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0a0a0b;color:#e5e2e3;padding:24px;">
+<h2 style="color:#3afecf;">Retailer listing request received</h2>
+<p>Hi {greet},</p>
+<p>Reference: <code style="color:#3afecf;">{application_id}</code></p>
+<p><strong>{store_name}</strong> · {platform_label} · {country.upper()}</p>
+<p>We validate read-only catalog access and reply within <strong>24 business hours</strong>. Free forever.</p>
+</body></html>"""
+    return _send(to_email, subject, text, html)
+
+
+def send_retailer_application_notify(
+    *,
+    application_id: str,
+    store_name: str,
+    platform: str,
+    country: str,
+    contact_email: str,
+    contact_name: str = "",
+    website: str = "",
+    has_token: bool = False,
+) -> dict:
+    """Notify hello@cli-market.dev of a new retailer listing request."""
+    subject = f"[Retailer apply] {application_id} — {store_name} ({platform}/{country})"
+    text = (
+        f"New retailer listing request\n\n"
+        f"Application ID: {application_id}\n"
+        f"Store: {store_name}\n"
+        f"Platform: {platform}\n"
+        f"Country: {country}\n"
+        f"Contact email: {contact_email}\n"
+    )
+    if contact_name.strip():
+        text += f"Contact name: {contact_name.strip()}\n"
+    if website.strip():
+        text += f"Website: {website.strip()}\n"
+    text += f"API token provided: {'yes' if has_token else 'no'}\n"
+    text += "\nReview: python3 ops/approve_retailer.py ok <id> | no <id>\n"
+    return _send(NOTIFY_EMAIL, subject, text, f"<pre>{text}</pre>")
+
+
 def _send(to_email: str, subject: str, text: str, html: str) -> dict:
     if not _smtp_configured():
         logger.warning("SMTP not configured — email not sent to %s", to_email)
