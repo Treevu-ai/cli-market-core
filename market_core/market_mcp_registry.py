@@ -167,7 +167,8 @@ def _build_tool_specs() -> list[dict[str, Any]]:
             _schema_object(
                 {
                     "query": {"type": "string", "description": "Search term"},
-                    "store": {"type": "string", "description": "Store ID (empty = all). Use market_discover for valid IDs."},
+                    "store": {"type": "string", "description": "Store ID (empty = all in country). Use market_discover for valid IDs."},
+                    "country": {"type": "string", "description": "Country code: PE, AR, MX, BR, CO, CL, ES, US. Prefer setting this to avoid timeouts."},
                     "line": {"type": "string", "description": "Business line: supermercados, farmacias, electro, moda, deportes, hogar"},
                     "limit": {"type": "integer", "default": 10},
                 },
@@ -178,10 +179,12 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         _tool(
             "market_compare",
             f"[Shop] Compare prices for one query across retailers side-by-side. Use when the user "
-            "asks for cheapest option or cross-store comparison. For single-store lookup use market_search.",
+            "asks for cheapest option or cross-store comparison. Set country (e.g. PE) or store to avoid timeouts.",
             _schema_object(
                 {
                     "query": {"type": "string", "description": "Product to compare"},
+                    "store": {"type": "string", "description": "Optional single store ID from market_discover"},
+                    "country": {"type": "string", "description": "Country code: PE, AR, MX, BR, CO, CL, ES, US"},
                     "line": {"type": "string", "description": "Business line filter"},
                     "limit": {"type": "integer", "default": 10},
                 },

@@ -142,12 +142,24 @@ def _tool_handlers() -> dict:
         "market_search": lambda a: api(
             "POST",
             "/products/search",
-            {"query": a["query"], "store": a.get("store"), "line": a.get("line"), "limit": a.get("limit", 10)},
+            {
+                "query": a["query"],
+                "store": a.get("store"),
+                "line": a.get("line"),
+                "country": a.get("country"),
+                "limit": a.get("limit", 10),
+            },
         ),
         "market_compare": lambda a: api(
             "POST",
             "/products/compare",
-            {"query": a["query"], "line": a.get("line"), "limit": a.get("limit", 10)},
+            {
+                "query": a["query"],
+                "store": a.get("store"),
+                "line": a.get("line"),
+                "country": a.get("country"),
+                "limit": a.get("limit", 10),
+            },
         ),
         "market_add": lambda a: api(
             "POST",

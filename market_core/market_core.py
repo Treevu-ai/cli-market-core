@@ -258,21 +258,29 @@ def _refresh_access_token() -> str | None:
         return None
 
 
+def _api_timeout(path: str, method: str) -> float:
+    default = float(os.getenv("MARKET_API_TIMEOUT", "45"))
+    if method == "POST" and path in ("/products/search", "/products/compare", "/v1/basket/compare"):
+        return float(os.getenv("MARKET_SEARCH_TIMEOUT", str(default)))
+    return default
+
+
 def api(method: str, path: str, json_data: dict | None = None) -> dict:
     token = None
     if path not in _AUTH_PUBLIC_PATHS:
         token = get_token()
     headers = {"Authorization": f"Bearer {token}"} if token else {}
+    timeout = _api_timeout(path, method)
 
     def _request(hdrs: dict) -> httpx.Response:
         if method == "GET":
-            return httpx.get(f"{API}{path}", headers=hdrs, timeout=30)
+            return httpx.get(f"{API}{path}", headers=hdrs, timeout=timeout)
         if method == "POST":
-            return httpx.post(f"{API}{path}", headers=hdrs, json=json_data, timeout=30)
+            return httpx.post(f"{API}{path}", headers=hdrs, json=json_data, timeout=timeout)
         if method == "PUT":
-            return httpx.put(f"{API}{path}", headers=hdrs, json=json_data, timeout=30)
+            return httpx.put(f"{API}{path}", headers=hdrs, json=json_data, timeout=timeout)
         if method == "DELETE":
-            return httpx.delete(f"{API}{path}", headers=hdrs, timeout=30)
+            return httpx.delete(f"{API}{path}", headers=hdrs, timeout=timeout)
         raise ValueError(f"Unknown method: {method}")
 
     try:
