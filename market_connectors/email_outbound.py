@@ -250,7 +250,7 @@ Cómo usarla:
 O exporta la variable de entorno:
   export MARKET_API_KEY={api_key}
 
-Docs y ejemplos: https://pypi.org/project/cli-market/
+Docs y ejemplos: https://pypi.org/project/cli-market-world/
 
 ¿Preguntas? Responde este correo — contestamos el mismo día.
 
@@ -303,7 +303,7 @@ How to use it:
 Or set the environment variable:
   export MARKET_API_KEY={api_key}
 
-Docs and examples: https://pypi.org/project/cli-market/
+Docs and examples: https://pypi.org/project/cli-market-world/
 
 Questions? Reply to this email — we respond same day.
 
