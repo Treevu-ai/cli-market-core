@@ -364,6 +364,46 @@ INDICATOR_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Brazil central bank headline IPCA month-over-month (BR only).",
         "formula": "BCB series 433 latest month",
     },
+    {
+        "key": "fx_ars_blue_gap",
+        "name": "ARS Official vs Blue FX Gap",
+        "category": "macro",
+        "source": "external:bluelytics.com.ar",
+        "unit": "pct",
+        "refresh_hours": 12,
+        "description": "Argentina blue vs official USD rate gap — invalidates nominal AR basket without it.",
+        "formula": "(blue - oficial) / oficial * 100 from bluelytics v2/latest",
+    },
+    {
+        "key": "bcrp_inflation_expectation_12m",
+        "name": "BCRP Inflation Expectation 12m",
+        "category": "macro",
+        "source": "external:bcrp.gob.pe",
+        "unit": "pct",
+        "refresh_hours": 168,
+        "description": "BCRP Encuesta de Expectativas — inflación esperada a 12 meses (PE).",
+        "formula": "BCRP series PD12912AM latest",
+    },
+    {
+        "key": "bcrp_reference_rate",
+        "name": "BCRP Reference Policy Rate",
+        "category": "macro",
+        "source": "external:bcrp.gob.pe",
+        "unit": "pct",
+        "refresh_hours": 168,
+        "description": "BCRP tasa de referencia de política monetaria (PE).",
+        "formula": "BCRP series PD04722MM latest",
+    },
+    {
+        "key": "fuel_price_index_pe",
+        "name": "Fuel Price Index (PE)",
+        "category": "logistics",
+        "source": "external:osinergmin.gob.pe",
+        "unit": "index",
+        "refresh_hours": 168,
+        "description": "Peru gasoline/diesel price proxy — real distribution cost vs weather-only stress.",
+        "formula": "OSINERGMIN public fuel prices Lima (gasolina + diésel avg)",
+    },
 ]
 
 ENRICHMENT_INDICATOR_KEYS: tuple[str, ...] = (
@@ -591,24 +631,32 @@ def compute_search_momentum(db, country: str | None = None) -> float | None:
 
 def compute_basket_stress(db, country: str | None = None) -> float | None:
     """Minimum sum of cheapest canasta item per staple; index vs 30d ago if history exists."""
+    from .golden_taxonomy import min_canasta_prices_golden
+
     stores = _stores_for_country(country)
     if not stores:
         return None
-    placeholders = ",".join("?" * len(stores))
-    totals: list[float] = []
-    for item in CANASTA_ITEMS:
-        row = db.execute(
-            f"""
-            SELECT MIN(price) AS p FROM price_snapshots
-            WHERE store IN ({placeholders}) AND price > 0
-              AND LOWER(name) LIKE ?
-            """,
-            [*stores, f"%{item}%"],
-        ).fetchone()
-        if row and row["p"]:
-            totals.append(float(row["p"]))
+
+    golden = min_canasta_prices_golden(db, country)
+    totals: list[float] = list(golden.values()) if len(golden) >= 3 else []
+
+    if len(totals) < 3:
+        placeholders = ",".join("?" * len(stores))
+        totals = []
+        for item in CANASTA_ITEMS:
+            row = db.execute(
+                f"""
+                SELECT MIN(price) AS p FROM price_snapshots
+                WHERE store IN ({placeholders}) AND price > 0
+                  AND LOWER(name) LIKE ?
+                """,
+                [*stores, f"%{item}%"],
+            ).fetchone()
+            if row and row["p"]:
+                totals.append(float(row["p"]))
     if len(totals) < 3:
         return None
+    placeholders = ",".join("?" * len(stores))
     current = sum(totals)
     baseline = current
     try:
@@ -832,6 +880,72 @@ def refresh_external_indicators(db, country: str | None = None) -> int:
             metadata={"internal_inflation_pct": internal_inf, "official_cpi_pct": cpi},
         )
         n += 1
+
+    from .market_enrich_sources import (
+        fetch_bcrp_inflation_expectation_12m,
+        fetch_bcrp_reference_rate,
+        fetch_fuel_price_index_pe,
+        fetch_fx_ars_blue_gap,
+    )
+
+    if cc == "AR":
+        ar_scope = "AR:macro"
+        gap_hours = defs.get("fx_ars_blue_gap", {}).get("refresh_hours", 12)
+        if _indicator_is_stale(db, "fx_ars_blue_gap", ar_scope, gap_hours):
+            gap = fetch_fx_ars_blue_gap()
+            if gap is not None:
+                _upsert_indicator_value(
+                    db,
+                    indicator_key="fx_ars_blue_gap",
+                    scope=ar_scope,
+                    value=gap,
+                    country="AR",
+                    metadata={"source": "bluelytics.com.ar"},
+                )
+                n += 1
+
+    if cc == "PE":
+        pe_scope = "PE:macro"
+        bcrp_exp_hours = defs.get("bcrp_inflation_expectation_12m", {}).get("refresh_hours", 168)
+        if _indicator_is_stale(db, "bcrp_inflation_expectation_12m", pe_scope, bcrp_exp_hours):
+            exp = fetch_bcrp_inflation_expectation_12m()
+            if exp is not None:
+                _upsert_indicator_value(
+                    db,
+                    indicator_key="bcrp_inflation_expectation_12m",
+                    scope=pe_scope,
+                    value=exp,
+                    country="PE",
+                    metadata={"series": "PD12912AM"},
+                )
+                n += 1
+        bcrp_rate_hours = defs.get("bcrp_reference_rate", {}).get("refresh_hours", 168)
+        if _indicator_is_stale(db, "bcrp_reference_rate", pe_scope, bcrp_rate_hours):
+            rate = fetch_bcrp_reference_rate()
+            if rate is not None:
+                _upsert_indicator_value(
+                    db,
+                    indicator_key="bcrp_reference_rate",
+                    scope=pe_scope,
+                    value=rate,
+                    country="PE",
+                    metadata={"series": "PD04722MM"},
+                )
+                n += 1
+        fuel_scope = "PE:logistics"
+        fuel_hours = defs.get("fuel_price_index_pe", {}).get("refresh_hours", 168)
+        if _indicator_is_stale(db, "fuel_price_index_pe", fuel_scope, fuel_hours):
+            fuel = fetch_fuel_price_index_pe()
+            if fuel is not None:
+                _upsert_indicator_value(
+                    db,
+                    indicator_key="fuel_price_index_pe",
+                    scope=fuel_scope,
+                    value=fuel,
+                    country="PE",
+                    metadata={"unit": "PEN/L proxy"},
+                )
+                n += 1
 
     return n
 

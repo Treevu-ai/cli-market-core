@@ -516,3 +516,95 @@ def fetch_wb_gdp_growth_yoy(country: str) -> float | None:
 
 def clear_tier2_cache() -> None:
     _imf_cache.clear()
+
+
+# ── Phase 1 regional macro (PE, AR) ───────────────────────────────────────────
+
+BCRP_API_BASE = "https://estadisticas.bcrp.gob.pe/estadisticas/series/api"
+BCRP_SERIES_INFLATION_EXPECTATION_12M = os.getenv("BCRP_SERIES_INFLATION_EXPECTATION_12M", "PD12912AM")
+BCRP_SERIES_REFERENCE_RATE = os.getenv("BCRP_SERIES_REFERENCE_RATE", "PD04722MM")
+
+
+def _bcrp_latest_value(series_code: str) -> float | None:
+    url = f"{BCRP_API_BASE}/{series_code}/json"
+    try:
+        with httpx.Client(timeout=15.0, headers=OFF_HEADERS) as client:
+            r = client.get(url)
+            r.raise_for_status()
+            periods = (r.json() or {}).get("periods") or []
+            if not periods:
+                return None
+            raw = (periods[-1].get("values") or [None])[0]
+            if raw is None:
+                return None
+            return round(float(str(raw).replace(",", ".")), 3)
+    except Exception as e:
+        logger.debug("BCRP %s failed: %s", series_code, e)
+        return None
+
+
+def fetch_bcrp_inflation_expectation_12m() -> float | None:
+    return _bcrp_latest_value(BCRP_SERIES_INFLATION_EXPECTATION_12M)
+
+
+def fetch_bcrp_reference_rate() -> float | None:
+    return _bcrp_latest_value(BCRP_SERIES_REFERENCE_RATE)
+
+
+def fetch_fx_ars_blue_gap() -> float | None:
+    """(blue - official) / official * 100 for Argentina."""
+    try:
+        with httpx.Client(timeout=12.0, headers=OFF_HEADERS) as client:
+            r = client.get("https://api.bluelytics.com.ar/v2/latest")
+            r.raise_for_status()
+            data = r.json()
+            oficial = float((data.get("oficial") or {}).get("value_avg") or 0)
+            blue = float((data.get("blue") or {}).get("value_avg") or 0)
+            if oficial <= 0 or blue <= 0:
+                return None
+            return round((blue - oficial) / oficial * 100, 2)
+    except Exception as e:
+        logger.debug("bluelytics ARS gap: %s", e)
+        return None
+
+
+def fetch_fuel_price_index_pe() -> float | None:
+    """
+    Average G_REGULAR + DIESEL retail prices (Lima proxy) from OSINERGMIN ArcGIS.
+  Override via OSINERGMIN_FUEL_API_URL env.
+    """
+    url = os.getenv(
+        "OSINERGMIN_FUEL_API_URL",
+        "https://gisem.osinergmin.gob.pe/serverosih/rest/services/"
+        "PRECIOS_COMBUSTIBLES_MIL1/MapServer/0/query",
+    )
+    params = {
+        "where": "DEPARTAMENTO='LIMA'",
+        "outFields": "G_REGULAR,DIESEL",
+        "returnGeometry": "false",
+        "f": "json",
+        "resultRecordCount": 50,
+    }
+    try:
+        with httpx.Client(timeout=20.0, headers=OFF_HEADERS) as client:
+            r = client.get(url, params=params)
+            r.raise_for_status()
+            features = (r.json() or {}).get("features") or []
+            vals: list[float] = []
+            for feat in features:
+                attrs = feat.get("attributes") or {}
+                for key in ("G_REGULAR", "DIESEL", "G_regular", "Diesel"):
+                    v = attrs.get(key)
+                    if v is not None:
+                        try:
+                            fv = float(v)
+                            if fv > 0:
+                                vals.append(fv)
+                        except (TypeError, ValueError):
+                            pass
+            if not vals:
+                return None
+            return round(sum(vals) / len(vals), 3)
+    except Exception as e:
+        logger.debug("OSINERGMIN fuel index PE: %s", e)
+        return None
