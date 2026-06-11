@@ -61,8 +61,27 @@ def _live_price_label(fallback: str = "45,000+") -> str:
     return fallback
 
 PRICES_VERIFIED_LABEL = _live_price_label()
+
+
+def _live_golden_linkage_pct(fallback: float = 0.0) -> float:
+    """Fetch golden linkage % from GET /health/stats (public, aggregated)."""
+    try:
+        import httpx
+        from .market_core import API as api
+        r = httpx.get(f"{api}/health/stats", timeout=10)
+        r.raise_for_status()
+        body = r.json()
+        pct = body.get("golden_linkage_pct", body.get("linkage_pct"))
+        if pct is not None:
+            return float(pct)
+    except Exception:
+        pass
+    return fallback
+
+
+GOLDEN_LINKAGE_PCT = _live_golden_linkage_pct()
 PYPI_PACKAGE_NAME = "cli-market-world"
-PACKAGE_VERSION = "1.9.29"
+PACKAGE_VERSION = "1.9.30"
 LICENSE = "MIT"
 PYPI_URL = f"https://pypi.org/project/{PYPI_PACKAGE_NAME}/"
 PEPY_PROJECT_URL = f"https://pepy.tech/projects/{PYPI_PACKAGE_NAME}"
