@@ -266,6 +266,65 @@ def handle_tool(name: str, args: dict) -> str:
         return json.dumps({"error": str(e)})
 
 
+def _is_jsonrpc_notification(request: dict) -> bool:
+    """JSON-RPC notifications omit ``id``; they must not receive a response."""
+    return "id" not in request
+
+
+def _write_rpc(message: dict) -> None:
+    sys.stdout.write(json.dumps(message, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def handle_rpc_request(request: dict, profile: str) -> dict | None:
+    """Build one JSON-RPC response, or ``None`` when no reply is allowed (notifications)."""
+    method = request.get("method", "")
+
+    if _is_jsonrpc_notification(request):
+        return None
+
+    req_id = request["id"]
+    params = request.get("params") or {}
+
+    if method == "initialize":
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "cli-market", "version": "1.9.31"},
+            },
+        }
+    if method == "ping":
+        return {"jsonrpc": "2.0", "id": req_id, "result": {}}
+    if method == "tools/list":
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"tools": list_tools(profile)},
+        }
+    if method == "tools/call":
+        tool_name = params["name"]
+        tool_args = params.get("arguments", {})
+        content = handle_tool(tool_name, tool_args)
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"content": [{"type": "text", "text": content}]},
+        }
+    if method in ("resources/list", "resources/templates/list"):
+        return {"jsonrpc": "2.0", "id": req_id, "result": {"resources": []}}
+    if method == "prompts/list":
+        return {"jsonrpc": "2.0", "id": req_id, "result": {"prompts": []}}
+
+    return {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "error": {"code": -32601, "message": f"Method not found: {method}"},
+    }
+
+
 def main():
     """MCP JSON-RPC loop over stdio."""
     profile = get_profile()
@@ -278,43 +337,9 @@ def main():
         except json.JSONDecodeError:
             continue
 
-        method = request.get("method", "")
-        req_id = request.get("id")
-
-        if method == "initialize":
-            response = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "cli-market", "version": "1.0.0"},
-                },
-            }
-        elif method == "tools/list":
-            response = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {"tools": list_tools(profile)},
-            }
-        elif method == "tools/call":
-            tool_name = request["params"]["name"]
-            tool_args = request["params"].get("arguments", {})
-            content = handle_tool(tool_name, tool_args)
-            response = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {"content": [{"type": "text", "text": content}]},
-            }
-        else:
-            response = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {"code": -32601, "message": f"Method not found: {method}"},
-            }
-
-        sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
+        response = handle_rpc_request(request, profile)
+        if response is not None:
+            _write_rpc(response)
 
 
 if __name__ == "__main__":
