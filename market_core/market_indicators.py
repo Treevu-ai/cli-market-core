@@ -404,6 +404,66 @@ INDICATOR_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Peru gasoline/diesel price proxy — real distribution cost vs weather-only stress.",
         "formula": "OSINERGMIN public fuel prices Lima (gasolina + diésel avg)",
     },
+    {
+        "key": "commodity_input_pressure",
+        "name": "Commodity Input Pressure",
+        "category": "macro",
+        "source": "external:worldbank+faostat",
+        "unit": "pct",
+        "refresh_hours": 168,
+        "description": "YoY % change in global food commodity price index — leading input cost pressure.",
+        "formula": "Δ% World Bank AG.PRD.FOOD.XD (FAOSTAT FP proxy when blocked)",
+    },
+    {
+        "key": "real_wage_basket_ratio",
+        "name": "Real Wage vs Basket Ratio",
+        "category": "affordability",
+        "source": "external:cepalstat",
+        "unit": "index",
+        "refresh_hours": 168,
+        "description": "CEPAL food purchasing power of minimum wage vs shelf basket stress.",
+        "formula": "CEPAL 2741 or real minimum wage (340) / basket_stress_index",
+    },
+    {
+        "key": "ipp_food_co",
+        "name": "Colombia Food Producer Price Index",
+        "category": "macro",
+        "source": "external:dane+worldbank",
+        "unit": "pct",
+        "refresh_hours": 168,
+        "description": "Colombia food producer price pressure (DANE IPP food; WB food CPI YoY fallback).",
+        "formula": "FP.CPI.FOOD.ZG CO (IPP proxy until DANE REST live)",
+    },
+    {
+        "key": "gtrends_search_momentum",
+        "name": "Google Trends Staple Momentum",
+        "category": "demand",
+        "source": "external:google trends",
+        "unit": "ratio",
+        "refresh_hours": 24,
+        "description": "Google Trends daily RSS staple keyword hits vs 7d cached baseline.",
+        "formula": "staple_hits_today / max(staple_hits_7d_ago, 1)",
+    },
+    {
+        "key": "bcrp_shelf_gap",
+        "name": "BCRP vs Shelf Inflation Gap",
+        "category": "composite",
+        "source": "computed",
+        "unit": "pp",
+        "refresh_hours": 168,
+        "description": "Peru: BCRP 12m inflation expectation minus staple shelf momentum.",
+        "formula": "bcrp_inflation_expectation_12m - staple_price_momentum",
+    },
+    {
+        "key": "commodity_transmission_lag",
+        "name": "Commodity Transmission Lag",
+        "category": "composite",
+        "source": "computed",
+        "unit": "pp",
+        "refresh_hours": 168,
+        "description": "Global commodity input pressure minus shelf staple momentum — leading signal.",
+        "formula": "commodity_input_pressure - staple_price_momentum",
+    },
 ]
 
 ENRICHMENT_INDICATOR_KEYS: tuple[str, ...] = (
@@ -568,15 +628,20 @@ def compute_promo_intensity(db, country: str | None = None, line: str | None = N
 
 
 def compute_price_dispersion(db, country: str | None = None, line: str | None = None) -> float | None:
-    filt, params = _snapshot_filter(country, line)
-    rows = db.execute(
-        f"SELECT LOWER(SUBSTR(name, 1, 40)) AS pname, price{filt} AND name IS NOT NULL",
-        params,
-    ).fetchall()
-    buckets: dict[str, list[float]] = {}
-    for r in rows:
-        if r["price"] and r["price"] > 0:
-            buckets.setdefault(r["pname"], []).append(float(r["price"]))
+    from .golden_taxonomy import canonical_price_buckets
+
+    buckets = canonical_price_buckets(db, country, line)
+    if not any(len(prices) >= 2 for prices in buckets.values()):
+        filt, params = _snapshot_filter(country, line)
+        rows = db.execute(
+            f"SELECT LOWER(SUBSTR(name, 1, 40)) AS pname, price{filt} AND name IS NOT NULL",
+            params,
+        ).fetchall()
+        buckets = {}
+        for r in rows:
+            if r["price"] and r["price"] > 0:
+                buckets.setdefault(r["pname"], []).append(float(r["price"]))
+
     cvs: list[float] = []
     for prices in buckets.values():
         if len(prices) < 2:
@@ -715,6 +780,12 @@ def compute_internal_inflation_avg(db, country: str | None, line: str | None, da
 
 def compute_staple_price_momentum(db, country: str | None, days: int = 7) -> float | None:
     """Average % price change for canasta staples over the last N days."""
+    from .golden_taxonomy import staple_price_deltas_golden
+
+    golden_deltas = staple_price_deltas_golden(db, country, days=days)
+    if golden_deltas:
+        return round(sum(golden_deltas) / len(golden_deltas), 2)
+
     stores = _stores_for_country(country)
     if not stores:
         return None
@@ -823,6 +894,128 @@ def _indicator_is_stale(db, indicator_key: str, scope: str, refresh_hours: int) 
         return True
     age = datetime.now(timezone.utc) - recorded
     return age >= timedelta(hours=max(1, refresh_hours))
+
+
+def _latest_indicator_value(db, indicator_key: str, scope: str) -> float | None:
+    row = db.execute(
+        """
+        SELECT value FROM indicator_values
+        WHERE indicator_key = ? AND scope = ?
+        ORDER BY recorded_at DESC LIMIT 1
+        """,
+        (indicator_key, scope),
+    ).fetchone()
+    if row and row["value"] is not None:
+        return float(row["value"])
+    return None
+
+
+def refresh_phase2_indicators(db, country: str | None = None) -> int:
+    """FAO/CEPAL/DANE/Trends fetchers + PE/CO composites."""
+    from .market_enrich_sources import (
+        fetch_commodity_input_pressure,
+        fetch_gtrends_search_momentum,
+        fetch_ipp_food_co,
+        fetch_real_wage_cepal_index,
+    )
+
+    cc = (country or "PE").upper()
+    scope = f"{cc}:macro"
+    enrich_scope = f"{cc}:enrichment"
+    defs = {d["key"]: d for d in INDICATOR_DEFINITIONS}
+    n = 0
+
+    global_scope = "global:macro"
+    comm_hours = defs.get("commodity_input_pressure", {}).get("refresh_hours", 168)
+    if _indicator_is_stale(db, "commodity_input_pressure", global_scope, comm_hours):
+        pressure = fetch_commodity_input_pressure()
+        if pressure is not None:
+            _upsert_indicator_value(
+                db,
+                indicator_key="commodity_input_pressure",
+                scope=global_scope,
+                value=pressure,
+                metadata={"source": "worldbank:AG.PRD.FOOD.XD"},
+            )
+            n += 1
+
+    wage_hours = defs.get("real_wage_basket_ratio", {}).get("refresh_hours", 168)
+    if _indicator_is_stale(db, "real_wage_basket_ratio", scope, wage_hours):
+        cepal_wage = fetch_real_wage_cepal_index(cc)
+        basket = _latest_indicator_value(db, "basket_stress_index", f"{cc}:all") or compute_basket_stress(db, cc)
+        if cepal_wage is not None and basket and basket > 0:
+            ratio = round(cepal_wage / basket * 100, 2)
+            _upsert_indicator_value(
+                db,
+                indicator_key="real_wage_basket_ratio",
+                scope=scope,
+                value=ratio,
+                country=cc,
+                metadata={"cepal_wage_index": cepal_wage, "basket_stress_index": basket},
+            )
+            n += 1
+
+    if cc == "CO":
+        ipp_hours = defs.get("ipp_food_co", {}).get("refresh_hours", 168)
+        if _indicator_is_stale(db, "ipp_food_co", scope, ipp_hours):
+            ipp = fetch_ipp_food_co()
+            if ipp is not None:
+                _upsert_indicator_value(
+                    db,
+                    indicator_key="ipp_food_co",
+                    scope=scope,
+                    value=ipp,
+                    country="CO",
+                    metadata={"proxy": "worldbank:FP.CPI.FOOD.ZG"},
+                )
+                n += 1
+
+    gt_hours = defs.get("gtrends_search_momentum", {}).get("refresh_hours", 24)
+    if _indicator_is_stale(db, "gtrends_search_momentum", enrich_scope, gt_hours):
+        gt = fetch_gtrends_search_momentum(db, cc)
+        if gt is not None:
+            _upsert_indicator_value(
+                db,
+                indicator_key="gtrends_search_momentum",
+                scope=enrich_scope,
+                value=gt,
+                country=cc,
+                metadata={"source": "google-trends-rss"},
+            )
+            n += 1
+
+    if cc == "PE":
+        gap_hours = defs.get("bcrp_shelf_gap", {}).get("refresh_hours", 168)
+        if _indicator_is_stale(db, "bcrp_shelf_gap", scope, gap_hours):
+            bcrp = _latest_indicator_value(db, "bcrp_inflation_expectation_12m", scope)
+            shelf = _latest_indicator_value(db, "staple_price_momentum", enrich_scope)
+            if bcrp is not None and shelf is not None:
+                _upsert_indicator_value(
+                    db,
+                    indicator_key="bcrp_shelf_gap",
+                    scope=scope,
+                    value=round(bcrp - shelf, 2),
+                    country="PE",
+                    metadata={"bcrp_inflation_expectation_12m": bcrp, "staple_price_momentum": shelf},
+                )
+                n += 1
+
+    lag_hours = defs.get("commodity_transmission_lag", {}).get("refresh_hours", 168)
+    if _indicator_is_stale(db, "commodity_transmission_lag", enrich_scope, lag_hours):
+        comm = _latest_indicator_value(db, "commodity_input_pressure", global_scope)
+        shelf = _latest_indicator_value(db, "staple_price_momentum", enrich_scope)
+        if comm is not None and shelf is not None:
+            _upsert_indicator_value(
+                db,
+                indicator_key="commodity_transmission_lag",
+                scope=enrich_scope,
+                value=round(comm - shelf, 2),
+                country=cc,
+                metadata={"commodity_input_pressure": comm, "staple_price_momentum": shelf},
+            )
+            n += 1
+
+    return n
 
 
 def refresh_external_indicators(db, country: str | None = None) -> int:
@@ -1229,12 +1422,14 @@ def refresh_indicators(country: str | None = None, line: str | None = None) -> d
     internal = refresh_internal_indicators(db, country, line)
     external = refresh_external_indicators(db, country)
     enrichment = refresh_enrichment_indicators(db, country)
+    phase2 = refresh_phase2_indicators(db, country)
     db.commit()
     db.close()
     return {
         "internal_written": internal,
         "external_written": external,
         "enrichment_written": enrichment,
+        "phase2_written": phase2,
     }
 
 

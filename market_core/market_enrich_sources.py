@@ -568,6 +568,138 @@ def fetch_fx_ars_blue_gap() -> float | None:
         return None
 
 
+# ── Phase 2 regional macro (FAO proxy, CEPAL, DANE, Google Trends) ───────────
+
+CEPAL_ISO3: dict[str, str] = {
+    "PE": "PER",
+    "AR": "ARG",
+    "CO": "COL",
+    "CL": "CHL",
+    "MX": "MEX",
+    "BR": "BRA",
+}
+
+GTRENDS_STAPLE_KEYWORDS = (
+    "leche", "milk", "arroz", "rice", "aceite", "oil", "huevo", "egg",
+    "pan", "bread", "cafe", "coffee", "pollo", "chicken", "queso", "cheese",
+)
+
+
+def _cepal_records(indicator_id: int, country: str) -> list[dict[str, Any]]:
+    iso3 = CEPAL_ISO3.get(country.upper())
+    if not iso3:
+        return []
+    url = f"https://api-cepalstat.cepal.org/cepalstat/api/v1/indicator/{indicator_id}/data?format=json&lang=en"
+    try:
+        with httpx.Client(timeout=25.0, headers=OFF_HEADERS) as client:
+            r = client.get(url)
+            r.raise_for_status()
+            records = (r.json() or {}).get("body", {}).get("records") or []
+            return [rec for rec in records if rec.get("iso3") == iso3]
+    except Exception as e:
+        logger.debug("CEPAL %s %s: %s", indicator_id, country, e)
+        return []
+
+
+def _cepal_latest(indicator_id: int, country: str) -> float | None:
+    records = _cepal_records(indicator_id, country)
+    if not records:
+        return None
+    try:
+        return round(float(records[-1]["value"]), 3)
+    except (TypeError, ValueError, KeyError):
+        return None
+
+
+def fetch_commodity_input_pressure() -> float | None:
+    """Global food commodity YoY % — World Bank AG.PRD.FOOD.XD (FAOSTAT FP proxy)."""
+    year = datetime.now(timezone.utc).year
+    url = (
+        "https://api.worldbank.org/v2/country/WLD/indicator/AG.PRD.FOOD.XD"
+        f"?format=json&per_page=8&date={year - 8}:{year}"
+    )
+    try:
+        with httpx.Client(timeout=15.0, headers=OFF_HEADERS) as client:
+            r = client.get(url)
+            r.raise_for_status()
+            payload = r.json()
+            if not isinstance(payload, list) or len(payload) < 2:
+                return None
+            vals: list[tuple[int, float]] = []
+            for entry in payload[1]:
+                if entry.get("value") is None:
+                    continue
+                try:
+                    yr = int(str(entry.get("date", "0"))[:4])
+                    vals.append((yr, float(entry["value"])))
+                except (TypeError, ValueError):
+                    continue
+            if len(vals) < 2:
+                return None
+            vals.sort(key=lambda x: x[0])
+            prev, curr = vals[-2][1], vals[-1][1]
+            if prev <= 0:
+                return None
+            return round((curr - prev) / prev * 100, 2)
+    except Exception as e:
+        logger.debug("commodity_input_pressure: %s", e)
+        return None
+
+
+def fetch_real_wage_cepal_index(country: str) -> float | None:
+    """CEPAL real minimum wage index (340) or food purchasing power (2741)."""
+    food_power = _cepal_latest(2741, country)
+    if food_power is not None:
+        return food_power
+    return _cepal_latest(340, country)
+
+
+def fetch_ipp_food_co() -> float | None:
+    """Colombia food producer price pressure — food CPI YoY until DANE IPP REST is wired."""
+    year = datetime.now(timezone.utc).year
+    url = (
+        "https://api.worldbank.org/v2/country/CO/indicator/FP.CPI.FOOD.ZG"
+        f"?format=json&per_page=5&date={year - 5}:{year}"
+    )
+    try:
+        with httpx.Client(timeout=12.0, headers=OFF_HEADERS) as client:
+            r = client.get(url)
+            r.raise_for_status()
+            payload = r.json()
+            if isinstance(payload, list) and len(payload) >= 2:
+                for entry in payload[1]:
+                    val = entry.get("value")
+                    if val is not None:
+                        return round(float(val), 3)
+    except Exception as e:
+        logger.debug("ipp_food_co: %s", e)
+    return None
+
+
+def fetch_gtrends_search_momentum(db, country: str) -> float | None:
+    """Staple keyword hits in Google Trends RSS vs cached 7d baseline."""
+    geo = country.upper()
+    url = f"https://trends.google.com/trending/rss?geo={geo}"
+    cache_key = f"gtrends:rss:{geo}"
+    try:
+        with httpx.Client(timeout=15.0, headers=OFF_HEADERS, follow_redirects=True) as client:
+            r = client.get(url)
+            r.raise_for_status()
+            text = r.text.lower()
+        hits = sum(1 for kw in GTRENDS_STAPLE_KEYWORDS if kw in text)
+        if hits == 0:
+            return None
+        prior = cache_get(db, cache_key, max_age_hours=24 * 14)
+        prior_hits = float((prior or {}).get("hits") or 0)
+        cache_set(db, cache_key, "google-trends-rss", {"hits": hits})
+        if prior_hits <= 0:
+            return 1.0
+        return round(hits / prior_hits, 3)
+    except Exception as e:
+        logger.debug("gtrends RSS %s: %s", country, e)
+        return None
+
+
 def fetch_fuel_price_index_pe() -> float | None:
     """
     Average G_REGULAR + DIESEL retail prices (Lima proxy) from OSINERGMIN ArcGIS.

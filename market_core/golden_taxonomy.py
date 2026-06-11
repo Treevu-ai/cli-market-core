@@ -76,3 +76,81 @@ def min_canasta_prices_golden(db, country: str | None) -> dict[str, float]:
             if prev is None or price < prev:
                 by_item[item] = price
     return by_item
+
+
+def canonical_price_buckets(db, country: str | None, line: str | None = None) -> dict[str, list[float]]:
+    """Group shelf prices by canonical_product_id for cross-store dispersion."""
+    from .market_core import STORES
+
+    cc = (country or "").upper()
+    stores = [k for k, v in STORES.items() if v.get("country") == cc and not v.get("disabled")]
+    if not stores:
+        return {}
+
+    ph = ",".join("?" * len(stores))
+    q = f"""
+        SELECT canonical_product_id, price
+        FROM price_snapshots
+        WHERE store IN ({ph}) AND price > 0
+          AND canonical_product_id IS NOT NULL AND canonical_product_id != ''
+    """
+    params: list = list(stores)
+    if line:
+        q += " AND line = ?"
+        params.append(line)
+
+    buckets: dict[str, list[float]] = {}
+    for row in db.execute(q, params).fetchall():
+        cid = str(row["canonical_product_id"] or "")
+        price = float(row["price"] or 0)
+        if cid and price > 0:
+            buckets.setdefault(cid, []).append(price)
+    return buckets
+
+
+def staple_price_deltas_golden(db, country: str | None, days: int = 7) -> list[float]:
+    """% price changes for canasta staples linked via Golden Record IDs."""
+    from datetime import datetime, timedelta, timezone
+
+    from .market_core import STORES
+
+    registry = get_taxonomy_registry(db)
+    if not registry:
+        return []
+
+    cc = (country or "").upper()
+    stores = [k for k, v in STORES.items() if v.get("country") == cc and not v.get("disabled")]
+    prod_ids = [pid for pid, meta in registry.items() if meta.get("canasta_item")]
+    if not stores or not prod_ids:
+        return []
+
+    since = (datetime.now(timezone.utc) - timedelta(days=max(1, days))).strftime("%Y-%m-%d %H:%M:%S")
+    store_ph = ",".join("?" * len(stores))
+    prod_ph = ",".join("?" * len(prod_ids))
+    rows = db.execute(
+        f"""
+        SELECT ph.product_id, ph.store, ph.price, ph.recorded_at
+        FROM price_history ph
+        INNER JOIN price_snapshots ps
+          ON ps.product_id = ph.product_id AND ps.store = ph.store
+        WHERE ph.store IN ({store_ph})
+          AND ph.price > 0 AND ph.recorded_at >= ?
+          AND ps.canonical_product_id IN ({prod_ph})
+        """,
+        [*stores, since, *prod_ids],
+    ).fetchall()
+
+    series: dict[str, list[tuple[str, float]]] = {}
+    for row in rows:
+        key = f"{row['store']}|{row['product_id']}"
+        series.setdefault(key, []).append((row["recorded_at"], float(row["price"])))
+
+    deltas: list[float] = []
+    for pts in series.values():
+        if len(pts) < 2:
+            continue
+        pts.sort(key=lambda x: x[0])
+        first, last = pts[0][1], pts[-1][1]
+        if first > 0:
+            deltas.append((last - first) / first * 100)
+    return deltas
