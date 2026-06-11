@@ -1450,6 +1450,7 @@ def refresh_after_collection(countries: list[str] | None = None) -> dict[str, An
         "internal_written": 0,
         "external_written": 0,
         "enrichment_written": 0,
+        "phase2_written": 0,
     }
     for cc in countries:
         result = refresh_indicators(country=cc, line=None)
@@ -1457,6 +1458,7 @@ def refresh_after_collection(countries: list[str] | None = None) -> dict[str, An
         summary["internal_written"] += result["internal_written"]
         summary["external_written"] += result["external_written"]
         summary["enrichment_written"] += result.get("enrichment_written", 0)
+        summary["phase2_written"] += result.get("phase2_written", 0)
     return summary
 
 
@@ -1541,6 +1543,12 @@ def _scores_from_latest(latest: dict[str, dict[str, Any]]) -> dict[str, Any]:
     imf_gap = latest.get("imf_wb_cpi_gap", {}).get("value")
     unemployment = latest.get("macro_unemployment_rate", {}).get("value")
     imf_gdp = latest.get("imf_gdp_growth_yoy", {}).get("value")
+    commodity_pressure = latest.get("commodity_input_pressure", {}).get("value")
+    wage_basket = latest.get("real_wage_basket_ratio", {}).get("value")
+    ipp_food = latest.get("ipp_food_co", {}).get("value")
+    gtrends = latest.get("gtrends_search_momentum", {}).get("value")
+    bcrp_gap = latest.get("bcrp_shelf_gap", {}).get("value")
+    transmission_lag = latest.get("commodity_transmission_lag", {}).get("value")
 
     scores: dict[str, Any] = {}
 
@@ -1648,6 +1656,48 @@ def _scores_from_latest(latest: dict[str, dict[str, Any]]) -> dict[str, Any]:
             "score": round(max(0, min(100, 50 + imf_gdp * 5)), 1),
             "label": "expanding" if imf_gdp > 3 else "slow" if imf_gdp > 0 else "contracting",
             "input": {"imf_gdp_growth_yoy_pct": imf_gdp},
+        }
+
+    if commodity_pressure is not None:
+        scores["commodity_pressure"] = {
+            "score": round(min(100, max(0, 50 + commodity_pressure * 3)), 1),
+            "label": "elevated" if commodity_pressure > 5 else "normal" if commodity_pressure > 0 else "eased",
+            "input": {"commodity_input_pressure_pct": commodity_pressure},
+        }
+
+    if wage_basket is not None:
+        scores["wage_affordability"] = {
+            "score": round(min(100, max(0, wage_basket * 25)), 1),
+            "label": "stretched" if wage_basket < 1.5 else "adequate" if wage_basket < 2.5 else "comfortable",
+            "input": {"real_wage_basket_ratio": wage_basket},
+        }
+
+    if ipp_food is not None:
+        scores["producer_pressure"] = {
+            "score": round(min(100, max(0, 50 + ipp_food * 3)), 1),
+            "label": "elevated" if ipp_food > 8 else "normal" if ipp_food > 2 else "eased",
+            "input": {"ipp_food_co_pct": ipp_food},
+        }
+
+    if gtrends is not None:
+        scores["search_momentum"] = {
+            "score": round(min(gtrends * 50, 100), 1),
+            "label": "rising" if gtrends > 1.1 else "cooling" if gtrends < 0.9 else "stable",
+            "input": {"gtrends_search_momentum": gtrends},
+        }
+
+    if bcrp_gap is not None:
+        scores["monetary_shelf_gap"] = {
+            "score": round(max(0, 100 - abs(bcrp_gap) * 4), 1),
+            "label": "divergent" if abs(bcrp_gap) > 5 else "aligned",
+            "input": {"bcrp_shelf_gap_pp": bcrp_gap},
+        }
+
+    if transmission_lag is not None:
+        scores["commodity_transmission"] = {
+            "score": round(max(0, min(100, 50 - transmission_lag * 2)), 1),
+            "label": "building" if transmission_lag > 3 else "caught_up" if transmission_lag < -2 else "neutral",
+            "input": {"commodity_transmission_lag_pp": transmission_lag},
         }
 
     return scores
