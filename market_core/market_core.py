@@ -1196,7 +1196,6 @@ def ensure_db_initialized() -> None:
         ensure_auth_token_schema(db)
         ensure_demo_schema(db)
         ensure_intel_schema(db)
-        _migrate_price_snapshots_v7(db)
         db.commit()
         db.close()
     except Exception as e:

@@ -196,21 +196,10 @@ def _migrate_price_snapshots_pg(db: _DB) -> None:
         logger.warning("price_snapshots migration skipped: %s", e)
 
 
-def _migrate_price_snapshots_v7(db: _DB) -> None:
-    """Fase 7: confidence column + query indexes for /v1/prices."""
-    if market_core.USE_PG:
-        try:
-            db.execute(
-                "ALTER TABLE price_snapshots ADD COLUMN IF NOT EXISTS confidence TEXT NOT NULL DEFAULT 'ok'"
-            )
-        except Exception as e:
-            logger.warning("price_snapshots confidence column skipped: %s", e)
-    else:
-        try:
-            db.execute("ALTER TABLE price_snapshots ADD COLUMN confidence TEXT NOT NULL DEFAULT 'ok'")
-        except Exception:
-            pass
+_V7_ADVISORY_LOCK = 74829103  # one-at-a-time price_snapshots v7 migration across workers
 
+
+def _ensure_price_snapshots_v7_indexes(db: _DB) -> None:
     for idx_sql in [
         "CREATE INDEX IF NOT EXISTS idx_ps_store_line_queried ON price_snapshots(store, line, queried_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_ps_line_currency ON price_snapshots(line, currency)",
@@ -220,6 +209,41 @@ def _migrate_price_snapshots_v7(db: _DB) -> None:
             db.execute(idx_sql)
         except Exception as e:
             logger.warning("price_snapshots v7 index skipped: %s", e)
+
+
+def _migrate_price_snapshots_v7(db: _DB) -> None:
+    """Fase 7: confidence column + query indexes for /v1/prices."""
+    if price_snapshots_has_confidence(db):
+        _ensure_price_snapshots_v7_indexes(db)
+        return
+
+    if market_core.USE_PG:
+        got_lock = False
+        try:
+            row = db.execute("SELECT pg_try_advisory_lock(%s)", (_V7_ADVISORY_LOCK,)).fetchone()
+            got_lock = bool(row and list(row.values())[0])
+            if not got_lock:
+                logger.debug("price_snapshots v7 migration: deferred (another worker migrating)")
+                return
+            db.execute(
+                "ALTER TABLE price_snapshots ADD COLUMN IF NOT EXISTS confidence TEXT NOT NULL DEFAULT 'ok'"
+            )
+        except Exception as e:
+            logger.warning("price_snapshots confidence column skipped: %s", e)
+        finally:
+            if got_lock:
+                try:
+                    db.execute("SELECT pg_advisory_unlock(%s)", (_V7_ADVISORY_LOCK,))
+                except Exception:
+                    pass
+    else:
+        try:
+            db.execute("ALTER TABLE price_snapshots ADD COLUMN confidence TEXT NOT NULL DEFAULT 'ok'")
+        except Exception:
+            pass
+
+    if price_snapshots_has_confidence(db):
+        _ensure_price_snapshots_v7_indexes(db)
 
 
 def price_snapshots_has_confidence(db: _DB) -> bool:
