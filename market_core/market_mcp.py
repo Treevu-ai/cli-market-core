@@ -184,7 +184,9 @@ def _tool_handlers() -> dict:
         "market_basket": lambda a: api("POST", "/v1/basket/compare", {"items": a["items"], "stores": a.get("stores")}),
         "market_intel_brief": _intel_brief_api,
         "market_inflation": lambda a: api(
-            "GET", f"/v1/intel/inflation?country={a.get('country', '')}&line={a.get('line', '')}"
+            "GET",
+            f"/v1/intel/inflation?country={a.get('country', '')}&line={a.get('line', '')}"
+            f"&days={a.get('days', 7)}",
         ),
         "market_scores": lambda a: api("GET", f"/v1/intel/scores?country={a.get('country', '')}&line={a.get('line', '')}"),
         "market_intel_refresh": lambda a: api(
