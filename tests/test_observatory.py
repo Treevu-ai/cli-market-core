@@ -86,3 +86,19 @@ def test_noise_filter_skips_smoke():
         success=True,
     )
     assert result.get("skipped") is True
+
+
+def test_observatory_snapshot_streak(obs_db):
+    from datetime import date
+
+    from market_core.market_observatory import (
+        compute_daily_observatory_metrics,
+        observatory_snapshot_streak,
+    )
+
+    compute_daily_observatory_metrics(day=date.today())
+    streak = observatory_snapshot_streak(days=7)
+    assert streak["window_days"] == 7
+    assert streak["snapshots_found"] >= 1
+    assert streak["target"] == 7
+    assert "ok" in streak
