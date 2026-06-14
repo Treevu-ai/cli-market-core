@@ -25,8 +25,8 @@ from market_core import USE_PG, get_db
 
 logger = logging.getLogger("market").getChild("observatory")
 
-_NOISE_PREFIXES = ("smoke", "deploy-test", "shiptest", "test-", "pam-", "user-")
-_NOISE_USER_HEX = re.compile(r"^user-[0-9a-f]{8,}$", re.I)
+_NOISE_PREFIXES = ("smoke", "deploy-test", "shiptest", "test-", "pam-")
+_NOISE_USER_HEX = re.compile(r"^user-[0-9a-f]{8}$", re.I)  # exactly 8 hex = CI-generated test IDs
 _METADATA_ALLOWLIST = frozenset({"client", "mcp_version", "cli_version", "identity_confidence"})
 _SKIP_PATHS = frozenset({"/health", "/", "/docs", "/openapi.json", "/redoc", "/favicon.ico"})
 _SKIP_PREFIXES = ("/admin/", "/static/", "/dashboard/observatory")
