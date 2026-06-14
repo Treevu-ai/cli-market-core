@@ -1008,6 +1008,21 @@ def db_validate_api_key(key: str) -> dict | None:
     return dict(row) if row else None
 
 
+def db_activate_outbound_target(target_id: str, start_date: str, notes: str = "") -> None:
+    from .outbound_db import db_activate_outbound_target as _f
+    _f(target_id, start_date, notes)
+
+
+def db_deactivate_outbound_target(target_id: str) -> None:
+    from .outbound_db import db_deactivate_outbound_target as _f
+    _f(target_id)
+
+
+def db_get_outbound_activations() -> dict[str, str]:
+    from .outbound_db import db_get_outbound_activations as _f
+    return _f()
+
+
 def check_rate_limit_sqlite(ip: str, window_secs: int = 60, max_req: int = 10,
                             daily_max: int = 100) -> None:
     """Rate limiter. Persists across restarts. Updated to support tiered limits."""
@@ -1200,10 +1215,12 @@ def ensure_db_initialized() -> None:
         from .auth_tokens import ensure_auth_token_schema
         from .demo_tokens import ensure_demo_schema
         from .intel_jobs import ensure_intel_schema
+        from .outbound_db import ensure_outbound_schema
 
         ensure_auth_token_schema(db)
         ensure_demo_schema(db)
         ensure_intel_schema(db)
+        ensure_outbound_schema(db)
         db.commit()
         db.close()
     except Exception as e:
