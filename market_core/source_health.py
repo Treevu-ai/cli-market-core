@@ -10,19 +10,20 @@ from .market_core import get_default_stores, STORES
 logger = logging.getLogger(__name__)
 
 
-def _age_hours(timestamp_str: str | datetime | None) -> float | None:
-    """Parse a SQLite/Postgres timestamp and return hours since.
+def _age_hours(timestamp_str: str | datetime | None, now: datetime | None = None) -> float | None:
+    """Parse a SQLite/Postgres timestamp and return hours since `now` (defaults to UTC now).
 
     Accepts ISO strings, SQLite naive strings, or datetime objects from asyncpg/psycopg.
     Returns None if parsing fails. UTC is assumed for naive values.
     """
+    _now = now or datetime.now(timezone.utc)
     if timestamp_str is None:
         return None
     if isinstance(timestamp_str, datetime):
         dt = timestamp_str
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+        return (_now - dt).total_seconds() / 3600
     if not timestamp_str:
         return None
     try:
@@ -36,7 +37,7 @@ def _age_hours(timestamp_str: str | datetime | None) -> float | None:
         # Naive timestamps from SQLite are UTC by convention here.
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+        return (_now - dt).total_seconds() / 3600
     except Exception as e:
         logger.warning("Could not parse timestamp %r: %s", timestamp_str, e)
         return None
@@ -131,7 +132,7 @@ def build_sources_health(
             "last_success": row["last_success"],
             "last_error": row["last_error"],
             "last_seen": str(last_seen) if last_seen else None,
-            "fresh_24h": _fresh_24h(last_seen, _age_hours),
+            "fresh_24h": _fresh_24h(last_seen, lambda ts: _age_hours(ts, now=now)),
             "coverage_7d_pct": coverage_map.get(sid, 0.0),
         })
 
