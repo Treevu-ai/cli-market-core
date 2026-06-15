@@ -1581,8 +1581,11 @@ def _scores_from_latest(latest: dict[str, dict[str, Any]]) -> dict[str, Any]:
         }
 
     if gap is not None:
+        # Log-scale penalty so hyperinflationary economies (AR: gap≈160pp) get
+        # a non-zero score that's still visually distinct from null/no-data.
+        _align_score = round(max(1.0, 100 - math.log1p(abs(gap)) * 20), 1) if abs(gap) > 0 else 100.0
         scores["macro_alignment"] = {
-            "score": round(max(0, 100 - abs(gap) * 5), 1),
+            "score": _align_score,
             "label": "aligned" if abs(gap) < 5 else "divergent",
             "input": {"collector_vs_official_gap_pp": gap},
         }
@@ -1638,8 +1641,10 @@ def _scores_from_latest(latest: dict[str, dict[str, Any]]) -> dict[str, Any]:
         }
 
     if imf_gap is not None:
+        # Log-scale so large IMF/WB divergences (AR) produce non-zero, readable scores.
+        _valid_score = round(max(1.0, 100 - math.log1p(abs(imf_gap)) * 30), 1) if abs(imf_gap) > 0 else 100.0
         scores["macro_validation"] = {
-            "score": round(max(0, 100 - abs(imf_gap) * 8), 1),
+            "score": _valid_score,
             "label": "consistent" if abs(imf_gap) < 2 else "divergent",
             "input": {"imf_wb_cpi_gap_pp": imf_gap},
         }

@@ -95,4 +95,31 @@ STORES = {
     # ── WOOCOMMERCE (Store API public read) ──
     "xray_pe": {"name":"Xray Chipped PE","base":"https://tienda.xraychipped.com.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"automotriz","platform":"woocommerce"},
     "nunaorganica_pe": {"name":"Nuna Orgánica","base":"https://nunaorganica.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"supermercados","platform":"woocommerce"},
+
+    # ── URUGUAY (UY) — expansión de cobertura ──
+    # Tienda Inglesa: retailer líder en UY, VTEX confirmado
+    "tienda_inglesa_uy": {"name":"Tienda Inglesa","base":"https://www.tiendainglesa.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex"},
+    # Disco y Devoto: Grupo Tata UY, plataforma VTEX
+    "disco_uy": {"name":"Disco UY","base":"https://www.disco.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex"},
+    "devoto_uy": {"name":"Devoto","base":"https://www.devoto.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex"},
+    # Geant: hipermercado en UY — pendiente verificación endpoint VTEX
+    "geant_uy": {"name":"Geant UY","base":"https://www.geant.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
+
+    # ── ECUADOR (EC) — expansión de cobertura ──
+    # Ecuador usa USD como moneda oficial desde 2000
+    # TIA: cadena de tiendas de descuento — plataforma por verificar
+    "tia_ec": {"name":"TIA Ecuador","base":"https://www.tia.com.ec","country":"EC","currency":"USD","emoji":"🇪🇨","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
+    # Fybeca: farmacia líder en EC — plataforma por verificar
+    "fybeca_ec": {"name":"Fybeca","base":"https://www.fybeca.com","country":"EC","currency":"USD","emoji":"🇪🇨","line":"farmacias","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
+    # Coral Hipermercados — plataforma por verificar
+    "coral_ec": {"name":"Coral Hipermercados","base":"https://www.coral.com.ec","country":"EC","currency":"USD","emoji":"🇪🇨","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
+
+    # ── BOLIVIA (BO) — expansión de cobertura ──
+    # Moneda: BOB (boliviano)
+    # Ketal: supermercado líder en Bolivia — e-commerce en expansión
+    "ketal_bo": {"name":"Ketal","base":"https://www.ketal.com.bo","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
+    # Hipermaxi: hipermercado principal Bolivia
+    "hipermaxi_bo": {"name":"Hipermaxi","base":"https://www.hipermaxi.com.bo","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
+    # Farmacorp: cadena de farmacias líder BO
+    "farmacorp_bo": {"name":"Farmacorp","base":"https://www.farmacorp.com","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"farmacias","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
 }
