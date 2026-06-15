@@ -523,6 +523,17 @@ def init_db_pg(db: _DB) -> None:
     """)
     db.execute("CREATE INDEX IF NOT EXISTS idx_alert_events_alert ON alert_events(alert_id, fired_at DESC)")
 
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS referral_codes (
+            ref_code TEXT PRIMARY KEY,
+            username TEXT NOT NULL DEFAULT '',
+            install_count INTEGER NOT NULL DEFAULT 0,
+            activated_count INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    db.execute("CREATE INDEX IF NOT EXISTS idx_referral_codes_username ON referral_codes(username)")
+
     from .market_billing import _migrate_payment_schema
     _migrate_payment_schema(db)
     market_core._migrate_store_credentials(db)
@@ -747,4 +758,13 @@ _SQLITE_DDL = """\
             fired_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_alert_events_alert ON alert_events(alert_id, fired_at DESC);
+
+        CREATE TABLE IF NOT EXISTS referral_codes (
+            ref_code TEXT PRIMARY KEY,
+            username TEXT NOT NULL DEFAULT '',
+            install_count INTEGER NOT NULL DEFAULT 0,
+            activated_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_referral_codes_username ON referral_codes(username);
 """
