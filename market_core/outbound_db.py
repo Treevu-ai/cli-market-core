@@ -70,4 +70,4 @@ def db_get_outbound_activations() -> dict[str, str]:
     db = market_core.get_db()
     rows = db.execute("SELECT target_id, start_date FROM outbound_activations").fetchall()
     db.close()
-    return {row[0]: row[1] for row in rows}
+    return {str(row["target_id"]): str(row["start_date"]) for row in rows}
