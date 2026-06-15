@@ -97,29 +97,30 @@ STORES = {
     "nunaorganica_pe": {"name":"Nuna Orgánica","base":"https://nunaorganica.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"supermercados","platform":"woocommerce"},
 
     # ── URUGUAY (UY) — expansión de cobertura ──
-    # Tienda Inglesa: retailer líder en UY, VTEX confirmado
-    "tienda_inglesa_uy": {"name":"Tienda Inglesa","base":"https://www.tiendainglesa.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex"},
-    # Disco y Devoto: Grupo Tata UY, plataforma VTEX
-    "disco_uy": {"name":"Disco UY","base":"https://www.disco.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex"},
-    "devoto_uy": {"name":"Devoto","base":"https://www.devoto.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex"},
-    # Geant: hipermercado en UY — pendiente verificación endpoint VTEX
-    "geant_uy": {"name":"Geant UY","base":"https://www.geant.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
+    # Tienda Inglesa: retailer líder en UY. VTEX catalog API responde 200+HTML (sin auth pública).
+    # Necesita app-key/app-token o investigar endpoint alternativo antes de activar.
+    "tienda_inglesa_uy": {"name":"Tienda Inglesa","base":"https://www.tiendainglesa.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"VTEX catalog API returns HTML (auth required or private endpoint)"},
+    # Disco y Devoto: Grupo Tata UY. Devuelven 404 en /api/ y /io/api/ — plataforma o dominio por confirmar.
+    "disco_uy": {"name":"Disco UY","base":"https://www.disco.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform or domain unconfirmed"},
+    "devoto_uy": {"name":"Devoto","base":"https://www.devoto.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform or domain unconfirmed"},
+    # Geant: hipermercado en UY — 404 en paths VTEX
+    "geant_uy": {"name":"Geant UY","base":"https://www.geant.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform unconfirmed"},
 
     # ── ECUADOR (EC) — expansión de cobertura ──
     # Ecuador usa USD como moneda oficial desde 2000
-    # TIA: cadena de tiendas de descuento — plataforma por verificar
-    "tia_ec": {"name":"TIA Ecuador","base":"https://www.tia.com.ec","country":"EC","currency":"USD","emoji":"🇪🇨","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
-    # Fybeca: farmacia líder en EC — plataforma por verificar
-    "fybeca_ec": {"name":"Fybeca","base":"https://www.fybeca.com","country":"EC","currency":"USD","emoji":"🇪🇨","line":"farmacias","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
-    # Coral Hipermercados — plataforma por verificar
-    "coral_ec": {"name":"Coral Hipermercados","base":"https://www.coral.com.ec","country":"EC","currency":"USD","emoji":"🇪🇨","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
+    # TIA: responde 200+HTML con New Relic — usa plataforma propia (no VTEX)
+    "tia_ec": {"name":"TIA Ecuador","base":"https://www.tia.com.ec","country":"EC","currency":"USD","emoji":"🇪🇨","line":"supermercados","platform":"unknown","disabled":True,"disabled_reason":"custom platform (not VTEX) — HTML response with New Relic JS"},
+    # Fybeca: farmacia líder en EC — 404 en paths VTEX, plataforma por confirmar
+    "fybeca_ec": {"name":"Fybeca","base":"https://www.fybeca.com","country":"EC","currency":"USD","emoji":"🇪🇨","line":"farmacias","platform":"unknown","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform unconfirmed"},
+    # Coral Hipermercados — dominio correcto por confirmar (coral.com.ec SSL mismatch)
+    "coral_ec": {"name":"Coral Hipermercados","base":"https://www.coral.com.ec","country":"EC","currency":"USD","emoji":"🇪🇨","line":"supermercados","platform":"unknown","disabled":True,"disabled_reason":"SSL hostname mismatch — correct domain unknown"},
 
     # ── BOLIVIA (BO) — expansión de cobertura ──
     # Moneda: BOB (boliviano)
-    # Ketal: supermercado líder en Bolivia — e-commerce en expansión
-    "ketal_bo": {"name":"Ketal","base":"https://www.ketal.com.bo","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
-    # Hipermaxi: hipermercado principal Bolivia
-    "hipermaxi_bo": {"name":"Hipermaxi","base":"https://www.hipermaxi.com.bo","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
-    # Farmacorp: cadena de farmacias líder BO
-    "farmacorp_bo": {"name":"Farmacorp","base":"https://www.farmacorp.com","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"farmacias","platform":"vtex","disabled":True,"disabled_reason":"pending VTEX endpoint verification"},
+    # Ketal: ketal.com.bo no resuelve DNS — dominio de e-commerce por confirmar
+    "ketal_bo": {"name":"Ketal","base":"https://www.ketal.com.bo","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"supermercados","platform":"unknown","disabled":True,"disabled_reason":"DNS failure — e-commerce domain unconfirmed"},
+    # Hipermaxi: hipermaxi.com resuelve pero 404 en VTEX — plataforma por confirmar
+    "hipermaxi_bo": {"name":"Hipermaxi","base":"https://www.hipermaxi.com","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"supermercados","platform":"unknown","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform unconfirmed"},
+    # Farmacorp: farmacorp.com resuelve pero 404 en VTEX — plataforma por confirmar
+    "farmacorp_bo": {"name":"Farmacorp","base":"https://www.farmacorp.com","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"farmacias","platform":"unknown","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform unconfirmed"},
 }
