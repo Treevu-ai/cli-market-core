@@ -1568,8 +1568,8 @@ def _scores_from_latest(latest: dict[str, dict[str, Any]]) -> dict[str, Any]:
 
     if basket is not None:
         scores["basket_stress"] = {
-            "score": round(basket, 1),
-            "label": "elevated" if basket > 105 else "normal" if basket > 95 else "eased",
+            "score": round(basket, 2),
+            "label": "elevated" if basket > 1.05 else "normal" if basket > 0.95 else "eased",
             "input": {"basket_stress_index": basket},
         }
 
