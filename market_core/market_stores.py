@@ -1,4 +1,4 @@
-# 68 verified retailers — 44 VTEX + 15 Shopify + 7 Magento + 2 WooCommerce
+# 71 verified retailers — 47 VTEX + 15 Shopify + 7 Magento + 2 WooCommerce
 STORES = {
 
     # ── SUPERMERCADOS ──
@@ -44,6 +44,9 @@ STORES = {
     # ── HOGAR ──
     "easy_ar": {"name":"Easy AR","base":"https://www.easy.com.ar","country":"AR","currency":"ARS","emoji":"🇦🇷","line":"hogar","platform":"vtex"},
     "promart": {"name":"Promart","base":"https://www.promart.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"hogar","platform":"vtex"},
+    "sodimac_cl": {"name":"Sodimac CL","base":"https://www.sodimac.cl","country":"CL","currency":"CLP","emoji":"🇨🇱","line":"hogar","platform":"vtex"},
+    "sodimac_pe": {"name":"Sodimac PE","base":"https://www.sodimac.com.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"hogar","platform":"vtex"},
+    "homecenter_co": {"name":"Homecenter CO","base":"https://www.homecenter.com.co","country":"CO","currency":"COP","emoji":"🇨🇴","line":"hogar","platform":"vtex"},
 
     # ── DEPARTAMENTALES ──
     "coppel_ar": {"name":"Coppel AR","base":"https://www.coppel.com.ar","country":"AR","currency":"ARS","emoji":"🇦🇷","line":"departamentales","platform":"vtex"},
