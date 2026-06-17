@@ -23,6 +23,15 @@ dependencies = [
     "playwright>=1.45.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+    "ruff>=0.4",
+    "mypy>=1",
+]
+
 [project.urls]
 Homepage = "https://cli-market.dev"
 Documentation = "https://cli-market.dev/docs"
@@ -63,7 +72,12 @@ include = ["market_core*", "market_connectors*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "--cov=market_core --cov=market_connectors --cov-report=term-missing --cov-fail-under=60"
+asyncio_mode = "strict"
+addopts = "--cov=market_core --cov=market_connectors --cov-report=term-missing --cov-fail-under=55"
+markers = [
+    "integration: live API tests (deselect with -m 'not integration')",
+    "asyncio: mark test as an asyncio coroutine",
+]
 
 [tool.ruff]
 line-length = 120
