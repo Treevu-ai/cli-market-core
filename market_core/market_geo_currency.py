@@ -15,7 +15,8 @@ LINES = {
     "hogar":           {"name": "Hogar y Construcción",   "emoji": "🏠", "description": "Mejoramiento del hogar, muebles, ferretería"},
     "departamentales": {"name": "Tiendas Departamentales", "emoji": "🏬", "description": "Ropa, hogar, electrónicos y más"},
     "moda":            {"name": "Moda y Vestimenta",      "emoji": "👕", "description": "Ropa, calzado y accesorios"},
-    "automotriz":      {"name": "Automotriz",           "emoji": "🚗", "description": "Repuestos, accesorios y servicios automotrices"},
+    "automotriz":      {"name": "Automotriz",             "emoji": "🚗", "description": "Repuestos, accesorios y servicios automotrices"},
+    "industrial":      {"name": "Industrial y Mayorista",  "emoji": "🏭", "description": "Insumos, herramientas y materiales industriales"},
 }
 
 
