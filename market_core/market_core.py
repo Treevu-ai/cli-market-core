@@ -189,6 +189,32 @@ def store_color(store: str) -> str:
 def store_emoji(store: str) -> str:
     return STORES.get(store, {}).get("emoji", "📦")
 
+
+def normalize_store_id(raw: str) -> str:
+    """Normalize store identifiers from collector/API into canonical STORES keys.
+
+    Handles common typos and variants observed in production telemetry:
+      - ``plaza vea`` -> ``plazavea``
+      - ``Plaza Vea`` -> ``plazavea``
+      - ``Wong`` -> ``wong``
+      - extra whitespace / case folding
+
+    Returns the canonical key if found; returns the lowercased, space-stripped
+    input as a fallback so callers always have a consistent string.
+    """
+    key = (raw or "").strip().lower().replace(" ", "")
+    # Direct match (already canonical or space-normalized)
+    if key in STORES:
+        return key
+    # Known aliases / collector artifacts
+    _aliases: dict[str, str] = {
+        "plaza vea": "plazavea",
+    }
+    clean = (raw or "").strip().lower()
+    if clean in _aliases:
+        return _aliases[clean]
+    return key
+
 # ── Session / auth helpers ────────────────────────────────────────────────────
 
 _AUTH_PUBLIC_PATHS = {"/", "/auth/login", "/auth/register", "/auth/refresh"}

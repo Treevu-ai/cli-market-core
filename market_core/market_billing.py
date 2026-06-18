@@ -64,11 +64,63 @@ def price_label_for_plan(plan: str) -> str:
     return f"${price_usd_for_plan(p):.0f}/mo"
 
 
-def checkout_upgrade_detail() -> str:
+def checkout_upgrade_detail(username: str = "") -> str:
+    """Human-readable message explaining why checkout is unavailable.
+
+    When ``username`` is provided, includes the user's current tier so the
+    message is diagnostic rather than generic (issue #17).
+    """
+    if username:
+        try:
+            sub = db_get_subscription(username)
+            tier = sub.get("tier", "free")
+            tier_label = tier.replace("_", " ").title()
+            if tier in ("pro", "pro_founding", "pro_annual"):
+                return "Checkout is enabled on your account. If you see an error, contact soporte@cli-market.dev."
+            if tier == "starter":
+                return (
+                    f"Checkout requires CLI Market Pro ({price_label_for_plan('pro')}). "
+                    f"You are on {tier_label} ({price_label_for_plan('starter')}). "
+                    "Run: market upgrade pro"
+                )
+            # free tier
+            return (
+                f"Checkout requires CLI Market Pro ({price_label_for_plan('pro')}). "
+                f"You are on Free tier. Upgrade: market upgrade pro"
+            )
+        except Exception:
+            pass
     return (
         f"Checkout requires CLI Market Pro ({price_label_for_plan('pro')}). "
         "Run: market upgrade"
     )
+
+
+def checkout_diagnostic(username: str) -> dict:
+    """Return structured diagnostic for debugging ghost checkout attempts.
+
+    Tells a support operator exactly why a checkout attempt failed or
+    would fail for a given user.
+    """
+    try:
+        sub = db_get_subscription(username)
+    except Exception:
+        return {"username": username, "error": "could not read subscription"}
+
+    tier = sub.get("tier", "free")
+    tier_cfg = TIERS.get(tier, TIERS["free"])
+    legacy = os.getenv("MARKET_LEGACY_CHECKOUT", "").lower() in ("1", "true", "yes")
+
+    return {
+        "username": username,
+        "tier": tier,
+        "tier_label": tier.replace("_", " ").title(),
+        "checkout_enabled": bool(tier_cfg.get("checkout")),
+        "legacy_bypass": legacy,
+        "can_checkout": user_can_checkout(username),
+        "upgrade_to": "pro" if tier != "pro" else None,
+        "upgrade_price": price_label_for_plan("pro") if tier != "pro" else None,
+    }
 
 TIERS = {
     "free": {
