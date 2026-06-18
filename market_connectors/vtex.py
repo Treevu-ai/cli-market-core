@@ -14,7 +14,7 @@ from collections import defaultdict
 from typing import Optional
 
 import httpx
-from .base import BaseConnector, parse_price, clean_name
+from .base import BaseConnector, parse_price, clean_name, sane_list_price
 
 # Optional Playwright import for fallback mechanism
 try:
@@ -382,7 +382,7 @@ class VtexConnector(BaseConnector):
         seller = sellers[0] if sellers else {}
         offer = seller.get("commertialOffer", {})
         price = parse_price(offer.get("Price"))
-        list_price = parse_price(offer.get("ListPrice"))
+        list_price = sane_list_price(price, parse_price(offer.get("ListPrice")))
         discount = round((1 - price / list_price) * 100) if list_price > price > 0 else None
         return {
             "id": raw.get("productReference", raw.get("productId", "")),
