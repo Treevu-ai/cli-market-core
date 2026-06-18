@@ -85,12 +85,17 @@ WIDE_LINES = frozenset({"supermercados", "farmacias", "electro", "hogar", "depar
 _SUBCATEGORY_KEYWORDS: dict[str, list[tuple[str, str]]] = {
     "supermercados": [
         ("leche en polvo", "leche"), ("sin lactosa", "leche"), ("leche", "leche"),
-        ("arroz", "arroz"), ("aceite", "aceite"), ("azucar", "azucar"), ("açúcar", "azucar"),
+        ("arroz", "arroz"),
+        # canned fish (often packed "en aceite vegetal") must bucket as conservas,
+        # not aceite — checked before "aceite" so the oil keyword can't steal them.
+        ("atun", "conservas"), ("atún", "conservas"), ("jurel", "conservas"),
+        ("bonito", "conservas"), ("caballa", "conservas"), ("sardina", "conservas"),
+        ("anchoveta", "conservas"), ("conserva", "conservas"),
+        ("aceite", "aceite"), ("azucar", "azucar"), ("açúcar", "azucar"),
         ("huevos", "huevos"), ("huevo", "huevos"), ("pan", "pan"), ("pão", "pan"),
         ("cafe", "cafe"), ("café", "cafe"), ("pollo", "pollo"), ("frango", "pollo"),
         ("queso", "queso"), ("queijo", "queso"), ("jabon", "jabon"), ("harina", "harina"),
         ("yogurt", "yogurt"), ("yogur", "yogurt"), ("pasta", "pasta"), ("fideos", "pasta"),
-        ("atun", "conservas"), ("atún", "conservas"), ("conserva", "conservas"),
         ("agua", "bebidas"), ("gaseosa", "bebidas"), ("cerveza", "bebidas"), ("cerveja", "bebidas"),
         ("milk", "leche"), ("rice", "arroz"), ("bread", "pan"), ("eggs", "huevos"),
         ("oil", "aceite"), ("sugar", "azucar"), ("coffee", "cafe"), ("chicken", "pollo"),

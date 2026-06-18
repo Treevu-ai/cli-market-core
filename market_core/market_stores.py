@@ -1,4 +1,4 @@
-# 68 verified retailers — 44 VTEX + 15 Shopify + 7 Magento + 2 WooCommerce
+# 71 verified retailers — 47 VTEX + 15 Shopify + 7 Magento + 2 WooCommerce
 STORES = {
 
     # ── SUPERMERCADOS ──
@@ -44,6 +44,9 @@ STORES = {
     # ── HOGAR ──
     "easy_ar": {"name":"Easy AR","base":"https://www.easy.com.ar","country":"AR","currency":"ARS","emoji":"🇦🇷","line":"hogar","platform":"vtex"},
     "promart": {"name":"Promart","base":"https://www.promart.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"hogar","platform":"vtex"},
+    "sodimac_cl": {"name":"Sodimac CL","base":"https://www.sodimac.cl","country":"CL","currency":"CLP","emoji":"🇨🇱","line":"hogar","platform":"vtex"},
+    "sodimac_pe": {"name":"Sodimac PE","base":"https://www.sodimac.com.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"hogar","platform":"vtex"},
+    "homecenter_co": {"name":"Homecenter CO","base":"https://www.homecenter.com.co","country":"CO","currency":"COP","emoji":"🇨🇴","line":"hogar","platform":"vtex"},
 
     # ── DEPARTAMENTALES ──
     "coppel_ar": {"name":"Coppel AR","base":"https://www.coppel.com.ar","country":"AR","currency":"ARS","emoji":"🇦🇷","line":"departamentales","platform":"vtex"},
@@ -95,4 +98,32 @@ STORES = {
     # ── WOOCOMMERCE (Store API public read) ──
     "xray_pe": {"name":"Xray Chipped PE","base":"https://tienda.xraychipped.com.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"automotriz","platform":"woocommerce"},
     "nunaorganica_pe": {"name":"Nuna Orgánica","base":"https://nunaorganica.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"supermercados","platform":"woocommerce"},
+
+    # ── URUGUAY (UY) — expansión de cobertura ──
+    # Tienda Inglesa: retailer líder en UY. VTEX catalog API responde 200+HTML (sin auth pública).
+    # Necesita app-key/app-token o investigar endpoint alternativo antes de activar.
+    "tienda_inglesa_uy": {"name":"Tienda Inglesa","base":"https://www.tiendainglesa.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"VTEX catalog API returns HTML (auth required or private endpoint)"},
+    # Disco y Devoto: Grupo Tata UY. Devuelven 404 en /api/ y /io/api/ — plataforma o dominio por confirmar.
+    "disco_uy": {"name":"Disco UY","base":"https://www.disco.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform or domain unconfirmed"},
+    "devoto_uy": {"name":"Devoto","base":"https://www.devoto.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform or domain unconfirmed"},
+    # Geant: hipermercado en UY — 404 en paths VTEX
+    "geant_uy": {"name":"Geant UY","base":"https://www.geant.com.uy","country":"UY","currency":"UYU","emoji":"🇺🇾","line":"supermercados","platform":"vtex","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform unconfirmed"},
+
+    # ── ECUADOR (EC) — expansión de cobertura ──
+    # Ecuador usa USD como moneda oficial desde 2000
+    # TIA: responde 200+HTML con New Relic — usa plataforma propia (no VTEX)
+    "tia_ec": {"name":"TIA Ecuador","base":"https://www.tia.com.ec","country":"EC","currency":"USD","emoji":"🇪🇨","line":"supermercados","platform":"unknown","disabled":True,"disabled_reason":"custom platform (not VTEX) — HTML response with New Relic JS"},
+    # Fybeca: farmacia líder en EC — 404 en paths VTEX, plataforma por confirmar
+    "fybeca_ec": {"name":"Fybeca","base":"https://www.fybeca.com","country":"EC","currency":"USD","emoji":"🇪🇨","line":"farmacias","platform":"unknown","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform unconfirmed"},
+    # Coral Hipermercados — dominio correcto por confirmar (coral.com.ec SSL mismatch)
+    "coral_ec": {"name":"Coral Hipermercados","base":"https://www.coral.com.ec","country":"EC","currency":"USD","emoji":"🇪🇨","line":"supermercados","platform":"unknown","disabled":True,"disabled_reason":"SSL hostname mismatch — correct domain unknown"},
+
+    # ── BOLIVIA (BO) — expansión de cobertura ──
+    # Moneda: BOB (boliviano)
+    # Ketal: ketal.com.bo no resuelve DNS — dominio de e-commerce por confirmar
+    "ketal_bo": {"name":"Ketal","base":"https://www.ketal.com.bo","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"supermercados","platform":"unknown","disabled":True,"disabled_reason":"DNS failure — e-commerce domain unconfirmed"},
+    # Hipermaxi: hipermaxi.com resuelve pero 404 en VTEX — plataforma por confirmar
+    "hipermaxi_bo": {"name":"Hipermaxi","base":"https://www.hipermaxi.com","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"supermercados","platform":"unknown","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform unconfirmed"},
+    # Farmacorp: farmacorp.com resuelve pero 404 en VTEX — plataforma por confirmar
+    "farmacorp_bo": {"name":"Farmacorp","base":"https://www.farmacorp.com","country":"BO","currency":"BOB","emoji":"🇧🇴","line":"farmacias","platform":"unknown","disabled":True,"disabled_reason":"404 on VTEX catalog paths — platform unconfirmed"},
 }

@@ -74,57 +74,18 @@ DB_FILE = DATA_DIR / "market.db"
 # ── Stores (VTEX retailers) ───────────────────────────────────────────────────
 
 from .market_stores import STORES
-
-LINES = {
-    "supermercados":   {"name": "Supermercados",          "emoji": "🛒", "description": "Alimentos, bebidas y consumo diario"},
-    "farmacias":       {"name": "Farmacias y Salud",      "emoji": "💊", "description": "Medicamentos, bienestar y cuidado personal"},
-    "electro":         {"name": "Electro y Tecnología",   "emoji": "📱", "description": "Electrónicos, electrodomésticos y gadgets"},
-    "hogar":           {"name": "Hogar y Construcción",   "emoji": "🏠", "description": "Mejoramiento del hogar, muebles, ferretería"},
-    "departamentales": {"name": "Tiendas Departamentales", "emoji": "🏬", "description": "Ropa, hogar, electrónicos y más"},
-    "moda":            {"name": "Moda y Vestimenta",      "emoji": "👕", "description": "Ropa, calzado y accesorios"},
-    "automotriz":      {"name": "Automotriz",           "emoji": "🚗", "description": "Repuestos, accesorios y servicios automotrices"},
-}
-
-
-def canonical_line_name(line_id: str | None) -> str:
-    """Display name for a business line — ignores legacy line_name in snapshots."""
-    key = (line_id or "").strip()
-    if not key:
-        return "Sin categoría"
-    meta = LINES.get(key)
-    if meta:
-        return str(meta.get("name") or key)
-    return key.replace("_", " ").title()
-
-
-COUNTRIES: dict[str, dict] = {}
-for _sk, _sv in STORES.items():
-    _cc = _sv["country"]
-    if _cc not in COUNTRIES:
-        COUNTRIES[_cc] = {"name": _cc, "stores": []}
-    COUNTRIES[_cc]["stores"].append(_sk)
-# Human-readable country names
-_country_names: dict[str, str] = {
-    "PE": "Perú", "AR": "Argentina", "BR": "Brasil", "MX": "México", "CO": "Colombia",
-    "CL": "Chile", "ES": "España", "FR": "Francia", "IT": "Italia", "DE": "Alemania",
-    "GB": "Reino Unido", "PT": "Portugal", "NL": "Países Bajos", "BE": "Bélgica",
-    "PL": "Polonia", "SE": "Suecia", "DK": "Dinamarca", "FI": "Finlandia",
-    "NO": "Noruega", "AT": "Austria", "CH": "Suiza", "IE": "Irlanda",
-    "GR": "Grecia", "CZ": "República Checa", "RO": "Rumania", "HU": "Hungría",
-    "SK": "Eslovaquia", "BG": "Bulgaria", "HR": "Croacia", "SI": "Eslovenia",
-    "LU": "Luxemburgo", "EE": "Estonia", "LV": "Letonia", "LT": "Lituania",
-    "UY": "Uruguay", "EC": "Ecuador", "BO": "Bolivia", "PY": "Paraguay",
-    "VE": "Venezuela", "CR": "Costa Rica", "GT": "Guatemala", "SV": "El Salvador",
-    "PA": "Panamá", "DO": "República Dominicana", "HN": "Honduras", "NI": "Nicaragua",
-    "US": "Estados Unidos", "CA": "Canadá", "AU": "Australia", "NZ": "Nueva Zelanda",
-    "JP": "Japón", "KR": "Corea del Sur", "CN": "China", "TW": "Taiwán",
-    "HK": "Hong Kong", "SG": "Singapur", "IN": "India", "MY": "Malasia",
-    "TH": "Tailandia", "ID": "Indonesia", "PH": "Filipinas", "VN": "Vietnam",
-    "TR": "Turquía", "RU": "Rusia", "AE": "Emiratos Árabes Unidos",
-    "ZA": "Sudáfrica", "NG": "Nigeria",
-}
-for _cc in COUNTRIES:
-    COUNTRIES[_cc]["name"] = _country_names.get(_cc, _cc)
+from .market_geo_currency import (  # noqa: F401 - re-exported for market_core consumers
+    COUNTRIES,
+    CURRENCY_SYMBOLS,
+    FX_PEN_PER_UNIT,
+    LINES,
+    canonical_line_name,
+    convert_currency,
+    fmt_price,
+    price_to_usd,
+    store_color,
+    store_emoji,
+)
 
 from .store_credentials import get_default_stores, resolve_store_config  # noqa: F401  (re-exported)
 PAGE_SIZE = 20
@@ -214,7 +175,7 @@ def normalize_store_id(raw: str) -> str:
     if clean in _aliases:
         return _aliases[clean]
     return key
-
+origin/main
 # ── Session / auth helpers ────────────────────────────────────────────────────
 
 _AUTH_PUBLIC_PATHS = {"/", "/auth/login", "/auth/register", "/auth/refresh"}
@@ -1034,6 +995,21 @@ def db_validate_api_key(key: str) -> dict | None:
     return dict(row) if row else None
 
 
+def db_activate_outbound_target(target_id: str, start_date: str, notes: str = "") -> None:
+    from .outbound_db import db_activate_outbound_target as _f
+    _f(target_id, start_date, notes)
+
+
+def db_deactivate_outbound_target(target_id: str) -> None:
+    from .outbound_db import db_deactivate_outbound_target as _f
+    _f(target_id)
+
+
+def db_get_outbound_activations() -> dict[str, str]:
+    from .outbound_db import db_get_outbound_activations as _f
+    return _f()
+
+
 def check_rate_limit_sqlite(ip: str, window_secs: int = 60, max_req: int = 10,
                             daily_max: int = 100) -> None:
     """Rate limiter. Persists across restarts. Updated to support tiered limits."""
@@ -1226,10 +1202,12 @@ def ensure_db_initialized() -> None:
         from .auth_tokens import ensure_auth_token_schema
         from .demo_tokens import ensure_demo_schema
         from .intel_jobs import ensure_intel_schema
+        from .outbound_db import ensure_outbound_schema
 
         ensure_auth_token_schema(db)
         ensure_demo_schema(db)
         ensure_intel_schema(db)
+        ensure_outbound_schema(db)
         db.commit()
         db.close()
     except Exception as e:

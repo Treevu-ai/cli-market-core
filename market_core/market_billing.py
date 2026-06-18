@@ -308,15 +308,36 @@ def _migrate_payment_schema(db) -> None:
     )
 
 
+def _is_expired(expires_at) -> bool:
+    """True if expires_at (str or datetime, any backend) is in the past."""
+    if not expires_at:
+        return False
+    try:
+        s = str(expires_at).replace("Z", "+00:00")
+        if " " in s and "T" not in s:
+            s = s.replace(" ", "T", 1)
+        dt = datetime.fromisoformat(s)
+        if not dt.tzinfo:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt < datetime.now(timezone.utc)
+    except ValueError:
+        return False
+
+
 def db_get_subscription(username: str) -> dict:
-    """Get user subscription. Falls back to free tier defaults."""
+    """Get user subscription. Falls back to free tier defaults.
+
+    A subscription whose expires_at has passed (e.g. a referral-granted
+    free Pro month) is treated as expired back to free, without needing a
+    separate cron to downgrade the row.
+    """
     db = market_core.get_db()
     row = db.execute(
-        "SELECT tier, req_limit_day, req_limit_min FROM subscriptions WHERE username=?",
+        "SELECT tier, req_limit_day, req_limit_min, expires_at FROM subscriptions WHERE username=?",
         (username,),
     ).fetchone()
     db.close()
-    if row:
+    if row and not _is_expired(row["expires_at"]):
         base = dict(row)
     else:
         base = {
@@ -341,22 +362,35 @@ def db_set_subscription(
     expires_days: int | None = None,
     paypal_subscription_id: str | None = None,
 ) -> dict:
+    """Set a user's subscription tier.
+
+    `expires_days` set to an int makes this grant temporary (e.g. a
+    referral-earned free Pro month); omit it (None) for a permanent grant
+    — every call explicitly clears any prior expiry so a permanent grant
+    (paid Pro, lifetime referral reward, etc.) never inherits a stale
+    expires_at from an earlier temporary one.
+    """
     db = market_core.get_db()
     t = TIERS.get(tier, TIERS["free"])
     day = req_day if req_day is not None else t["req_day"]
     mn = req_min if req_min is not None else t["req_min"]
     pp_sub = paypal_subscription_id or ""
+    expires_at = (
+        (datetime.now(timezone.utc) + timedelta(days=expires_days)).isoformat()
+        if expires_days is not None
+        else None
+    )
     db.execute(
-        "INSERT INTO subscriptions (username, tier, req_limit_day, req_limit_min, paypal_subscription_id) "
-        "VALUES (?,?,?,?,?) "
-        "ON CONFLICT(username) DO UPDATE SET tier=?, req_limit_day=?, req_limit_min=?, "
+        "INSERT INTO subscriptions (username, tier, req_limit_day, req_limit_min, expires_at, paypal_subscription_id) "
+        "VALUES (?,?,?,?,?,?) "
+        "ON CONFLICT(username) DO UPDATE SET tier=?, req_limit_day=?, req_limit_min=?, expires_at=?, "
         "paypal_subscription_id=CASE WHEN excluded.paypal_subscription_id != '' "
         "THEN excluded.paypal_subscription_id ELSE subscriptions.paypal_subscription_id END",
-        (username, tier, day, mn, pp_sub, tier, day, mn),
+        (username, tier, day, mn, expires_at, pp_sub, tier, day, mn, expires_at),
     )
     db.commit()
     db.close()
-    return {"username": username, "tier": tier, "req_limit_day": day, "req_limit_min": mn}
+    return {"username": username, "tier": tier, "req_limit_day": day, "req_limit_min": mn, "expires_at": expires_at}
 
 
 def db_claim_webhook_event(event_key: str, source: str = "") -> bool:
@@ -538,6 +572,77 @@ def validate_founding_available(username: str, promo_code: str = "") -> tuple[bo
 def founding_seats_remaining() -> int:
     used = db_count_promo_redemptions(FOUNDING_PROMO_CODE)
     return max(0, FOUNDING_SEAT_LIMIT - used)
+
+
+# ── Referral rewards (market share — docs/market-share-spec.md) ───────────────
+#
+# Per-activation: +500 req/day for the referrer, while still on the free
+# tier. Tier thresholds grant Pro (temporarily at 3, permanently at 10).
+# 25+ is Enterprise preview + swag — not gradable automatically (physical
+# swag), so it's only recorded as a promo redemption for manual ops
+# fulfillment rather than applied as a tier change.
+REFERRAL_BONUS_PER_ACTIVATION = 500
+REFERRAL_TIER_REWARDS: dict[int, tuple[str, int | None]] = {
+    3: ("pro", 30),    # 1 month free Pro
+    10: ("pro", None),  # Pro lifetime
+}
+REFERRAL_ENTERPRISE_THRESHOLD = 25
+
+
+def apply_referral_activation(ref_code: str, new_username: str) -> dict | None:
+    """Credit a referrer when someone they referred completes registration.
+
+    Called from POST /auth/register when the new signup supplies a
+    ref_code. Increments the code's activated_count and grants rewards;
+    each tier reward is granted at most once per referrer (tracked via
+    promo_redemptions) so re-crossing a threshold is a no-op.
+    """
+    code = (ref_code or "").strip()[:16]
+    if not code:
+        return None
+
+    db = market_core.get_db()
+    try:
+        row = db.execute(
+            "SELECT username FROM referral_codes WHERE ref_code=?", (code,)
+        ).fetchone()
+        if not row or not row["username"] or row["username"] == new_username:
+            return None  # unknown code, or self-referral
+        referrer = row["username"]
+
+        db.execute(
+            "UPDATE referral_codes SET activated_count = activated_count + 1 WHERE ref_code=?",
+            (code,),
+        )
+        db.commit()
+        count_row = db.execute(
+            "SELECT activated_count FROM referral_codes WHERE ref_code=?", (code,)
+        ).fetchone()
+        count = int(count_row["activated_count"])
+    finally:
+        db.close()
+
+    sub = db_get_subscription(referrer)
+    if (sub.get("tier") or "free") == "free":
+        bumped_day = int(sub.get("req_limit_day") or TIERS["free"]["req_day"]) + REFERRAL_BONUS_PER_ACTIVATION
+        db_set_subscription(referrer, "free", req_day=bumped_day)
+
+    for threshold in sorted(REFERRAL_TIER_REWARDS):
+        if count < threshold:
+            continue
+        promo_code = f"referral_tier_{threshold}"
+        if db_has_promo_redemption(referrer, promo_code):
+            continue
+        tier, expires_days = REFERRAL_TIER_REWARDS[threshold]
+        db_set_subscription(referrer, tier, expires_days=expires_days)
+        db_record_promo_redemption(referrer, promo_code, tier)
+
+    if count >= REFERRAL_ENTERPRISE_THRESHOLD:
+        promo_code = "referral_tier_25"
+        if not db_has_promo_redemption(referrer, promo_code):
+            db_record_promo_redemption(referrer, promo_code, "enterprise_preview_manual")
+
+    return {"referrer": referrer, "activated_count": count}
 
 
 def user_can_checkout(username: str) -> bool:

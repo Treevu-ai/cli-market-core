@@ -9,7 +9,7 @@ Optional: storefront_token for Storefront API access.
 """
 
 import httpx
-from .base import BaseConnector, parse_price, clean_name
+from .base import BaseConnector, parse_price, clean_name, sane_list_price
 
 
 class ShopifyConnector(BaseConnector):
@@ -103,6 +103,7 @@ class ShopifyConnector(BaseConnector):
             list_price = parse_price(variant.get("compare_at_price", "0") or price)
             stock = variant.get("inventory_quantity", 0)
 
+        list_price = sane_list_price(price, list_price)
         discount = round((1 - price / list_price) * 100) if list_price > price > 0 else None
 
         return {
