@@ -238,7 +238,23 @@ def _effective_price(row: dict) -> tuple[float, str]:
     return float(row.get("price") or 0), "nominal"
 
 
-def compute_dispersion(products: list[dict]) -> list[dict]:
+def compute_dispersion(
+    products: list[dict],
+    *,
+    sort_by: str = "spread_ratio",
+    sort_order: str = "desc",
+    limit: int = 0,
+    min_products: int = 3,
+) -> list[dict]:
+    """Compute price dispersion by (line, currency, subcategory) bucket.
+
+    Args:
+        products: raw price_snapshot rows with line/name/price/currency fields.
+        sort_by: ``spread_ratio`` (default), ``count``, ``avg_price``, ``line``.
+        sort_order: ``desc`` (default) or ``asc``.
+        limit: max results to return (0 = all).
+        min_products: minimum rows in a bucket to qualify (default 3).
+    """
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for row in products:
         line = row.get("line") or ""
@@ -252,7 +268,7 @@ def compute_dispersion(products: list[dict]) -> list[dict]:
 
     out: list[dict] = []
     for (line, currency, sub), rows in groups.items():
-        if len(rows) < 3:
+        if len(rows) < min_products:
             continue
         by_basis: dict[str, list[float]] = defaultdict(list)
         for r in rows:
@@ -283,7 +299,18 @@ def compute_dispersion(products: list[dict]) -> list[dict]:
             "price_basis": basis_pick,
             **stats,
         })
-    out.sort(key=lambda x: (-x["spread_ratio"], x["line"], x.get("subcategory") or ""))
+    # ── sort / limit ──
+    _sort_key_map = {
+        "spread_ratio": lambda x: x["spread_ratio"],
+        "count": lambda x: x["count"],
+        "avg_price": lambda x: x["avg_price"],
+        "line": lambda x: (x["line"], x.get("subcategory") or ""),
+    }
+    key_fn = _sort_key_map.get(sort_by, _sort_key_map["spread_ratio"])
+    reverse = sort_order != "asc"
+    out.sort(key=key_fn, reverse=reverse)
+    if limit > 0:
+        out = out[:limit]
     return out
 
 
