@@ -175,7 +175,6 @@ def normalize_store_id(raw: str) -> str:
     if clean in _aliases:
         return _aliases[clean]
     return key
-origin/main
 # ── Session / auth helpers ────────────────────────────────────────────────────
 
 _AUTH_PUBLIC_PATHS = {"/", "/auth/login", "/auth/register", "/auth/refresh"}
