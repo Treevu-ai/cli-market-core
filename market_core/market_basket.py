@@ -1,6 +1,7 @@
 """Canasta básica snapshot from DB — shared by dashboard and GET /v1/basket."""
 
 from __future__ import annotations
+from typing import Any
 
 from .response_envelope import envelope, freshness_from_string
 from .market_spread import CANASTA_ITEMS, CANASTA_SQL_LIKE, matches_canasta_item
@@ -11,11 +12,6 @@ CANASTA_PARTIAL_THRESHOLD = 6
 
 
 def _canasta_name_sql(prod: str) -> tuple[str, tuple]:
-    """Build WHERE fragment for canasta seed (handles accents + huevo/huevos).
-
-    Uses LOWER() so PostgreSQL LIKE matches title-case product names (Azúcar, Café).
-    SQLite LIKE is ASCII case-insensitive; LOWER() is harmless there.
-    """
     patterns = CANASTA_SQL_LIKE.get(prod, (f"%{prod}%",))
     if len(patterns) == 1:
         return "LOWER(name) LIKE LOWER(?)", (patterns[0],)
@@ -124,4 +120,87 @@ def build_canasta_snapshot(
             "items_total": result["items_total"],
             "partial_threshold": result["partial_threshold"],
         },
+    )
+
+
+def build_basket_compare(
+    db,
+    *,
+    items: list[dict[str, Any]],
+    store_filter: set[str] | None = None,
+    enveloped: bool = False,
+) -> dict[str, Any]:
+    """Compare total basket cost across retailers for arbitrary items.
+
+    Args:
+        db: Database connection.
+        items: List of dicts with ``name`` (required) and optional ``qty`` (default 1).
+        store_filter: Optional set of store keys to restrict comparison.
+        enveloped: When True, wrap result in canonical envelope.
+
+    Returns:
+        ``{items_searched, items_found, stores: [{store_name, items_found, total, currency, breakdown}]}``
+    """
+    store_totals: dict[str, dict[str, Any]] = {}
+    items_found = 0
+
+    for entry in items:
+        query = str(entry.get("name", "")).strip()
+        qty = max(1, int(entry.get("qty", 1) or 1))
+        if not query:
+            continue
+
+        rows = db.execute(
+            """SELECT store, store_name, name, price, currency
+               FROM price_snapshots
+               WHERE price > 0 AND price < 999999
+                 AND LOWER(name) LIKE LOWER(?)
+               ORDER BY price ASC""",
+            (f"%{query}%",),
+        ).fetchall()
+
+        store_best: dict[str, tuple[float, str, str]] = {}
+        for r in rows:
+            store = r["store"]
+            if store_filter and store not in store_filter:
+                continue
+            price = float(r["price"])
+            if store not in store_best or price < store_best[store][0]:
+                store_best[store] = (price, r["store_name"], r["currency"])
+
+        if store_best:
+            items_found += 1
+            for store, (price, store_name, currency) in store_best.items():
+                item_total = round(price * qty, 2)
+                if store not in store_totals:
+                    store_totals[store] = {
+                        "store_name": store_name,
+                        "items_found": 0,
+                        "total": 0.0,
+                        "currency": currency,
+                        "breakdown": [],
+                    }
+                store_totals[store]["items_found"] += 1
+                store_totals[store]["total"] = round(store_totals[store]["total"] + item_total, 2)
+                store_totals[store]["breakdown"].append({
+                    "item": query,
+                    "qty": qty,
+                    "unit_price": price,
+                    "item_total": item_total,
+                })
+
+    stores = sorted(store_totals.values(), key=lambda x: x["total"])
+
+    result = {
+        "items_searched": len(items),
+        "items_found": items_found,
+        "stores": stores[:10],
+    }
+    if not enveloped:
+        return result
+    return envelope(
+        data=stores[:10],
+        freshness_seconds=None,
+        confidence="ok",
+        extra_meta=result,
     )
