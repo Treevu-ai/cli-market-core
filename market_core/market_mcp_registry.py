@@ -1,7 +1,7 @@
 """MCP tool registry — canonical definitions, metadata, aliases, and profiles.
 
 PR1+PR2+PR5: canonical tool registry with metadata, aliases, and profiles.
-``tools/list`` defaults to the ``default`` profile (22 curated Shop/Intel/Account tools).
+``tools/list`` defaults to the ``default`` profile (24 curated Shop/Intel/Account tools).
 Set ``MCP_TOOL_PROFILE=legacy`` for all 46 registered tools (includes deprecated aliases).
 Also: ``full`` (43) and ``admin`` (46 + scan/refresh).
 """
@@ -30,9 +30,7 @@ def _coverage_stats() -> tuple[int, int, int]:
 # Tools hidden from ``default`` profile (advanced / admin / soon-deprecated).
 _ADVANCED_NAMES = frozenset(
     {
-        "market_ticket",
         "market_voice",
-        "market_barcode",
         "market_categories",
         "market_enrich",
         "market_stock",
@@ -150,7 +148,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
             meta=_meta(
                 bundle="shop",
                 order=2,
-                pairs_with=["market_search", "market_compare"],
+                pairs_with=["market_search", "market_compare", "market_intel_brief"],
             ),
         ),
         _tool(
@@ -174,7 +172,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                 },
                 required=["query"],
             ),
-            meta=_meta(bundle="shop", order=3, pairs_with=["market_compare", "market_add"]),
+            meta=_meta(bundle="shop", order=3, pairs_with=["market_compare", "market_add", "market_discover", "market_intel_brief", "market_login"]),
         ),
         _tool(
             "market_compare",
@@ -190,7 +188,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                 },
                 required=["query"],
             ),
-            meta=_meta(bundle="shop", order=4, pairs_with=["market_search", "market_basket"]),
+            meta=_meta(bundle="shop", order=4, pairs_with=["market_search", "market_basket", "market_intel_brief"]),
         ),
         _tool(
             "market_add",
@@ -336,6 +334,44 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                 }
             ),
             meta=_meta(bundle="intel", order=3, icp=["research", "trade"]),
+        ),
+        _tool(
+            "market_price_risk",
+            "[Intel] Price Risk Intelligence — which categories are becoming volatile? "
+            "Returns risk level (low/moderate/high) with supporting signals from price dispersion, promo intensity, and staple momentum.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"},
+                    "line": {"type": "string", "description": "supermercados, farmacias, electro"},
+                    "days": {"type": "integer", "default": 7, "description": "Analysis window in days"},
+                }
+            ),
+            meta=_meta(bundle="intel", order=4, icp=["research", "fintech", "trade"], pairs_with=["market_inflation_report", "market_procurement_signal"]),
+        ),
+        _tool(
+            "market_inflation_report",
+            "[Intel] Inflation Intelligence — where is price pressure increasing? "
+            "Returns pressure level (stable/rising/rising_fast/falling/above_official) from internal shelf inflation and macro CPI gap.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"},
+                    "line": {"type": "string", "description": "supermercados, farmacias, electro"},
+                    "days": {"type": "integer", "default": 30, "description": "Analysis window in days"},
+                }
+            ),
+            meta=_meta(bundle="intel", order=5, icp=["research", "fintech", "trade"], pairs_with=["market_price_risk", "market_procurement_signal"]),
+        ),
+        _tool(
+            "market_procurement_signal",
+            "[Intel] Procurement Intelligence — when should I buy? "
+            "Returns buy_now/monitor/wait signal from basket stress, search momentum, and staple price trends.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"},
+                    "line": {"type": "string", "description": "supermercados, farmacias, electro"},
+                }
+            ),
+            meta=_meta(bundle="intel", order=6, icp=["research", "trade", "builder"], pairs_with=["market_price_risk", "market_inflation_report"]),
         ),
         _tool(
             "market_intel_refresh",
@@ -663,7 +699,7 @@ def tool_in_profile(name: str, profile: str) -> bool:
 
 
 def get_profile() -> str:
-    """Active MCP tool profile from env (default: default = 22 curated tools)."""
+    """Active MCP tool profile from env (default: default = 24 curated tools)."""
     raw = (os.environ.get("MCP_TOOL_PROFILE") or "default").strip().lower()
     return raw if raw in PROFILES else "default"
 
@@ -693,5 +729,5 @@ def get_tool_meta(name: str) -> dict[str, Any] | None:
 
 # Original 43 tool names — must keep resolving after PR2 additions.
 ORIGINAL_TOOL_NAMES: frozenset[str] = frozenset(
-    n for n in CANONICAL_NAMES if n not in {"market_discover", "market_price_alerts", "market_intel_brief"}
+    n for n in CANONICAL_NAMES if n not in {"market_discover", "market_price_alerts", "market_intel_brief", "market_price_risk", "market_inflation_report", "market_procurement_signal"}
 )

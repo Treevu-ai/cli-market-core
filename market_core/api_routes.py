@@ -1,10 +1,20 @@
 """API v1 routes — shared between backend and CLI.
 
-These paths are relative; the backend mounts them with prefix='/v1'.
-Auth is pluggable: set _auth_fn to your auth callable before the app starts.
+Mount in backend with::
+
+    from market_core.api_routes import router
+    app.include_router(router, prefix="/v1")
+
+Auth is pluggable: set ``_auth_fn`` to your auth callable before the app starts.
+Set ``_enveloped_default`` to False if you don't want response envelopes.
+
+All endpoints default to ``enveloped=True`` — responses wrapped in
+canonical ``{data, meta, trace}``.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Query
 
@@ -16,12 +26,25 @@ from .data_v1_service import (
 )
 from .market_basket import build_canasta_snapshot
 from .market_core import get_db
+from .market_intel_products import (
+    compute_inflation_report,
+    compute_price_risk,
+    compute_procurement_signal,
+)
+from .market_quality import build_data_quality_scores
+from .market_slas import slas_by_retailer, slas_summary
+from .response_envelope import envelope, timing
 
-router = APIRouter(tags=["intelligence"])
+router = APIRouter(tags=["intel", "quality", "health"])
 
-# Pluggable auth: set this before app startup if you need auth.
+# ── Pluggable auth ────────────────────────────────────────────────────────────
+
+# Set before app startup if you need auth.
 # Signature: (authorization: str | None) -> str (username)
 _auth_fn = None
+
+# Set to False to disable response envelopes by default.
+_enveloped_default = True
 
 
 def _v1_auth(authorization: str | None = Header(None)) -> str:
@@ -31,6 +54,113 @@ def _v1_auth(authorization: str | None = Header(None)) -> str:
     return "anonymous"
 
 
+def _wrap(data: Any, latency_ms: float | None = None) -> dict:
+    return envelope(data=data, freshness_seconds=None, confidence="ok", latency_ms=latency_ms)
+
+
+# ── Intel products ─────────────────────────────────────────────────────────────
+
+@router.get("/intel/price-risk")
+def intel_price_risk(
+    country: str | None = Query(None, description="PE, AR, MX, BR, CO, CL"),
+    line: str | None = Query(None, description="supermercados, farmacias, electro"),
+    days: int = Query(7, ge=1, le=90),
+    enveloped: bool = Query(True),
+):
+    """Price Risk Intelligence — which categories are becoming volatile?"""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = compute_price_risk(db, country=country, line=line, days=days)
+        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+    finally:
+        db.close()
+
+
+@router.get("/intel/inflation-report")
+def intel_inflation_report(
+    country: str | None = Query(None, description="PE, AR, MX, BR, CO, CL"),
+    line: str | None = Query(None, description="supermercados, farmacias, electro"),
+    days: int = Query(30, ge=1, le=365),
+    enveloped: bool = Query(True),
+):
+    """Inflation Intelligence — where is price pressure increasing?"""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = compute_inflation_report(db, country=country, line=line, days=days)
+        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+    finally:
+        db.close()
+
+
+@router.get("/intel/procurement-signal")
+def intel_procurement_signal(
+    country: str | None = Query(None, description="PE, AR, MX, BR, CO, CL"),
+    line: str | None = Query(None, description="supermercados, farmacias, electro"),
+    enveloped: bool = Query(True),
+):
+    """Procurement Intelligence — when should I buy? Returns buy_now/monitor/wait."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = compute_procurement_signal(db, country=country, line=line)
+        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+    finally:
+        db.close()
+
+
+# ── Data quality ───────────────────────────────────────────────────────────────
+
+@router.get("/quality/scores")
+def quality_scores(
+    days: int = Query(7, ge=1, le=30),
+    enveloped: bool = Query(True),
+):
+    """Composite data-quality scores: freshness, unit normalization, match confidence."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = build_data_quality_scores(db, days=days)
+        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+    finally:
+        db.close()
+
+
+# ── Health / SLAs ──────────────────────────────────────────────────────────────
+
+@router.get("/health/slas")
+def health_slas(
+    line: str | None = Query(None),
+    enveloped: bool = Query(True),
+):
+    """Per-retailer SLA metrics: p50/p95 freshness, alive/dead status, error rate."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = slas_by_retailer(db, line=line)
+        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+    finally:
+        db.close()
+
+
+@router.get("/health/slas-summary")
+def health_slas_summary(
+    line: str | None = Query(None),
+    enveloped: bool = Query(True),
+):
+    """Compact SLA summary."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = slas_summary(db, line=line)
+        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+    finally:
+        db.close()
+
+
+# ── Data v1 ────────────────────────────────────────────────────────────────────
+
 @router.get("/quality/flagged")
 def quality_flagged(
     reason: str | None = Query(None, description="discount | outlier | spread"),
@@ -38,6 +168,7 @@ def quality_flagged(
     offset: int = Query(0, ge=0),
     username: str = Depends(_v1_auth),
 ):
+    """Paginated quality anomalies."""
     db = get_db()
     try:
         return query_flagged(db, reason=reason, limit=limit, offset=offset)
@@ -56,6 +187,7 @@ def prices_v1(
     offset: int = Query(0, ge=0),
     username: str = Depends(_v1_auth),
 ):
+    """Paginated price snapshots (?clean=1 filters suspect)."""
     db = get_db()
     try:
         return query_prices(
@@ -81,6 +213,7 @@ def dispersion_v1(
     offset: int = Query(0, ge=0),
     username: str = Depends(_v1_auth),
 ):
+    """Spread groups by subcategory."""
     db = get_db()
     try:
         return query_dispersion(
@@ -101,6 +234,7 @@ def basket_snapshot_v1(
     min_items: int = Query(3, ge=1, le=10),
     username: str = Depends(_v1_auth),
 ):
+    """Canasta snapshot from DB."""
     store_filter = None
     if stores:
         store_filter = {s.strip() for s in stores.split(",") if s.strip()}
@@ -116,6 +250,7 @@ def coverage_matrix_v1(
     line: str | None = None,
     username: str = Depends(_v1_auth),
 ):
+    """Country × line coverage map."""
     db = get_db()
     try:
         return build_coverage_matrix(db, line=line)

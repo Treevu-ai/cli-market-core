@@ -42,6 +42,20 @@ def test_infer_subcategory_super_and_farmacia():
     assert infer_subcategory("unknown_line", "Foo") == "otros"
 
 
+def test_canned_fish_in_oil_buckets_as_conservas_not_aceite():
+    # canned fish packed "en aceite vegetal" must not pollute the aceite bucket
+    for name in (
+        "Filete de Atún en Aceite Vegetal Florida 140g",
+        "Trozos de Jurel en Aceite Vegetal Campomar 150g",
+        "Filete de Bonito en Aceite Vegetal 170g",
+        "Filete de Caballa en Aceite Vegetal 170g",
+        "Sardinas en Aceite Vegetal Vigilante 120g",
+    ):
+        assert infer_subcategory("supermercados", name) == "conservas", name
+    # real cooking oil still buckets as aceite
+    assert infer_subcategory("supermercados", "Aceite Vegetal Primor 900ml") == "aceite"
+
+
 def test_compare_key_normalizes_brand_and_name():
     assert compare_key("Leche 1L", "Gloria") == "gloria|leche1l"
 

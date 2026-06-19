@@ -140,6 +140,26 @@ def build_health_stats(
     coverage_7d_pct = round(stores_7d / stores_indexed * 100, 1) if stores_indexed > 0 else 0
     avg_daily_7d = round(snapshots_7d / 7) if snapshots_7d else 0
 
+    # ── Per-store freshness (issue #18 — breakout of global 63% into retailer-level) ──
+    freshness_by_store: list[dict] = []
+    try:
+        fbs_rows = db.execute(
+            f"""SELECT store,
+                       COUNT(*) as total,
+                       COUNT(*) FILTER (WHERE queried_at >= {interval_1d}) as fresh_24h,
+                       ROUND(
+                         COUNT(*) FILTER (WHERE queried_at >= {interval_1d}) * 100.0
+                         / NULLIF(COUNT(*), 0), 1
+                       ) as fresh_24h_pct,
+                       COUNT(*) FILTER (WHERE queried_at >= {interval_7d}) as fresh_7d
+                FROM price_snapshots WHERE price > 0
+                GROUP BY store
+                ORDER BY fresh_24h_pct ASC"""
+        ).fetchall()
+        freshness_by_store = [dict(r) for r in fbs_rows]
+    except Exception as exc:
+        logger.debug("freshness_by_store skipped: %s", exc)
+
     out: dict = {
         "total_indexed": total,
         "snapshots_24h": snapshots_24h,
@@ -155,6 +175,7 @@ def build_health_stats(
         "snapshots_linked": linkage["snapshots_linked"],
         "unlinked_snapshots": linkage["unlinked_snapshots"],
         "golden_records_distinct": linkage["golden_records_distinct"],
+        "freshness_by_store": freshness_by_store,
     }
     if registry_size is not None:
         out["registry_size"] = registry_size

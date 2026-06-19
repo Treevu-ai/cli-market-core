@@ -25,7 +25,7 @@ BUNDLE_PREFIXES = ("[Shop]", "[Intel]", "[Account]", "[Advanced]", "[Admin]")
 
 
 def test_registry_has_46_tools():
-    assert len(TOOLS) == 46
+    assert len(TOOLS) == 49
     names = [t["name"] for t in TOOLS]
     assert len(names) == len(set(names))
 
@@ -81,7 +81,7 @@ def test_get_profile_legacy_env(monkeypatch):
 
 
 def test_legacy_profile_lists_all_46():
-    assert len(list_tools("legacy")) == 46
+    assert len(list_tools("legacy")) == 49
 
 
 def test_default_profile_includes_pr2_canonicals():
@@ -98,7 +98,7 @@ def test_default_profile_includes_pr2_canonicals():
 
 def test_default_profile_is_curated_size():
     default_count = public_tool_count("default")
-    assert 19 <= default_count <= 23
+    assert 20 <= default_count <= 28  # +3 intel products (Sprint 3)
 
 
 def test_admin_profile_includes_scan():
@@ -109,8 +109,10 @@ def test_admin_profile_includes_scan():
 def test_default_profile_hides_admin_and_advanced():
     names = {t["name"] for t in list_tools("default")}
     assert "market_scan" not in names
-    assert "market_ticket" not in names
     assert "market_intel_refresh" not in names
+    # P2-7: market_ticket and market_barcode promoted to default
+    assert "market_ticket" in names
+    assert "market_barcode" in names
 
 
 def test_list_tools_strips_meta():

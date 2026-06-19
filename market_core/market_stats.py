@@ -162,6 +162,88 @@ def server_json_description() -> str:
     )
 
 
+# ── Percentile helpers (issue #7–9: MAA segmentation, WAA) ──────────────────
+
+
+def compute_usage_percentiles(
+    counts: list[int],
+    *,
+    percentiles: tuple[float, ...] = (50.0, 90.0, 99.0),
+) -> dict[str, float]:
+    """Return P50/P90/P99 (or custom) from a list of per-agent usage counts.
+
+    >>> compute_usage_percentiles([1, 1, 1, 2, 5, 100], percentiles=(50, 90))
+    {'P50': 1.5, 'P90': 52.5, 'n': 6, 'total': 110, 'mean': 18.33}
+    """
+    if not counts:
+        return {"P50": 0.0, "P90": 0.0, "P99": 0.0, "n": 0, "total": 0, "mean": 0.0}
+    n = len(counts)
+    total = sum(counts)
+    sorted_counts = sorted(counts)
+
+    def _pctile(p: float) -> float:
+        k = (p / 100.0) * (n - 1)
+        lo = int(k)
+        hi = min(lo + 1, n - 1)
+        frac = k - lo
+        return round(sorted_counts[lo] * (1 - frac) + sorted_counts[hi] * frac, 2)
+
+    result: dict[str, float] = {"n": n, "total": total, "mean": round(total / n, 2)}
+    for p in percentiles:
+        result[f"P{int(p)}"] = _pctile(p)
+    return result
+
+
+def usage_segments(
+    counts: list[int],
+    *,
+    active_threshold: int = 3,
+) -> dict:
+    """Segment agents into power / active / dormant / one-hit.
+
+    ``active_threshold``: minimum weekly tool calls to count as active (WAA).
+
+    Returns segment counts and the percentile breakdown.
+    """
+    if not counts:
+        return {
+            "total_agents": 0,
+            "power": 0,        # top 5% by volume
+            "active": 0,       # >= active_threshold calls
+            "dormant": 0,      # < active_threshold but > 1
+            "one_hit": 0,      # exactly 1 call
+            "zero": 0,         # 0 calls
+            "percentiles": compute_usage_percentiles(counts),
+        }
+
+    n = len(counts)
+    total_calls = sum(counts)
+    # Power = top agents whose cumulative share reaches 80% of total calls,
+    # or top 5% by count, whichever is smaller. Prevents "everyone is power"
+    # when most agents have identical low counts.
+    sorted_desc = sorted(counts, reverse=True)
+    cum = 0
+    power_n = 0
+    for c in sorted_desc:
+        cum += c
+        power_n += 1
+        if cum >= total_calls * 0.8 or power_n >= max(1, n // 20):
+            break
+    # Floor: at most 5% of agents, at least 1 if any calls exist
+    power_n = min(power_n, max(1, n // 20)) if total_calls > 0 else 0
+
+    segments = {
+        "total_agents": n,
+        "power": power_n,
+        "active": sum(1 for c in counts if c >= active_threshold),
+        "dormant": sum(1 for c in counts if 1 < c < active_threshold),
+        "one_hit": sum(1 for c in counts if c == 1),
+        "zero": sum(1 for c in counts if c == 0),
+        "percentiles": compute_usage_percentiles(counts),
+    }
+    return segments
+
+
 def seo_description() -> str:
     return (
         f"Commerce API for AI agents. {MCP_TOOLS} MCP tools, {RETAILERS_PHRASE_EN}. "

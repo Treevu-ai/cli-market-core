@@ -1,0 +1,148 @@
+"""Tests for market_intel_products.py and build_basket_compare."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone, timedelta
+
+import pytest
+
+from market_core import get_db
+from market_core.market_intel_products import (
+    _interpret_inflation_pressure,
+    _interpret_price_risk,
+    _interpret_procurement,
+)
+from market_core.market_basket import build_basket_compare
+
+
+def _seed_snapshots(db, rows: list[tuple]):
+    for pid, store, store_name, name, price, line, currency, age_hours in rows:
+        ts = (datetime.now(timezone.utc) - timedelta(hours=age_hours)).isoformat()
+        db.execute(
+            """INSERT INTO price_snapshots (product_id, store, store_name, name, price, line, currency, queried_at, confidence)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ok')""",
+            (pid, store, store_name, name, price, line, currency, ts),
+        )
+    db.commit()
+
+
+# ── interpretation helpers (pure functions) ─────────────────────────────────────
+
+def test_interpret_price_risk_low():
+    level, _ = _interpret_price_risk(10.0, 20.0, 1.0)
+    assert level == "low"
+
+
+def test_interpret_price_risk_high():
+    level, _ = _interpret_price_risk(60.0, 35.0, 6.0)
+    assert level == "high"
+
+
+def test_interpret_price_risk_moderate():
+    level, _ = _interpret_price_risk(30.0, 15.0, 0.0)
+    assert level == "moderate"
+
+
+def test_interpret_price_risk_none_signals():
+    level, reason = _interpret_price_risk(None, None, None)
+    assert level == "low"
+    assert "stable" in reason
+
+
+def test_interpret_inflation_pressure():
+    assert _interpret_inflation_pressure(12.0, None, None) == "rising_fast"
+    assert _interpret_inflation_pressure(6.0, None, None) == "rising"
+    assert _interpret_inflation_pressure(-3.0, None, None) == "falling"
+    assert _interpret_inflation_pressure(None, None, 3.0) == "above_official"
+    assert _interpret_inflation_pressure(2.0, 1.0, 0.5) == "stable"
+
+
+def test_interpret_procurement():
+    s, _ = _interpret_procurement(90.0, 1.0, 0.0)
+    assert s == "buy_now"
+    s2, _ = _interpret_procurement(115.0, 1.0, 0.0)
+    assert s2 == "wait"
+    s3, _ = _interpret_procurement(100.0, 1.0, 0.0)
+    assert s3 == "monitor"
+
+
+def test_interpret_procurement_staples_rising():
+    s, _ = _interpret_procurement(100.0, 1.0, 6.0)
+    assert s == "wait"
+
+
+# ── intel products (DB schema dependent — skipped in unit test suite) ───────────
+
+@pytest.mark.skip(reason="requires full DB schema with indicator_definitions seeded")
+def test_compute_price_risk_shape():
+    pass
+
+
+@pytest.mark.skip(reason="requires full DB schema")
+def test_compute_inflation_report_shape():
+    pass
+
+
+@pytest.mark.skip(reason="requires full DB schema")
+def test_compute_procurement_signal_shape():
+    pass
+
+
+# ── basket compare ──────────────────────────────────────────────────────────────
+
+def test_basket_compare_empty(isolated_db):
+    db = get_db()
+    try:
+        result = build_basket_compare(db, items=[])
+        assert result["items_searched"] == 0
+        assert result["items_found"] == 0
+        assert result["stores"] == []
+    finally:
+        db.close()
+
+
+def test_basket_compare_with_items(isolated_db):
+    db = get_db()
+    try:
+        _seed_snapshots(db, [
+            ("a", "wong_pe", "Wong", "Leche 1L", 5.0, "s", "PEN", 1),
+            ("b", "wong_pe", "Wong", "Arroz 1kg", 4.0, "s", "PEN", 1),
+            ("c", "metro_pe", "Metro", "Leche 1L", 5.5, "s", "PEN", 1),
+            ("d", "metro_pe", "Metro", "Arroz 1kg", 3.5, "s", "PEN", 1),
+        ])
+        result = build_basket_compare(db, items=[{"name": "leche", "qty": 2}, {"name": "arroz", "qty": 1}])
+        assert result["items_searched"] == 2
+        assert result["items_found"] == 2
+        assert len(result["stores"]) >= 1
+        for store in result["stores"]:
+            assert "total" in store
+            assert "currency" in store
+            assert "breakdown" in store
+    finally:
+        db.close()
+
+
+def test_basket_compare_store_filter(isolated_db):
+    db = get_db()
+    try:
+        _seed_snapshots(db, [
+            ("a", "wong_pe", "Wong", "Leche 1L", 5.0, "s", "PEN", 1),
+            ("b", "metro_pe", "Metro", "Leche 1L", 5.5, "s", "PEN", 1),
+        ])
+        result = build_basket_compare(db, items=[{"name": "leche"}], store_filter={"wong_pe"})
+        assert len(result["stores"]) == 1
+        assert result["stores"][0]["store_name"] == "Wong"
+    finally:
+        db.close()
+
+
+def test_basket_compare_enveloped(isolated_db):
+    db = get_db()
+    try:
+        _seed_snapshots(db, [("a", "wong_pe", "Wong", "Leche 1L", 5.0, "s", "PEN", 1)])
+        result = build_basket_compare(db, items=[{"name": "leche"}], enveloped=True)
+        assert "data" in result
+        assert "meta" in result
+        assert "trace" in result
+    finally:
+        db.close()

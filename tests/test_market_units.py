@@ -21,6 +21,15 @@ def test_price_per_base_unit():
     assert out["price_per"] == 5.0
 
 
+def test_price_per_base_unit_rejects_typo_micro_pack():
+    # retailer typo: 1 kg bag listed as "1 g" -> would imply S/9900/kg.
+    # Fall back to nominal instead of polluting the per-kg comparison.
+    assert price_per_base_unit(9.9, "Harina de Arroz Costeño 1 g") is None
+    assert price_per_base_unit(3.0, "Bebida 1 ml") is None
+    # a real small-but-sane pack is still normalized
+    assert price_per_base_unit(2.0, "Sal 100 g") is not None
+
+
 def test_is_standard_canasta_pack():
     assert is_standard_canasta_pack("Leche entera 1L", "leche") is True
     assert is_standard_canasta_pack("Leche 250ml", "leche") is False

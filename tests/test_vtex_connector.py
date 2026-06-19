@@ -4,12 +4,54 @@ from __future__ import annotations
 
 import pytest
 
+from market_connectors.base import sane_list_price
 from market_connectors.vtex import (
     VtexConnector,
     _client_headers,
     _vtex_headers,
     _vtex_json_list,
 )
+
+
+def _vtex_raw(price, list_price):
+    return {
+        "productId": "1",
+        "productReference": "REF-1",
+        "productName": "Ajo Coloso Por Unidad",
+        "brand": "Coloso",
+        "categoryId": "100",
+        "items": [
+            {"sellers": [{"commertialOffer": {
+                "Price": price, "ListPrice": list_price, "AvailableQuantity": 5,
+            }}]}
+        ],
+    }
+
+
+_STORE_CFG = {"name": "Jumbo AR", "currency": "ARS", "base": "https://www.jumbo.com.ar"}
+
+
+def test_sane_list_price_drops_garbage():
+    # Jumbo/Vea AR return ListPrice ~90x the price (fake ~99% discount).
+    assert sane_list_price(1199.0, 108507.0) == 1199.0
+    # real promos (< 90% off) are preserved
+    assert sane_list_price(22.9, 25.8) == 25.8
+    # no list price / already sane
+    assert sane_list_price(10.0, 10.0) == 10.0
+    assert sane_list_price(10.0, 0.0) == 0.0
+
+
+def test_vtex_normalize_drops_garbage_listprice():
+    out = VtexConnector().normalize(_vtex_raw(1199.0, 108507.0), "jumbo_ar", _STORE_CFG)
+    assert out["price"] == 1199.0
+    assert out["list_price"] == 1199.0
+    assert out["discount"] is None
+
+
+def test_vtex_normalize_keeps_real_discount():
+    out = VtexConnector().normalize(_vtex_raw(22.9, 25.8), "wong", _STORE_CFG)
+    assert out["list_price"] == 25.8
+    assert out["discount"] == 11
 
 
 class _FakeResp:

@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 
-from .base import BaseConnector, clean_name, parse_price
+from .base import BaseConnector, clean_name, parse_price, sane_list_price
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +222,7 @@ class WooCommerceConnector(BaseConnector):
             url = raw.get("permalink", "")
             brand = _brand_from_raw(raw)
             category = _category_from_raw(raw)
+            list_price = sane_list_price(price, list_price)
             discount = round((1 - price / list_price) * 100) if list_price > price > 0 else None
             return {
                 "id": product_id,
@@ -245,6 +246,7 @@ class WooCommerceConnector(BaseConnector):
         sale = parse_price(raw.get("sale_price"))
         if sale and sale < list_price:
             price = sale
+        list_price = sane_list_price(price, list_price)
         discount = round((1 - price / list_price) * 100) if list_price > price > 0 else None
         stock = int(raw.get("stock_quantity") or (1 if raw.get("stock_status") == "instock" else 0))
         brand = _brand_from_raw(raw)

@@ -45,11 +45,23 @@ def parse_pack_size(name: str) -> tuple[float, str] | None:
     return None
 
 
+# Below these, a weight/volume parsed from a title is almost always a unit typo
+# (e.g. retailer lists "Harina de Arroz 1 g" for a 1 kg bag), and a sub-5g/5ml
+# pack is not meaningfully comparable per kg/L anyway. Fall back to nominal
+# instead of emitting an absurd per-base-unit price (e.g. S/9900/kg).
+_MIN_KG = 0.005
+_MIN_L = 0.005
+
+
 def price_per_base_unit(price: float, name: str) -> dict | None:
     parsed = parse_pack_size(name)
     if not parsed or price <= 0:
         return None
     qty, base = parsed
+    if base == "kg" and qty < _MIN_KG:
+        return None
+    if base == "L" and qty < _MIN_L:
+        return None
     return {
         "basis": base,
         "pack_qty": qty,
