@@ -30,9 +30,7 @@ def _coverage_stats() -> tuple[int, int, int]:
 # Tools hidden from ``default`` profile (advanced / admin / soon-deprecated).
 _ADVANCED_NAMES = frozenset(
     {
-        "market_ticket",
         "market_voice",
-        "market_barcode",
         "market_categories",
         "market_enrich",
         "market_stock",
@@ -150,7 +148,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
             meta=_meta(
                 bundle="shop",
                 order=2,
-                pairs_with=["market_search", "market_compare"],
+                pairs_with=["market_search", "market_compare", "market_intel_brief"],
             ),
         ),
         _tool(
@@ -174,7 +172,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                 },
                 required=["query"],
             ),
-            meta=_meta(bundle="shop", order=3, pairs_with=["market_compare", "market_add"]),
+            meta=_meta(bundle="shop", order=3, pairs_with=["market_compare", "market_add", "market_discover", "market_intel_brief", "market_login"]),
         ),
         _tool(
             "market_compare",
@@ -190,7 +188,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                 },
                 required=["query"],
             ),
-            meta=_meta(bundle="shop", order=4, pairs_with=["market_search", "market_basket"]),
+            meta=_meta(bundle="shop", order=4, pairs_with=["market_search", "market_basket", "market_intel_brief"]),
         ),
         _tool(
             "market_add",
