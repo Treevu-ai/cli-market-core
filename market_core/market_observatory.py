@@ -362,6 +362,14 @@ def ensure_observatory_schema() -> None:
         "CREATE INDEX IF NOT EXISTS idx_agent_events_tool ON agent_events(tool_name, occurred_at)",
     ):
         db.execute(idx)
+    # P3-9: migrate existing tables to add session_id column
+    try:
+        if USE_PG:
+            db.execute("ALTER TABLE agent_events ADD COLUMN IF NOT EXISTS session_id TEXT")
+        else:
+            db.execute("ALTER TABLE agent_events ADD COLUMN session_id TEXT")
+    except Exception:
+        pass  # column already exists
     db.commit()
     db.close()
 
