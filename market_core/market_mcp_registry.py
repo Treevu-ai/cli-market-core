@@ -1,7 +1,7 @@
 """MCP tool registry — canonical definitions, metadata, aliases, and profiles.
 
 PR1+PR2+PR5: canonical tool registry with metadata, aliases, and profiles.
-``tools/list`` defaults to the ``default`` profile (22 curated Shop/Intel/Account tools).
+``tools/list`` defaults to the ``default`` profile (24 curated Shop/Intel/Account tools).
 Set ``MCP_TOOL_PROFILE=legacy`` for all 46 registered tools (includes deprecated aliases).
 Also: ``full`` (43) and ``admin`` (46 + scan/refresh).
 """
@@ -661,7 +661,7 @@ def tool_in_profile(name: str, profile: str) -> bool:
 
 
 def get_profile() -> str:
-    """Active MCP tool profile from env (default: default = 22 curated tools)."""
+    """Active MCP tool profile from env (default: default = 24 curated tools)."""
     raw = (os.environ.get("MCP_TOOL_PROFILE") or "default").strip().lower()
     return raw if raw in PROFILES else "default"
 
