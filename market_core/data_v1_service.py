@@ -1,6 +1,7 @@
 """Intelligence API v1 — shared queries for /v1/quality, /v1/prices, /v1/dispersion, /v1/coverage."""
 
 from __future__ import annotations
+from datetime import datetime, timezone, timedelta
 
 from .dashboard_quality import QUALITY_FILTERS
 from .market_core import STORES
@@ -46,7 +47,7 @@ def count_flagged_outliers(db) -> int:
 def build_coverage_matrix(db, *, line: str | None = None, enveloped: bool = False) -> dict:
     line_country_raw = db.execute(
         """SELECT ps.line, ps.store, COUNT(*) as n
-           FROM price_snapshots ps WHERE ps.price>0
+           FROM price_snapshots ps WHERE ps.price > 0
            GROUP BY ps.line, ps.store"""
     ).fetchall()
     line_country_map: dict[str, set] = {}
@@ -59,9 +60,23 @@ def build_coverage_matrix(db, *, line: str | None = None, enveloped: bool = Fals
         line_country_map.setdefault(key, set()).add(r["store"])
 
     cells = [
-        {"line": k.split("|")[0], "country": k.split("|")[1], "stores": len(v)}
-        for k, v in line_country_map.items()
+        {"line": k.split("|")[0], "country": k.split("|")[1], "stores": len(v), "freshness_pct": None}
+        for k, v in sorted(line_country_map.items())
     ]
+
+    if cells:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        for cell in cells:
+            fresh_row = db.execute(
+                """SELECT COUNT(*) as total,
+                          SUM(CASE WHEN queried_at >= ? THEN 1 ELSE 0 END) as fresh_7d
+                   FROM price_snapshots WHERE price > 0 AND line = ?""",
+                (cutoff, cell["line"]),
+            ).fetchone()
+            total_f = int(fresh_row["total"] or 0)
+            fresh_f = int(fresh_row["fresh_7d"] or 0)
+            cell["freshness_pct"] = round(fresh_f / total_f * 100, 1) if total_f > 0 else 0.0
+
     lines = sorted(set(c["line"] for c in cells))
     countries = sorted(set(c["country"] for c in cells))
     lookup = {f"{c['line']}|{c['country']}": c["stores"] for c in cells}
