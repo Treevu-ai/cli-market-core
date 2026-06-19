@@ -61,7 +61,7 @@ _PREFIX_ROUTES: tuple[tuple[str, str, str], ...] = (
 _OBSERVATORY_DDL_PG = """
 CREATE TABLE IF NOT EXISTS agent_events (
     id TEXT PRIMARY KEY,
-    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),  -- P3-9: session_id added below
     agent_id TEXT NOT NULL,
     tool_name TEXT NOT NULL,
     route TEXT,
@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS agent_events (
     latency_ms INTEGER,
     retailer TEXT,
     query_type TEXT,
+    session_id TEXT,
     error_code TEXT,
     metadata TEXT
 );
@@ -105,7 +106,7 @@ CREATE TABLE IF NOT EXISTS daily_observatory_metrics (
 _OBSERVATORY_DDL_SQLITE = """
 CREATE TABLE IF NOT EXISTS agent_events (
     id TEXT PRIMARY KEY,
-    occurred_at TEXT NOT NULL DEFAULT (datetime('now')),
+    occurred_at TEXT NOT NULL DEFAULT (datetime('now')),  -- P3-9: session_id added below
     agent_id TEXT NOT NULL,
     tool_name TEXT NOT NULL,
     route TEXT,
@@ -115,6 +116,7 @@ CREATE TABLE IF NOT EXISTS agent_events (
     latency_ms INTEGER,
     retailer TEXT,
     query_type TEXT,
+    session_id TEXT,
     error_code TEXT,
     metadata TEXT
 );
@@ -246,7 +248,14 @@ def _extract_geo_retailer(
     if retailer and not country:
         country = _country_from_store(retailer) or ""
 
-    return (country[:8] or None), (retailer[:64] or None)
+    # Normalize country case and retailer key for consistent telemetry
+    country_norm = country.strip().upper()[:8] if country else None
+    retailer_norm = None
+    if retailer:
+        from .market_core import normalize_store_id
+        retailer_norm = normalize_store_id(retailer)[:64] or None
+
+    return country_norm, retailer_norm
 
 
 def _sanitize_metadata(meta: dict[str, Any] | None) -> dict[str, Any]:
@@ -427,6 +436,7 @@ def record_agent_event(
     retailer: str | None = None,
     query_type: str | None = None,
     error_code: str | None = None,
+    session_id: str | None = None,
     identity_source: str = "unknown",
     linked_username: str | None = None,
     metadata: dict[str, Any] | None = None,
@@ -461,9 +471,9 @@ def record_agent_event(
         db.execute(
             """
             INSERT INTO agent_events (
-                id, occurred_at, agent_id, tool_name, route, country, organization_id,
+                id, occurred_at, agent_id, tool_name, route, country, organization_id, session_id,
                 success, latency_ms, retailer, query_type, error_code, metadata
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event_id,
@@ -473,6 +483,7 @@ def record_agent_event(
                 route,
                 country,
                 organization_id,
+                session_id,
                 bool(success),
                 latency_ms,
                 retailer,
@@ -638,7 +649,7 @@ def _weekly_agent_growth(day_agents: dict[str, set[str]]) -> float | None:
     return round((a - b) / b, 4)
 
 
-def observatory_summary(*, days: int = 30) -> dict[str, Any]:
+def observatory_summary(*, days: int = 30, top_n: int = 5) -> dict[str, Any]:
     """Public aggregate metrics for /analytics/observatory."""
     days = max(1, min(days, 90))
     ensure_observatory_schema()
@@ -690,8 +701,8 @@ def observatory_summary(*, days: int = 30) -> dict[str, Any]:
     retention_7 = mcp_retention_summary(days=days, return_within_days=7)
     retention_30 = mcp_retention_summary(days=days, return_within_days=30)
 
-    def _top(counter: dict[str, int], n: int = 5) -> list[dict[str, Any]]:
-        return [{"name": k, "count": v} for k, v in sorted(counter.items(), key=lambda x: -x[1])[:n]]
+    def _top(counter: dict[str, int], n: int = 5, default_n: int = 5) -> list[dict[str, Any]]:
+        return [{"name": k, "count": v} for k, v in sorted(counter.items(), key=lambda x: -x[1])[:max(1, min(n, default_n))]]
 
     weekly_growth = _weekly_agent_growth(day_agents)
 
@@ -711,9 +722,9 @@ def observatory_summary(*, days: int = 30) -> dict[str, Any]:
         "mcp_retention_7d": retention_7,
         "mcp_retention_30d": retention_30,
         "weekly_agent_growth": weekly_growth,
-        "top_tools": _top(tools),
-        "top_retailers": _top(retailers),
-        "top_countries": _top(countries),
+        "top_tools": _top(tools, top_n, 50),
+        "top_retailers": _top(retailers, top_n, 50),
+        "top_countries": _top(countries, top_n, 50),
         "telemetry_enabled": observatory_enabled(),
     }
 
@@ -892,6 +903,7 @@ class ObservatoryMiddleware(BaseHTTPMiddleware):
                 error_code=str(response.status_code) if not success else None,
                 identity_source=identity["identity_source"],
                 linked_username=identity.get("linked_username"),
+                session_id=request.headers.get("X-Session-ID"),
                 metadata={"identity_confidence": identity.get("identity_confidence")},
             ),
         )
