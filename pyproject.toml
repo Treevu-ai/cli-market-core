@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-market-core"
-version = "1.9.43"
+version = "1.9.45"
 description = "CLI Market intelligence layer — indicators, billing, MCP primitives, and retailer connectors. Dependency of cli-market-world."
 requires-python = ">=3.10"
 license = "MIT"
