@@ -24,6 +24,7 @@ from .market_indicators_catalog import (
     TIER2_INDICATOR_KEYS,  # noqa: F401 - re-exported for market_core.market_indicators consumers
     WB_COUNTRY,
 )
+from .response_envelope import compute_freshness_seconds, envelope
 from .market_spread import CANASTA_ITEMS
 
 logger = logging.getLogger(__name__)
@@ -973,6 +974,7 @@ def get_latest_values(
     country: str | None = None,
     line: str | None = None,
     limit: int = 50,
+    enveloped: bool = False,
 ) -> list[dict]:
     q = """
         SELECT iv.indicator_key, iv.scope, iv.country, iv.line, iv.value,
@@ -1021,7 +1023,14 @@ def get_latest_values(
                 "recorded_at": r["recorded_at"],
             }
         )
-    return out
+    if not enveloped:
+        return out
+    return envelope(
+        data=out,
+        freshness_seconds=compute_freshness_seconds(out, timestamp_field="recorded_at"),
+        confidence="ok",
+        extra_meta={"count": len(out)},
+    )
 
 
 def _scores_from_latest(latest: dict[str, dict[str, Any]]) -> dict[str, Any]:

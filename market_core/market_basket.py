@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .response_envelope import envelope, freshness_from_string
 from .market_spread import CANASTA_ITEMS, CANASTA_SQL_LIKE, matches_canasta_item
 from .market_units import is_standard_canasta_pack
 
@@ -58,13 +59,21 @@ def _aggregate_canasta(db, *, store_filter: set[str] | None = None) -> dict[str,
     return canasta
 
 
-def build_canasta_basica(db, *, min_items: int = 3) -> list[dict]:
+def build_canasta_basica(db, *, min_items: int = 3, enveloped: bool = False) -> list[dict] | dict:
     """Dashboard-compatible canasta_basica rows."""
     canasta = _aggregate_canasta(db)
-    return sorted(
+    rows = sorted(
         [v for v in canasta.values() if v["items"] >= min_items],
         key=lambda x: x["total"],
     )[:10]
+    if not enveloped:
+        return rows
+    return envelope(
+        data=rows,
+        freshness_seconds=None,
+        confidence="ok",
+        extra_meta={"items_total": CANASTA_TOTAL_ITEMS, "min_items": min_items},
+    )
 
 
 def build_canasta_snapshot(
@@ -72,6 +81,7 @@ def build_canasta_snapshot(
     *,
     min_items: int = 3,
     store_filter: set[str] | None = None,
+    enveloped: bool = False,
 ) -> dict:
     """Build canasta snapshot for GET /v1/basket."""
     canasta = _aggregate_canasta(db, store_filter=store_filter)
@@ -85,7 +95,7 @@ def build_canasta_snapshot(
     ).fetchone()
     snapshot_at = snapshot_row["ts"] if snapshot_row else None
 
-    return {
+    result = {
         "source": "snapshot",
         "snapshot_at": snapshot_at,
         "items_total": CANASTA_TOTAL_ITEMS,
@@ -102,3 +112,16 @@ def build_canasta_snapshot(
             for row in stores
         ],
     }
+    if not enveloped:
+        return result
+    return envelope(
+        data=result["stores"],
+        freshness_seconds=freshness_from_string(snapshot_at),
+        confidence="ok",
+        extra_meta={
+            "source": result["source"],
+            "snapshot_at": snapshot_at,
+            "items_total": result["items_total"],
+            "partial_threshold": result["partial_threshold"],
+        },
+    )

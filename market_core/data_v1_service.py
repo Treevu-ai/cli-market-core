@@ -7,6 +7,7 @@ from .market_core import STORES
 from .market_db import price_snapshots_has_confidence
 from .market_spread import build_spread_analytics, find_median_outliers
 from .price_confidence import discount_is_scrape_error, spread_confidence
+from .response_envelope import aggregate_confidence, compute_freshness_seconds, envelope
 
 MAX_LIMIT = 500
 DEFAULT_LIMIT = 50
@@ -42,7 +43,7 @@ def count_flagged_outliers(db) -> int:
     return len(_outlier_keys(products))
 
 
-def build_coverage_matrix(db, *, line: str | None = None) -> dict:
+def build_coverage_matrix(db, *, line: str | None = None, enveloped: bool = False) -> dict:
     line_country_raw = db.execute(
         """SELECT ps.line, ps.store, COUNT(*) as n
            FROM price_snapshots ps WHERE ps.price>0
@@ -70,12 +71,20 @@ def build_coverage_matrix(db, *, line: str | None = None) -> dict:
             if lookup.get(f"{ln}|{country}", 0) == 0:
                 gaps.append(f"{ln}×{country}")
 
-    return {
+    result = {
         "lines": lines,
         "countries": countries,
         "cells": cells,
         "gaps": gaps,
     }
+    if not enveloped:
+        return result
+    return envelope(
+        data=result,
+        freshness_seconds=None,
+        confidence="ok",
+        extra_meta={"lines_count": len(lines), "countries_count": len(countries), "gaps_count": len(gaps)},
+    )
 
 
 def query_flagged(
@@ -84,6 +93,7 @@ def query_flagged(
     reason: str | None = None,
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
+    enveloped: bool = False,
 ) -> dict:
     limit = _clamp_limit(limit)
     offset = max(0, int(offset or 0))
@@ -153,13 +163,21 @@ def query_flagged(
     items.sort(key=lambda x: (x.get("reason") or "", -(x.get("discount_pct") or 0)))
     total = len(items)
     page = items[offset : offset + limit]
-    return {
+    result = {
         "total": total,
         "limit": limit,
         "offset": offset,
         "filters_applied": list(QUALITY_FILTERS),
         "items": page,
     }
+    if not enveloped:
+        return result
+    return envelope(
+        data=page,
+        freshness_seconds=compute_freshness_seconds(page),
+        confidence=aggregate_confidence(page),
+        extra_meta={"total": total, "limit": limit, "offset": offset, "filters_applied": list(QUALITY_FILTERS)},
+    )
 
 
 def query_prices(
@@ -172,6 +190,7 @@ def query_prices(
     store: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    enveloped: bool = False,
 ) -> dict:
     limit = _clamp_limit(limit, default=100)
     offset = max(0, int(offset or 0))
@@ -241,13 +260,21 @@ def query_prices(
                 "discount_pct": _discount_pct(price, list_price),
                 "confidence": row.get("confidence") or "ok",
             })
-        return {
+        result = {
             "total": total,
             "limit": limit,
             "offset": offset,
             "clean": clean,
             "items": items,
         }
+        if not enveloped:
+            return result
+        return envelope(
+            data=items,
+            freshness_seconds=compute_freshness_seconds(items),
+            confidence=aggregate_confidence(items),
+            extra_meta={"total": total, "limit": limit, "offset": offset, "clean": clean},
+        )
 
     rows = db.execute(
         f"""
@@ -289,13 +316,21 @@ def query_prices(
 
     total = len(filtered)
     page = filtered[offset : offset + limit]
-    return {
+    result = {
         "total": total,
         "limit": limit,
         "offset": offset,
         "clean": clean,
         "items": page,
     }
+    if not enveloped:
+        return result
+    return envelope(
+        data=page,
+        freshness_seconds=compute_freshness_seconds(page),
+        confidence=aggregate_confidence(page),
+        extra_meta={"total": total, "limit": limit, "offset": offset, "clean": clean},
+    )
 
 
 def query_dispersion(
@@ -306,6 +341,7 @@ def query_dispersion(
     currency: str | None = None,
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
+    enveloped: bool = False,
 ) -> dict:
     limit = _clamp_limit(limit)
     offset = max(0, int(offset or 0))
@@ -335,7 +371,7 @@ def query_dispersion(
 
     total = len(items)
     page = items[offset : offset + limit]
-    return {
+    result = {
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -343,6 +379,14 @@ def query_dispersion(
         "grouping": "line+currency+subcategory",
         "items": page,
     }
+    if not enveloped:
+        return result
+    return envelope(
+        data=page,
+        freshness_seconds=compute_freshness_seconds(page),
+        confidence=aggregate_confidence(page, confidence_field="status"),
+        extra_meta={"total": total, "limit": limit, "offset": offset, "clean": clean, "grouping": "line+currency+subcategory"},
+    )
 
 
 def intelligence_acceso_examples(base: str = "https://cli-market-production.up.railway.app") -> list[dict]:

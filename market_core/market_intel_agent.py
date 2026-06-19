@@ -30,6 +30,7 @@ from .data_v1_service import (
     query_dispersion,
     query_prices,
 )
+from .response_envelope import envelope
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -189,7 +190,7 @@ def _dispatch(name: str, args: dict, db) -> dict:
 
 # ── Orchestration ─────────────────────────────────────────────────────────────
 
-def ask_intel(question: str, db, *, model: str | None = None) -> dict:
+def ask_intel(question: str, db, *, model: str | None = None, enveloped: bool = False) -> dict:
     """Run the tool-use loop and return {answer, tools_used, iterations}.
 
     Raises AgentUnavailable when ANTHROPIC_API_KEY is not configured.
@@ -244,15 +245,31 @@ def ask_intel(question: str, db, *, model: str | None = None) -> dict:
             answer = "".join(
                 b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
             )
-            return {
+            result = {
                 "answer": answer.strip(),
                 "tools_used": tools_used,
                 "model": model,
             }
+            if not enveloped:
+                return result
+            return envelope(
+                data=result["answer"],
+                freshness_seconds=None,
+                confidence="ok",
+                extra_meta={"tools_used": tools_used, "model": model, "truncated": False},
+            )
 
-    return {
+    result = {
         "answer": "No pude resolver la consulta dentro del límite de pasos. Probá reformularla.",
         "tools_used": tools_used,
         "model": model,
         "truncated": True,
     }
+    if not enveloped:
+        return result
+    return envelope(
+        data=result["answer"],
+        freshness_seconds=None,
+        confidence="ok",
+        extra_meta={"tools_used": tools_used, "model": model or DEFAULT_MODEL, "truncated": True},
+    )
