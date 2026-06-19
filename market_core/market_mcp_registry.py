@@ -336,6 +336,44 @@ def _build_tool_specs() -> list[dict[str, Any]]:
             meta=_meta(bundle="intel", order=3, icp=["research", "trade"]),
         ),
         _tool(
+            "market_price_risk",
+            "[Intel] Price Risk Intelligence — which categories are becoming volatile? "
+            "Returns risk level (low/moderate/high) with supporting signals from price dispersion, promo intensity, and staple momentum.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"},
+                    "line": {"type": "string", "description": "supermercados, farmacias, electro"},
+                    "days": {"type": "integer", "default": 7, "description": "Analysis window in days"},
+                }
+            ),
+            meta=_meta(bundle="intel", order=4, icp=["research", "fintech", "trade"], pairs_with=["market_inflation_report", "market_procurement_signal"]),
+        ),
+        _tool(
+            "market_inflation_report",
+            "[Intel] Inflation Intelligence — where is price pressure increasing? "
+            "Returns pressure level (stable/rising/rising_fast/falling/above_official) from internal shelf inflation and macro CPI gap.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"},
+                    "line": {"type": "string", "description": "supermercados, farmacias, electro"},
+                    "days": {"type": "integer", "default": 30, "description": "Analysis window in days"},
+                }
+            ),
+            meta=_meta(bundle="intel", order=5, icp=["research", "fintech", "trade"], pairs_with=["market_price_risk", "market_procurement_signal"]),
+        ),
+        _tool(
+            "market_procurement_signal",
+            "[Intel] Procurement Intelligence — when should I buy? "
+            "Returns buy_now/monitor/wait signal from basket stress, search momentum, and staple price trends.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"},
+                    "line": {"type": "string", "description": "supermercados, farmacias, electro"},
+                }
+            ),
+            meta=_meta(bundle="intel", order=6, icp=["research", "trade", "builder"], pairs_with=["market_price_risk", "market_inflation_report"]),
+        ),
+        _tool(
             "market_intel_refresh",
             "[Admin] Recalculate internal indicators and fetch public APIs (FX, World Bank CPI, OFF, Wikimedia, weather). "
             "Not for public MCP — cron/admin only.",
@@ -691,5 +729,5 @@ def get_tool_meta(name: str) -> dict[str, Any] | None:
 
 # Original 43 tool names — must keep resolving after PR2 additions.
 ORIGINAL_TOOL_NAMES: frozenset[str] = frozenset(
-    n for n in CANONICAL_NAMES if n not in {"market_discover", "market_price_alerts", "market_intel_brief"}
+    n for n in CANONICAL_NAMES if n not in {"market_discover", "market_price_alerts", "market_intel_brief", "market_price_risk", "market_inflation_report", "market_procurement_signal"}
 )

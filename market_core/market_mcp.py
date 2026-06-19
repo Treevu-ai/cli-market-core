@@ -189,6 +189,20 @@ def _tool_handlers() -> dict:
             f"&days={a.get('days', 7)}",
         ),
         "market_scores": lambda a: api("GET", f"/v1/intel/scores?country={a.get('country', '')}&line={a.get('line', '')}"),
+        "market_price_risk": lambda a: api(
+            "GET",
+            f"/v1/intel/price-risk?country={a.get('country', '')}&line={a.get('line', '')}"
+            f"&days={a.get('days', 7)}",
+        ),
+        "market_inflation_report": lambda a: api(
+            "GET",
+            f"/v1/intel/inflation-report?country={a.get('country', '')}&line={a.get('line', '')}"
+            f"&days={a.get('days', 30)}",
+        ),
+        "market_procurement_signal": lambda a: api(
+            "GET",
+            f"/v1/intel/procurement-signal?country={a.get('country', '')}&line={a.get('line', '')}"
+        ),
         "market_intel_refresh": lambda a: api(
             "POST", f"/v1/intel/refresh?country={a.get('country', '')}&line={a.get('line', '')}"
         ),
