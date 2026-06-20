@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/registry/refs/heads/main/docs/reference/server.json",
+  "name": "io.github.treevu-ai/cli-market-world",
+  "version": "1.9.33",
+  "display_name": "CLI Market",
+  "description": "LATAM price intelligence MCP — 41 verified retailers across 8 countries, 23 tools, 61,000+ live prices refreshed every 4h. Search, compare, basket optimization, inflation signals, and procurement workflows.",
+  "license": "MIT",
+  "homepage": "https://cli-market.dev",
+  "source_code_url": "https://github.com/treevu-ai/cli-market-core",
+  "categories": ["ecommerce", "data", "finance"],
+  "tags": ["latam", "retail", "prices", "procurement", "inflation", "agents", "commerce", "vtex"],
+  "packages": [
+    {
+      "registry_name": "pypi",
+      "name": "cli-market-world",
+      "version": "1.9.33",
+      "runtime_hint": "uvx",
+      "runtime_arguments": ["cli-market-world", "mcp"]
+    }
+  ],
+  "remotes": [
+    {
+      "transport_type": "http",
+      "url": "https://cli-market-production.up.railway.app/mcp",
+      "authorization_type": "api_key",
+      "authorization_token_env": "CLI_MARKET_API_KEY"
+    }
+  ]
+}
