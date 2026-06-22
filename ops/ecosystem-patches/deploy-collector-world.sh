@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # deploy-collector-world.sh — P0 collector fix para cli-market-world
+# Detecta rutas automaticamente. Layout: repos hermanos bajo el usuario.
+#   ~/cli-market-core/   ~/cli-market-world/
+# Uso: bash ~/cli-market-core/ops/ecosystem-patches/deploy-collector-world.sh
 set -euo pipefail
 BRANCH="cursor/collector-index-rotate-p0-e95e"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

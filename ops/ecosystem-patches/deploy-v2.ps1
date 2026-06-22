@@ -1,6 +1,7 @@
 # deploy-v2.ps1 — Aplica patches P0-P2 y pushea rama NUEVA (evita rama remota vieja)
-# Uso: desde la carpeta padre de los repos (ej. C:\Users\acuba\Treevu-ai)
-#   powershell -ExecutionPolicy Bypass -File cli-market-core\ops\ecosystem-patches\deploy-v2.ps1
+# Repos hermanos bajo el usuario (ej. C:\Users\acuba\cli-market-*). No requiere carpeta Treevu-ai.
+# Uso:
+#   powershell -ExecutionPolicy Bypass -File C:\Users\acuba\cli-market-core\ops\ecosystem-patches\deploy-v2.ps1
 
 $ErrorActionPreference = "Stop"
 $Branch = "cursor/ecosystem-p0-p2-v2-e95e"

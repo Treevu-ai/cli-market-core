@@ -10,14 +10,27 @@ Además, la rama remota `cursor/collector-p0-world-e95e` en world es **vieja** (
 
 ### P0 collector (world) — un solo comando
 
+No hace falta una carpeta `Treevu-ai`. Basta con que los repos estén **al mismo nivel**, por ejemplo:
+
+```
+C:\Users\acuba\cli-market-core\
+C:\Users\acuba\cli-market-world\
+```
+
+Puedes ejecutar el script **desde cualquier carpeta** (usa rutas absolutas):
+
 ```powershell
-# Windows — desde carpeta padre (ej. C:\Users\acuba\Treevu-ai):
-powershell -ExecutionPolicy Bypass -File cli-market-core\ops\ecosystem-patches\deploy-collector-world.ps1
+# 1) Actualizar core (trae el patch)
+cd C:\Users\acuba\cli-market-core
+git pull origin cursor/ecosystem-fixes-p0-p2-e95e
+
+# 2) Deploy collector → push rama nueva en world
+powershell -ExecutionPolicy Bypass -File C:\Users\acuba\cli-market-core\ops\ecosystem-patches\deploy-collector-world.ps1
 ```
 
 ```bash
-# Linux/macOS:
-bash cli-market-core/ops/ecosystem-patches/deploy-collector-world.sh
+# Linux/macOS (mismo layout: ~/cli-market-core y ~/cli-market-world)
+bash ~/cli-market-core/ops/ecosystem-patches/deploy-collector-world.sh
 ```
 
 Luego abre el PR: https://github.com/Treevu-ai/cli-market-world/compare/main...cursor/collector-index-rotate-p0-e95e
@@ -88,7 +101,7 @@ git am ../cli-market-core/ops/ecosystem-patches/<PATCH-CORRECTO>.patch
 
 ## Prerrequisitos
 
-- Repos clonados bajo la misma carpeta padre (ej. `~/Treevu-ai/`).
+- Repos clonados como **hermanos** en la misma carpeta (ej. `C:\Users\acuba\cli-market-core` y `C:\Users\acuba\cli-market-world`). No se requiere carpeta `Treevu-ai`.
 - `main` actualizado: `git pull origin main`
 
 ## cli-market-backend

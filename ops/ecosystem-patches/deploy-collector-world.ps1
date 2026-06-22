@@ -1,6 +1,12 @@
 # deploy-collector-world.ps1 — P0 collector fix para cli-market-world
-# Uso (desde carpeta padre de repos, ej. C:\Users\acuba\Treevu-ai):
-#   powershell -ExecutionPolicy Bypass -File cli-market-core\ops\ecosystem-patches\deploy-collector-world.ps1
+# No importa desde qué carpeta lo ejecutes: detecta rutas desde la ubicación del script.
+#
+# Layout típico (repos hermanos bajo el usuario, sin carpeta Treevu-ai):
+#   C:\Users\acuba\cli-market-core\
+#   C:\Users\acuba\cli-market-world\
+#
+# Uso:
+#   powershell -ExecutionPolicy Bypass -File C:\Users\acuba\cli-market-core\ops\ecosystem-patches\deploy-collector-world.ps1
 
 $ErrorActionPreference = "Stop"
 $Branch = "cursor/collector-index-rotate-p0-e95e"
@@ -15,7 +21,13 @@ if (-not (Test-Path $PatchFile)) {
     throw "No encuentro $PatchFile — actualiza cli-market-core (git pull)"
 }
 if (-not (Test-Path $RepoPath)) {
-    throw "No encuentro $RepoPath — clona cli-market-world junto a cli-market-core"
+    throw @"
+No encuentro $RepoPath
+Esperado: cli-market-world al mismo nivel que cli-market-core.
+Ejemplo valido:
+  C:\Users\acuba\cli-market-core
+  C:\Users\acuba\cli-market-world
+"@
 }
 
 Write-Host "Repo: $RepoPath" -ForegroundColor Cyan
