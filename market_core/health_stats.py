@@ -140,6 +140,25 @@ def build_health_stats(
     coverage_7d_pct = round(stores_7d / stores_indexed * 100, 1) if stores_indexed > 0 else 0
     avg_daily_7d = round(snapshots_7d / 7) if snapshots_7d else 0
 
+    stores_fresh_24h = 0
+    stores_fresh_24h_pct = 0.0
+    try:
+        from .store_credentials import get_default_stores
+
+        default_stores = frozenset(get_default_stores())
+        if default_stores:
+            fresh_rows = db.execute(
+                f"""SELECT store FROM price_snapshots
+                    WHERE price > 0 AND queried_at >= {interval_1d}
+                    GROUP BY store"""
+            ).fetchall()
+            stores_fresh_24h = sum(
+                1 for row in fresh_rows if row["store"] in default_stores
+            )
+            stores_fresh_24h_pct = round(stores_fresh_24h / len(default_stores) * 100, 1)
+    except Exception as exc:
+        logger.debug("stores_fresh_24h skipped: %s", exc)
+
     # ── Per-store freshness (issue #18 — breakout of global 63% into retailer-level) ──
     freshness_by_store: list[dict] = []
     try:
@@ -165,6 +184,8 @@ def build_health_stats(
         "snapshots_24h": snapshots_24h,
         "stores_indexed": stores_indexed,
         "fresh_24h_pct": fresh_24h_pct,
+        "stores_fresh_24h": stores_fresh_24h,
+        "stores_fresh_24h_pct": stores_fresh_24h_pct,
         "moat_age_hours": moat_age_hours,
         "coverage_7d_pct": coverage_7d_pct,
         "avg_daily_7d": avg_daily_7d,
