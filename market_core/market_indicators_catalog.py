@@ -56,8 +56,8 @@ INDICATOR_DEFINITIONS: list[dict[str, Any]] = [
         "source": "internal:price_snapshots",
         "unit": "pct",
         "refresh_hours": 8,
-        "description": "Share of price_snapshots updated within the last 24 hours.",
-        "formula": "count(queried_at>=now-24h) / count(*) * 100",
+        "description": "Share of catalog stores with at least one price snapshot in the last 24 hours.",
+        "formula": "count(DISTINCT store where queried_at>=now-24h) / catalog_stores * 100",
     },
     {
         "key": "store_coverage",

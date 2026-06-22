@@ -159,16 +159,21 @@ def compute_price_dispersion(db, country: str | None = None, line: str | None = 
 
 
 def compute_moat_freshness(db, country: str | None = None, line: str | None = None) -> float | None:
+    # Store-coverage freshness: what fraction of catalog stores have at least one
+    # snapshot in the last 24h? This avoids penalising moat growth — the old
+    # snapshot-count formula (fresh_rows / total_rows) decreases as the moat grows
+    # even when the collector is healthy.
     since = _since_iso(24)
-    filt, params = _snapshot_filter(country, line)
-    row = db.execute(
-        f"SELECT COUNT(*) AS total, SUM(CASE WHEN queried_at >= ? THEN 1 ELSE 0 END) AS fresh{filt}",
-        [since, *params],
-    ).fetchone()
-    total = row["total"] or 0
-    if total == 0:
+    stores_in_catalog = _stores_for_country(country) if country else list(STORES.keys())
+    if not stores_in_catalog:
         return None
-    return round((row["fresh"] or 0) / total * 100, 2)
+    filt, params = _snapshot_filter(country, line)
+    rows = db.execute(
+        f"SELECT COUNT(DISTINCT store) AS fresh_stores{filt} AND queried_at >= ?",
+        [*params, since],
+    ).fetchone()
+    fresh = rows["fresh_stores"] or 0
+    return round(fresh / len(stores_in_catalog) * 100, 2)
 
 
 def compute_store_coverage(db, country: str | None = None, line: str | None = None) -> float | None:
