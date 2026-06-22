@@ -1,0 +1,226 @@
+From 180c007a048d152e3723d0a0e95e9c64debb1c09 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Mon, 22 Jun 2026 18:47:25 +0000
+Subject: [PATCH] fix(collector): wire index cycle, rotating catalog refresh,
+ bump core
+
+- Invoke certify_round after each collection run (daemon + one-shot)
+- Rotate full-catalog refresh across stores each cycle (CATALOG_STORES_PER_CYCLE)
+- Full catalog sweep every 6 cycles as safety net
+- Ship index_gate in collector Docker image for post-collect enrichment
+- Pin cli-market-core @ 90fefe1 (1.10.0 + stores_fresh_24h stats)
+---
+ Dockerfile.collector     |  2 +-
+ collect_prices.py        | 83 +++++++++++++++++++++++++++++++++++-----
+ railway.collector.toml   |  3 ++
+ requirements-railway.txt |  4 +-
+ 4 files changed, 79 insertions(+), 13 deletions(-)
+
+diff --git a/Dockerfile.collector b/Dockerfile.collector
+index b40e508..00d43b3 100644
+--- a/Dockerfile.collector
++++ b/Dockerfile.collector
+@@ -25,7 +25,7 @@ RUN set -eux; \
+     playwright install chromium; \
+     rm -f /root/.gitconfig
+ 
+-COPY collect_prices.py ./
++COPY collect_prices.py index_gate.py price_snapshots_schema.py collector_schema.py ./
+ 
+ ENV PYTHONUNBUFFERED=1
+ CMD ["python", "collect_prices.py", "--daemon"]
+diff --git a/collect_prices.py b/collect_prices.py
+index 80559fe..4d37a5b 100644
+--- a/collect_prices.py
++++ b/collect_prices.py
+@@ -42,6 +42,11 @@ QUERY_TIMEOUT = 15.0
+ DAEMON_INTERVAL = int(os.getenv("COLLECT_INTERVAL_HOURS", "4"))
+ MAX_QUERIES_PER_LINE = int(os.getenv("COLLECT_MAX_QUERIES_PER_LINE", "12"))
+ COLLECTOR_ADVISORY_LOCK = int(os.getenv("COLLECTOR_ADVISORY_LOCK", "84957231"))
++INDEX_COLLECT_ENABLED = os.getenv("INDEX_COLLECT_ENABLED", "1").strip().lower() not in (
++    "0",
++    "false",
++    "no",
++)
+ 
+ LINE_MAX_PRICE = {
+     "supermercados": 10_000,
+@@ -585,18 +590,20 @@ async def fetch_store_multi(client, store, term):
+ # ── Full catalog download ───────────────────────────────────────────────────
+ 
+ CATALOG_INTERVAL_MINS = int(os.getenv("COLLECT_CATALOG_INTERVAL", "60"))
++CATALOG_STORES_PER_CYCLE = int(os.getenv("CATALOG_STORES_PER_CYCLE", "10"))
+ _last_catalog_pull: float = 0.0
+ 
+ async def collect_full_catalog_pg(pool, store: str) -> int:
+-    from market_connectors.vtex import VtexConnector
++    from market_connectors import get_connector
+     from store_credentials import resolve_store_config
+ 
+     cfg = resolve_store_config(store)
+-    if cfg.get("platform") != "vtex":
++    platform = cfg.get("platform", "vtex")
++    if platform not in ("vtex", "woocommerce"):
+         return 0
+-    vtex = VtexConnector()
++    connector = get_connector(platform)
+     try:
+-        all_raw = await vtex.fetch_all_products(cfg, max_pages=20)
++        all_raw = await connector.fetch_all_products(cfg, max_pages=20)
+     except Exception as e:
+         logger.warning("full catalog %s: %s", store, str(e)[:80])
+         return 0
+@@ -605,7 +612,7 @@ async def collect_full_catalog_pg(pool, store: str) -> int:
+     line_name = LINES.get(line, {}).get("name", "")
+     async with pool.acquire() as conn:
+         for p in all_raw:
+-            prod = vtex.normalize(p, store, cfg)
++            prod = connector.normalize(p, store, cfg)
+             prod["line"] = line
+             prod["line_name"] = line_name
+             if prod.get("price", 0) <= 0:
+@@ -642,23 +649,45 @@ async def collect_full_catalog_pg(pool, store: str) -> int:
+             await asyncio.sleep(0.05)
+     return collected
+ 
+-async def run_full_catalog_pg(pool, stores: list[str]) -> int:
++async def run_full_catalog_pg(pool, stores: list[str], *, force: bool = False) -> int:
+     global _last_catalog_pull
+     from store_credentials import resolve_store_config
+ 
+     now = time.monotonic()
+-    if now - _last_catalog_pull < CATALOG_INTERVAL_MINS * 60:
++    if not force and now - _last_catalog_pull < CATALOG_INTERVAL_MINS * 60:
+         return 0
+     _last_catalog_pull = now
+     total = 0
+     for store in stores:
+-        if resolve_store_config(store).get("platform") != "vtex":
++        if resolve_store_config(store).get("platform") not in ("vtex", "woocommerce"):
+             continue
+         n = await collect_full_catalog_pg(pool, store)
+         print(f"    📦 {store}: {n:,} products (full catalog)")
+         total += n
+     return total
+ 
++
++async def run_rotating_catalog_pg(pool, stores: list[str], cycle: int) -> int:
++    """Refresh full catalog for a rotating subset each cycle — improves moat freshness without one huge batch."""
++    from store_credentials import resolve_store_config
++
++    eligible = [
++        s for s in stores
++        if resolve_store_config(s).get("platform") in ("vtex", "woocommerce")
++    ]
++    if not eligible:
++        return 0
++    batch_size = max(1, min(CATALOG_STORES_PER_CYCLE, len(eligible)))
++    start = (cycle * batch_size) % len(eligible)
++    batch = [eligible[(start + i) % len(eligible)] for i in range(batch_size)]
++    total = 0
++    for store in batch:
++        n = await collect_full_catalog_pg(pool, store)
++        if n:
++            print(f"    📦 {store}: {n:,} products (rotating catalog)")
++        total += n
++    return total
++
+ # ── Collector core ──────────────────────────────────────────────────────────
+ 
+ async def collect_one_pg(pool, store, queries):
+@@ -899,6 +928,29 @@ def do_report():
+         print()
+     db.close()
+ 
++def _run_index_cycle(prices_collected: int) -> None:
++    """Feed recent price_snapshots into the semantic index after a collection run."""
++    if not INDEX_COLLECT_ENABLED or prices_collected <= 0:
++        return
++    try:
++        from index_gate import certify_round
++
++        stats = certify_round(prices_collected)
++        resolved = stats.get("resolved", 0)
++        registry = stats.get("registry_size", 0)
++        linked = stats.get("linked", 0)
++        if resolved:
++            print(
++                f"  🧠 Index: {resolved} snapshots resolved, {linked} linked → "
++                f"{registry:,} Golden Records "
++                f"({stats.get('exact', 0)} exact, {stats.get('auto', 0)} new)"
++            )
++        else:
++            logger.info("Index cycle: 0 snapshots resolved (registry=%d)", registry)
++    except Exception as exc:
++        print(f"  ⚠ Index cycle skipped: {exc}")
++        logger.warning("Index cycle failed: %s", exc)
++
+ # ── Main ────────────────────────────────────────────────────────────────────
+ 
+ async def main():
+@@ -964,6 +1016,7 @@ async def main():
+                 )
+                 if errs:
+                     print(f"    (see full logs for the {errs} error(s); top ones in collector_runs.errors)")
++                _run_index_cycle(r.get("prices_collected", 0))
+                 # Evaluate price alerts after every collection cycle
+                 try:
+                     from market_alerts import evaluate_alerts
+@@ -973,9 +1026,13 @@ async def main():
+                 except Exception as _ae:
+                     print(f"  ⚠ Alert evaluation skipped: {_ae}")
+                 if USE_PG and pool:
+-                    cat_count = await run_full_catalog_pg(pool, stores)
++                    cat_count = await run_rotating_catalog_pg(pool, stores, cycle)
+                     if cat_count:
+-                        print(f"  📦 Full catalog: {cat_count:,} new products")
++                        print(f"  📦 Rotating catalog: {cat_count:,} products refreshed")
++                    elif cycle % 6 == 0:
++                        cat_count = await run_full_catalog_pg(pool, stores, force=True)
++                        if cat_count:
++                            print(f"  📦 Full catalog sweep: {cat_count:,} products refreshed")
+                     # Refresh enrichment indicators every 6 cycles (24h) for all countries
+                     if cycle % 6 == 0:
+                         try:
+@@ -1028,6 +1085,12 @@ async def main():
+         print(f"🔍 {label} | {len(stores)} stores × {len(queries)} queries (seed+feedback)")
+         t0=time.monotonic(); r=await run_collection(stores, queries)
+         print(f"  ✓ {r['prices_collected']:,} prices | {r['stores_succeeded']}/{r['stores_attempted']} stores | {time.monotonic()-t0:.1f}s | {r['errors']} errors")
++        _run_index_cycle(r.get("prices_collected", 0))
++        if USE_PG:
++            pool = await get_pool()
++            cat_count = await run_rotating_catalog_pg(pool, stores, 0)
++            if cat_count:
++                print(f"  📦 Rotating catalog: {cat_count:,} products refreshed")
+         do_status()
+ 
+ if __name__ == "__main__":
+diff --git a/railway.collector.toml b/railway.collector.toml
+index 7323a9e..f468160 100644
+--- a/railway.collector.toml
++++ b/railway.collector.toml
+@@ -10,6 +10,9 @@ builder = "DOCKERFILE"
+ dockerfilePath = "Dockerfile.collector"
+ watchPatterns = [
+   "collect_prices.py",
++  "index_gate.py",
++  "price_snapshots_schema.py",
++  "collector_schema.py",
+   "market_stores.py",
+   "market_core.py",
+   "market_db.py",
+diff --git a/requirements-railway.txt b/requirements-railway.txt
+index 5de0642..40dfedf 100644
+--- a/requirements-railway.txt
++++ b/requirements-railway.txt
+@@ -1,5 +1,5 @@
+-# Shared core library — PyPI (reproducible pin via == in production if needed).
+-cli-market-core==1.9.44
++# Pinned to git until 1.10.0 is published to PyPI (includes Sprint 1–3 intel + envelope).
++cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@90fefe1
+ 
+ # Semantic moat — Golden Record persistence (SQLite dev / Postgres prod).
+ cli-market-index[postgres] @ git+https://github.com/Treevu-ai/cli-market-index@9d050131e9e5b16381581d1916e386f34d319ca6
+-- 
+2.43.0
+

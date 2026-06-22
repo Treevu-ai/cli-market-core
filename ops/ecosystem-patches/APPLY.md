@@ -2,6 +2,26 @@
 
 Los patches viven en **cli-market-core** (`ops/ecosystem-patches/`), rama `cursor/ecosystem-fixes-p0-p2-e95e` o `main` tras merge PR #38.
 
+## Por qué no aparece el PR en GitHub
+
+`cursor[bot]` **no tiene permisos de push** en `cli-market-world`, `cli-market-content` ni `procure-copilot`. Los commits existen solo en el agente local hasta que **tú** ejecutes el script de deploy desde tu máquina (con tu cuenta GitHub).
+
+Además, la rama remota `cursor/collector-p0-world-e95e` en world es **vieja** (23 commits detrás de `main`, sin cambios del collector). Usa la rama nueva `cursor/collector-index-rotate-p0-e95e`.
+
+### P0 collector (world) — un solo comando
+
+```powershell
+# Windows — desde carpeta padre (ej. C:\Users\acuba\Treevu-ai):
+powershell -ExecutionPolicy Bypass -File cli-market-core\ops\ecosystem-patches\deploy-collector-world.ps1
+```
+
+```bash
+# Linux/macOS:
+bash cli-market-core/ops/ecosystem-patches/deploy-collector-world.sh
+```
+
+Luego abre el PR: https://github.com/Treevu-ai/cli-market-world/compare/main...cursor/collector-index-rotate-p0-e95e
+
 ## ⚠️ No mezclar patches entre repos
 
 Cada `.patch` es **solo para un repo**. Si aplicas el patch equivocado (ej. backend en world), verás archivos que no corresponden.
