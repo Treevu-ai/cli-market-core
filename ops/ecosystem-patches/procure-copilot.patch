@@ -1,0 +1,129 @@
+From 00ec5c40ded761d912762ec14a8fff75359bb299 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Mon, 22 Jun 2026 16:46:16 +0000
+Subject: [PATCH] feat(billing): add PayPal checkout success/cancel pages and
+ sync market stats
+
+Completes return URLs from /api/checkout/create for self-serve subscription flow.
+---
+ app/checkout/cancel/page.tsx  | 35 +++++++++++++++++++++++++++++
+ app/checkout/success/page.tsx | 42 +++++++++++++++++++++++++++++++++++
+ lib/market-stats.ts           |  6 ++---
+ 3 files changed, 80 insertions(+), 3 deletions(-)
+ create mode 100644 app/checkout/cancel/page.tsx
+ create mode 100644 app/checkout/success/page.tsx
+
+diff --git a/app/checkout/cancel/page.tsx b/app/checkout/cancel/page.tsx
+new file mode 100644
+index 0000000..712a179
+--- /dev/null
++++ b/app/checkout/cancel/page.tsx
+@@ -0,0 +1,35 @@
++import Link from "next/link";
++import type { Metadata } from "next";
++
++export const metadata: Metadata = {
++  title: "Pago cancelado — Procure Copilot",
++  description: "El checkout de Procure Copilot fue cancelado.",
++};
++
++export default function CheckoutCancelPage() {
++  return (
++    <main className="min-h-screen bg-[#0a0f0d] text-[#e8f5f0] flex items-center justify-center p-6">
++      <div className="max-w-lg w-full rounded-2xl border border-[#1e2e28] bg-[#0f1613] p-8 text-center">
++        <p className="text-[#3afecf] text-sm font-mono mb-2">PROCURE COPILOT</p>
++        <h1 className="text-2xl font-semibold mb-3">Checkout cancelado</h1>
++        <p className="text-[#b9cac2] mb-6">
++          No se realizó ningún cargo. Puedes volver a comparar planes o contactarnos si necesitas ayuda.
++        </p>
++        <div className="flex flex-col sm:flex-row gap-3 justify-center">
++          <Link
++            href="/procure"
++            className="inline-flex items-center justify-center rounded-lg bg-[#3afecf] px-5 py-2.5 text-sm font-medium text-[#0a0f0d]"
++          >
++            Ver planes
++          </Link>
++          <Link
++            href="/dashboard"
++            className="inline-flex items-center justify-center rounded-lg border border-[#2a3d36] px-5 py-2.5 text-sm text-[#e8f5f0]"
++          >
++            Dashboard
++          </Link>
++        </div>
++      </div>
++    </main>
++  );
++}
+diff --git a/app/checkout/success/page.tsx b/app/checkout/success/page.tsx
+new file mode 100644
+index 0000000..e904ed4
+--- /dev/null
++++ b/app/checkout/success/page.tsx
+@@ -0,0 +1,42 @@
++import Link from "next/link";
++import type { Metadata } from "next";
++
++export const metadata: Metadata = {
++  title: "Pago confirmado — Procure Copilot",
++  description: "Tu suscripción Procure Copilot está en proceso de activación.",
++};
++
++export default function CheckoutSuccessPage() {
++  return (
++    <main className="min-h-screen bg-[#0a0f0d] text-[#e8f5f0] flex items-center justify-center p-6">
++      <div className="max-w-lg w-full rounded-2xl border border-[#1e2e28] bg-[#0f1613] p-8 text-center">
++        <p className="text-[#3afecf] text-sm font-mono mb-2">PROCURE COPILOT</p>
++        <h1 className="text-2xl font-semibold mb-3">Pago recibido</h1>
++        <p className="text-[#b9cac2] mb-6">
++          Gracias por suscribirte. En unos minutos activaremos tu plan en CLI Market.
++          Si ya tienes cuenta, inicia sesión en el dashboard con tu API key.
++        </p>
++        <div className="flex flex-col sm:flex-row gap-3 justify-center">
++          <Link
++            href="/dashboard"
++            className="inline-flex items-center justify-center rounded-lg bg-[#3afecf] px-5 py-2.5 text-sm font-medium text-[#0a0f0d]"
++          >
++            Ir al dashboard
++          </Link>
++          <Link
++            href="/procure"
++            className="inline-flex items-center justify-center rounded-lg border border-[#2a3d36] px-5 py-2.5 text-sm text-[#e8f5f0]"
++          >
++            Volver a Procure
++          </Link>
++        </div>
++        <p className="mt-6 text-xs text-[#889992]">
++          ¿Problemas con la activación?{" "}
++          <a href="mailto:hello@cli-market.dev" className="text-[#3afecf]">
++            hello@cli-market.dev
++          </a>
++        </p>
++      </div>
++    </main>
++  );
++}
+diff --git a/lib/market-stats.ts b/lib/market-stats.ts
+index 68077d2..d7d7972 100644
+--- a/lib/market-stats.ts
++++ b/lib/market-stats.ts
+@@ -1,14 +1,14 @@
+-// AUTO-GENERATED — do not edit. Run: python3 ops/sync_market_stats.py in cli-market-world
++// AUTO-GENERATED — do not edit. Run: python3 ops/sync_market_stats.py
+ 
+ export const CLI_MARKET_STATS = {
+   retailersDefined: 81,
+   retailersVerified: 41,
+   countries: 8,
+   mcpTools: 27,
+-  pricesVerifiedLabel: "61,000+",
++  pricesVerifiedLabel: "62,000+",
+   pricesRefreshHours: 4,
+   apiBaseUrl: "https://cli-market-production.up.railway.app",
+   retailersPhraseEs: "81 retailers, 41 verificados activos",
+   retailersPhraseEn: "81 retailers, 41 verified active",
+-  heroBadgeEs: "41 retailers verificados · 8 países · 27 MCP tools",
++  heroBadgeEs: "41 retailers verificados \u00b7 8 pa\u00edses \u00b7 27 MCP tools",
+ } as const;
+-- 
+2.43.0
+

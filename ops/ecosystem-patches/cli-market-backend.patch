@@ -1,0 +1,140 @@
+From 19e17cfd6ccf12555ea848aebff5eaad9909d598 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Mon, 22 Jun 2026 16:46:16 +0000
+Subject: [PATCH] fix(collector): wire index cycle, rotating catalog refresh,
+ bump core to 1.10.0
+
+- Invoke certify_round after each collection run (daemon + one-shot)
+- Rotate full-catalog refresh across stores each cycle (CATALOG_STORES_PER_CYCLE)
+- Full catalog sweep every 6 cycles as safety net
+- Ship index_gate in collector Docker image for post-collect enrichment
+- Pin cli-market-core @ d4b8061 (Sprint 1-3 intel + envelope)
+---
+ Dockerfile.collector   |  2 +-
+ collect_prices.py      | 38 ++++++++++++++++++++++++++++++++++++--
+ railway.collector.toml |  3 +++
+ requirements.txt       |  2 +-
+ 4 files changed, 41 insertions(+), 4 deletions(-)
+
+diff --git a/Dockerfile.collector b/Dockerfile.collector
+index 9464f8b..7c8b33b 100644
+--- a/Dockerfile.collector
++++ b/Dockerfile.collector
+@@ -29,7 +29,7 @@ RUN set -eux; \
+     playwright install chromium; \
+     rm -f /root/.gitconfig
+ 
+-COPY collect_prices.py ./
++COPY collect_prices.py index_gate.py price_snapshots_schema.py collector_schema.py ./
+ 
+ ENV PYTHONUNBUFFERED=1
+ CMD ["python", "collect_prices.py", "--daemon"]
+\ No newline at end of file
+diff --git a/collect_prices.py b/collect_prices.py
+index a3a124c..cad63df 100644
+--- a/collect_prices.py
++++ b/collect_prices.py
+@@ -667,6 +667,7 @@ async def fetch_store_multi(client, store, term):
+ # ── Full catalog download ───────────────────────────────────────────────────
+ 
+ CATALOG_INTERVAL_MINS = int(os.getenv("COLLECT_CATALOG_INTERVAL", "60"))
++CATALOG_STORES_PER_CYCLE = int(os.getenv("CATALOG_STORES_PER_CYCLE", "10"))
+ _last_catalog_pull: float = 0.0
+ 
+ async def collect_full_catalog_pg(pool, store: str) -> int:
+@@ -743,6 +744,28 @@ async def run_full_catalog_pg(pool, stores: list[str], *, force: bool = False) -
+     return total
+ 
+ 
++async def run_rotating_catalog_pg(pool, stores: list[str], cycle: int) -> int:
++    """Refresh full catalog for a rotating subset each cycle — improves moat freshness without one huge batch."""
++    from store_credentials import resolve_store_config
++
++    eligible = [
++        s for s in stores
++        if resolve_store_config(s).get("platform") in ("vtex", "woocommerce")
++    ]
++    if not eligible:
++        return 0
++    batch_size = max(1, min(CATALOG_STORES_PER_CYCLE, len(eligible)))
++    start = (cycle * batch_size) % len(eligible)
++    batch = [eligible[(start + i) % len(eligible)] for i in range(batch_size)]
++    total = 0
++    for store in batch:
++        n = await collect_full_catalog_pg(pool, store)
++        if n:
++            print(f"    📦 {store}: {n:,} products (rotating catalog)")
++        total += n
++    return total
++
++
+ 
+ async def force_catalog_stores(stores: list[str]) -> dict:
+     """Bypass catalog interval and upsert full catalog for given stores."""
+@@ -1112,6 +1135,7 @@ async def main():
+                     f"responded {responded}/{attempted} | "
+                     f"{time.monotonic()-t0:.1f}s | {r['errors']} errors"
+                 )
++                _run_index_cycle(r.get("prices_collected", 0))
+                 # Evaluate price alerts after every collection cycle
+                 try:
+                     from market_alerts import evaluate_alerts
+@@ -1121,9 +1145,13 @@ async def main():
+                 except Exception as _ae:
+                     print(f"  ⚠ Alert evaluation skipped: {_ae}")
+                 if USE_PG and pool:
+-                    cat_count = await run_full_catalog_pg(pool, stores)
++                    cat_count = await run_rotating_catalog_pg(pool, stores, cycle)
+                     if cat_count:
+-                        print(f"  📦 Full catalog: {cat_count:,} new products")
++                        print(f"  📦 Rotating catalog: {cat_count:,} products refreshed")
++                    elif cycle % 6 == 0:
++                        cat_count = await run_full_catalog_pg(pool, stores, force=True)
++                        if cat_count:
++                            print(f"  📦 Full catalog sweep: {cat_count:,} products refreshed")
+                     # Refresh enrichment indicators every 6 cycles (24h) for all countries
+                     if cycle % 6 == 0:
+                         try:
+@@ -1181,6 +1209,12 @@ async def main():
+             f"  ✓ {r['prices_collected']:,} prices | yield {yielded}/{r['stores_attempted']} | "
+             f"responded {responded}/{r['stores_attempted']} | {time.monotonic()-t0:.1f}s | {r['errors']} errors"
+         )
++        _run_index_cycle(r.get("prices_collected", 0))
++        if USE_PG:
++            pool = await get_pool()
++            cat_count = await run_rotating_catalog_pg(pool, stores, 0)
++            if cat_count:
++                print(f"  📦 Rotating catalog: {cat_count:,} products refreshed")
+         do_status()
+ 
+ if __name__ == "__main__":
+diff --git a/railway.collector.toml b/railway.collector.toml
+index e7b4c86..8193a11 100644
+--- a/railway.collector.toml
++++ b/railway.collector.toml
+@@ -12,6 +12,9 @@ dockerfilePath = "Dockerfile.collector"
+ # so a core bump = a requirements.txt change = a collector redeploy.
+ watchPatterns = [
+   "collect_prices.py",
++  "index_gate.py",
++  "price_snapshots_schema.py",
++  "collector_schema.py",
+   "requirements.txt",
+   "requirements-private.txt",
+   "Dockerfile.collector",
+diff --git a/requirements.txt b/requirements.txt
+index 00d75e2..184dc75 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,7 +1,7 @@
+ # Public PyPI deps only — GitHub dependency graph / auto-submission read this file.
+ # Private cli-market-index pin lives in requirements-private.txt (Docker + local dev).
+ # Pinned to git until 1.10.0 is published to PyPI (includes api_routes module).
+-cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@48b8305
++cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@d4b8061
+ 
+ # Runtime / dev deps not pulled in transitively by cli-market-core.
+ playwright>=1.45.0
+-- 
+2.43.0
+
