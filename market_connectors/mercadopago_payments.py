@@ -279,3 +279,182 @@ def parse_external_order_id(external_reference: str) -> str | None:
     if idx >= 0:
         return upper[idx : idx + 12]
     return None
+
+
+# ── MercadoPago Card Tokenization ────────────────────────────────────────────
+# Enables embedded card payment without redirect to MP Checkout Pro.
+# Flow: frontend collects card_token_id via MercadoPago.js SDK
+#       → POST /v1/payments with token (server-side)
+# Also supports saved cards via customer_id for returning buyers.
+
+
+async def create_card_payment(
+    card_token_id: str,
+    amount: float,
+    *,
+    currency: str = "PEN",
+    description: str = "CLI Market",
+    payer_email: str = "",
+    installments: int = 1,
+    external_reference: str = "",
+) -> dict[str, Any]:
+    """Process a card payment using a MercadoPago card token.
+
+    The card_token_id comes from the MercadoPago.js frontend SDK
+    (cardForm.createCardToken or mp.createCardToken). This avoids
+    the buyer being redirected to Checkout Pro.
+    """
+    body: dict[str, Any] = {
+        "transaction_amount": float(amount),
+        "token": card_token_id,
+        "description": description[:256],
+        "installments": max(1, installments),
+        "payment_method_id": "",  # auto-detected from token
+        "statement_descriptor": "CLI MARKET",
+    }
+    if currency:
+        body["currency_id"] = currency.upper()
+    if payer_email:
+        body["payer"] = {"email": payer_email}
+    if external_reference:
+        body["external_reference"] = external_reference[:256]
+    body["notification_url"] = notification_url()
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        resp = await client.post(
+            f"{MP_API}/v1/payments",
+            json=body,
+            headers=_auth_headers(),
+        )
+        if resp.status_code not in (200, 201):
+            return {"error": resp.text[:300], "status": resp.status_code}
+        data = resp.json()
+        return {
+            "payment_id": data.get("id"),
+            "status": data.get("status"),
+            "status_detail": data.get("status_detail"),
+            "payment_method_id": data.get("payment_method_id"),
+            "card_last_four": (data.get("card") or {}).get("last_four_digits"),
+            "installments": data.get("installments"),
+            "amount": data.get("transaction_amount"),
+            "external_reference": data.get("external_reference"),
+        }
+
+
+async def save_card_for_customer(
+    card_token_id: str,
+    customer_id: str,
+) -> dict[str, Any]:
+    """Save a card to a MercadoPago customer for future one-click payments.
+
+    Requires an existing MP customer_id (from create_customer or previous save).
+    """
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            f"{MP_API}/v1/customers/{customer_id}/cards",
+            json={"token": card_token_id},
+            headers=_auth_headers(),
+        )
+        if resp.status_code not in (200, 201):
+            return {"error": resp.text[:300], "status": resp.status_code}
+        data = resp.json()
+        return {
+            "card_id": data.get("id"),
+            "last_four": data.get("last_four_digits"),
+            "expiration_month": data.get("expiration_month"),
+            "expiration_year": data.get("expiration_year"),
+            "payment_method_id": (data.get("payment_method") or {}).get("id"),
+            "issuer_name": (data.get("issuer") or {}).get("name"),
+        }
+
+
+async def create_customer(email: str, description: str = "") -> dict[str, Any]:
+    """Create a MercadoPago customer for card vault / saved cards."""
+    body: dict[str, Any] = {"email": email}
+    if description:
+        body["description"] = description[:256]
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            f"{MP_API}/v1/customers",
+            json=body,
+            headers=_auth_headers(),
+        )
+        if resp.status_code not in (200, 201):
+            return {"error": resp.text[:300], "status": resp.status_code}
+        data = resp.json()
+        return {
+            "customer_id": data.get("id"),
+            "email": data.get("email"),
+        }
+
+
+async def list_customer_cards(customer_id: str) -> dict[str, Any]:
+    """List saved cards for a MercadoPago customer."""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            f"{MP_API}/v1/customers/{customer_id}/cards",
+            headers=_auth_headers(),
+        )
+        if resp.status_code != 200:
+            return {"error": resp.text[:300], "status": resp.status_code}
+        cards = resp.json()
+        return {
+            "customer_id": customer_id,
+            "cards": [
+                {
+                    "card_id": c.get("id"),
+                    "last_four": c.get("last_four_digits"),
+                    "expiration_month": c.get("expiration_month"),
+                    "expiration_year": c.get("expiration_year"),
+                    "payment_method_id": (c.get("payment_method") or {}).get("id"),
+                }
+                for c in (cards if isinstance(cards, list) else [])
+            ],
+        }
+
+
+async def charge_saved_card(
+    card_id: str,
+    customer_id: str,
+    amount: float,
+    *,
+    currency: str = "PEN",
+    description: str = "CLI Market",
+    external_reference: str = "",
+) -> dict[str, Any]:
+    """Charge a previously saved card — no card_token needed.
+
+    Uses the saved card_id + customer_id for one-click recurring payment.
+    """
+    body: dict[str, Any] = {
+        "transaction_amount": float(amount),
+        "description": description[:256],
+        "payment_method_id": "",  # auto-detected
+        "payer": {
+            "id": customer_id,
+        },
+        "token": card_id,
+        "installments": 1,
+        "statement_descriptor": "CLI MARKET",
+    }
+    if currency:
+        body["currency_id"] = currency.upper()
+    if external_reference:
+        body["external_reference"] = external_reference[:256]
+    body["notification_url"] = notification_url()
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        resp = await client.post(
+            f"{MP_API}/v1/payments",
+            json=body,
+            headers=_auth_headers(),
+        )
+        if resp.status_code not in (200, 201):
+            return {"error": resp.text[:300], "status": resp.status_code}
+        data = resp.json()
+        return {
+            "payment_id": data.get("id"),
+            "status": data.get("status"),
+            "status_detail": data.get("status_detail"),
+            "amount": data.get("transaction_amount"),
+        }

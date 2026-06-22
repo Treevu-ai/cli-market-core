@@ -297,6 +297,8 @@ WEBHOOK_EVENT_TYPES = [
     "CHECKOUT.ORDER.APPROVED",
     "CHECKOUT.ORDER.COMPLETED",
     "PAYMENT.CAPTURE.COMPLETED",
+    "VAULT.PAYMENT-TOKEN.CREATED",
+    "VAULT.PAYMENT-TOKEN.DELETED",
 ]
 
 
@@ -369,3 +371,175 @@ async def check_connection() -> dict:
         "starter_plan_id_env": PAYPAL_STARTER_PLAN_ID or None,
         "webhook_id_env": PAYPAL_WEBHOOK_ID or None,
     }
+
+
+# ── PayPal Vault (payment tokenization) ─────────────────────────────────────
+# Allows storing a payment method and charging it later without redirect.
+# Flow: create_vault_setup_token → buyer approves → create_vault_payment_token
+#       → charge_vault_payment_token (recurring/one-click)
+
+
+async def create_vault_setup_token(
+    *,
+    return_url: str = "https://cli-market.dev?vault=success",
+    cancel_url: str = "https://cli-market.dev?vault=cancelled",
+    customer_id: str = "",
+) -> dict:
+    """Create a Vault setup token — buyer approves to save payment method.
+
+    Returns setup_token_id and approve_url. Buyer visits approve_url,
+    then we call create_vault_payment_token to finalize.
+    """
+    token = await _get_access_token()
+    body: dict = {
+        "payment_source": {
+            "paypal": {
+                "usage_type": "MERCHANT",
+                "experience_context": {
+                    "return_url": return_url,
+                    "cancel_url": cancel_url,
+                    "brand_name": "CLI Market",
+                    "shipping_preference": "NO_SHIPPING",
+                    "vault_instruction": "ON_CREATE_PAYMENT_TOKENS",
+                },
+            },
+        },
+    }
+    if customer_id:
+        body["customer"] = {"id": customer_id}
+    resp = await request_with_retry(
+        "POST",
+        f"{PAYPAL_API}/v3/vault/setup-tokens",
+        timeout=15.0,
+        label="paypal_vault_setup",
+        json=body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+    )
+    if resp.status_code in (200, 201):
+        data = resp.json()
+        approve_link = next(
+            (l["href"] for l in data.get("links", []) if l["rel"] == "approve"),
+            None,
+        )
+        return {
+            "setup_token_id": data.get("id"),
+            "status": data.get("status"),
+            "approve_url": approve_link,
+        }
+    return {"error": f"Vault setup failed: {resp.text[:300]}", "status": resp.status_code}
+
+
+async def create_vault_payment_token(setup_token_id: str) -> dict:
+    """Finalize vault — exchange setup token for a reusable payment token.
+
+    Call after buyer approves the setup token.
+    Returns payment_token_id that can be charged without redirect.
+    """
+    token = await _get_access_token()
+    body = {
+        "payment_source": {
+            "token": {
+                "id": setup_token_id,
+                "type": "SETUP_TOKEN",
+            },
+        },
+    }
+    resp = await request_with_retry(
+        "POST",
+        f"{PAYPAL_API}/v3/vault/payment-tokens",
+        timeout=15.0,
+        label="paypal_vault_payment_token",
+        json=body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+    )
+    if resp.status_code in (200, 201):
+        data = resp.json()
+        return {
+            "payment_token_id": data.get("id"),
+            "status": data.get("status"),
+            "customer_id": (data.get("customer") or {}).get("id"),
+        }
+    return {"error": f"Vault token failed: {resp.text[:300]}", "status": resp.status_code}
+
+
+async def charge_vault_payment_token(
+    payment_token_id: str,
+    amount: float,
+    currency: str = "USD",
+    reference: str = "",
+) -> dict:
+    """Charge a vaulted payment method — no buyer redirect needed.
+
+    Used for recurring billing, one-click reorders, and subscription renewals.
+    """
+    token = await _get_access_token()
+    body = {
+        "intent": "CAPTURE",
+        "purchase_units": [{
+            "amount": {"currency_code": currency, "value": f"{amount:.2f}"},
+            "reference_id": reference or "cli-market-vault-charge",
+            "description": f"CLI Market — {reference}",
+        }],
+        "payment_source": {
+            "paypal": {
+                "vault_id": payment_token_id,
+            },
+        },
+    }
+    resp = await request_with_retry(
+        "POST",
+        f"{PAYPAL_API}/v2/checkout/orders",
+        timeout=15.0,
+        label="paypal_vault_charge",
+        json=body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+    )
+    if resp.status_code in (200, 201):
+        data = resp.json()
+        return {
+            "ok": True,
+            "order_id": data["id"],
+            "status": data.get("status"),
+            "payment_token_id": payment_token_id,
+        }
+    return {"ok": False, "error": resp.text[:300], "status": resp.status_code}
+
+
+async def list_vault_payment_tokens(customer_id: str) -> dict:
+    """List all vaulted payment tokens for a customer."""
+    token = await _get_access_token()
+    resp = await request_with_retry(
+        "GET",
+        f"{PAYPAL_API}/v3/vault/payment-tokens?customer_id={customer_id}",
+        timeout=15.0,
+        label="paypal_vault_list",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    if resp.status_code == 200:
+        data = resp.json()
+        return {"tokens": data.get("payment_tokens", []), "customer_id": customer_id}
+    return {"error": resp.text[:300], "status": resp.status_code}
+
+
+async def delete_vault_payment_token(payment_token_id: str) -> dict:
+    """Delete a vaulted payment token."""
+    token = await _get_access_token()
+    resp = await request_with_retry(
+        "DELETE",
+        f"{PAYPAL_API}/v3/vault/payment-tokens/{payment_token_id}",
+        timeout=15.0,
+        label="paypal_vault_delete",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    if resp.status_code in (200, 204):
+        return {"ok": True, "deleted": payment_token_id}
+    return {"ok": False, "error": resp.text[:300], "status": resp.status_code}
