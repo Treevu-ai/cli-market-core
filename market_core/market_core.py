@@ -35,6 +35,16 @@ if USE_PG:
         logger_pg = logging.getLogger("market.pg")
         logger_pg.info("Using PostgreSQL backend")
     except ImportError:
+        _is_prod = (
+            os.getenv("RAILWAY_ENVIRONMENT", "").lower() == "production"
+            or os.getenv("MARKET_ENV", "").lower() == "production"
+        )
+        if _is_prod:
+            raise RuntimeError(
+                "DATABASE_URL is set but psycopg2 is not installed in production. "
+                "This would silently fall back to an empty SQLite database, causing data loss. "
+                "Install psycopg2-binary or fix DATABASE_URL."
+            )
         logging.getLogger("market").error(
             "DATABASE_URL is set but psycopg2 is not installed. "
             "Install: pip install psycopg2-binary. Falling back to SQLite."
