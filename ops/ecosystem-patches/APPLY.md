@@ -28,7 +28,32 @@ grep run_rotating_catalog collect_prices.py   # world: no (0 matches)
 grep mcpTools landing/lib/marketStats.ts      # world: mcpTools: 27
 ```
 
-### Si aplicaste el patch equivocado
+### Si la rama remota quedó vieja (push devuelve OK pero GitHub sigue en False)
+
+Usa una **rama nueva** `cursor/ecosystem-p0-p2-v2-e95e` y push con `--force`:
+
+```powershell
+# Windows — desde carpeta padre de los repos:
+powershell -ExecutionPolicy Bypass -File cli-market-core\ops\ecosystem-patches\deploy-v2.ps1
+```
+
+```bash
+# Linux/macOS:
+bash cli-market-core/ops/ecosystem-patches/deploy-v2.sh
+```
+
+Diagnóstico manual si `git push` falla:
+
+```powershell
+git remote -v                    # debe ser Treevu-ai/<repo>
+git status
+git log -1 --oneline
+git push -u origin <rama> --force 2>&1
+```
+
+Si `git am` falla, copia el error completo — el patch aplica limpio sobre `main` actual (verificado 2026-06-22).
+
+---
 
 ```bash
 cd <repo-afectado>
