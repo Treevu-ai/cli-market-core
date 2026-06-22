@@ -1,0 +1,287 @@
+From f0496a212c930904a1330102de7e6ac404dfa949 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Mon, 22 Jun 2026 16:46:16 +0000
+Subject: [PATCH] docs(procure): align outbound pricing with plans.ts ($29
+ Compare / $79 Ops)
+
+Rewrite feature matrix from code source of truth; fix procure sequences
+that mixed CLI Market Build Pro pricing with Procure Copilot plans.
+---
+ commercial/procure-copilot-feature-matrix.md | 192 ++++---------------
+ devto/devto-01-commerce-infrastructure.md    |   2 +-
+ outbound/procure-sequences.md                |  10 +-
+ 3 files changed, 39 insertions(+), 165 deletions(-)
+
+diff --git a/commercial/procure-copilot-feature-matrix.md b/commercial/procure-copilot-feature-matrix.md
+index 315f2ae..4a5da78 100644
+--- a/commercial/procure-copilot-feature-matrix.md
++++ b/commercial/procure-copilot-feature-matrix.md
+@@ -1,184 +1,58 @@
+ ---
+-title: Feature Matrix — Procure Copilot (Starter / Pro / Business)
++title: Feature Matrix — Procure Copilot (Compare / Ops / Scale)
+ type: feature-matrix
+ audience: procurement
+-status: draft
+-date: 2026-06-14
++status: active
++date: 2026-06-22
+ canonical: GTM-Hub.md
++source_of_truth: procure-copilot/lib/plans.ts
+ ---
+ 
+ # Procure Copilot — Matriz de Features por Plan
+ 
+-**Para comparar planes antes de suscribirse o presentar en sales calls**
++**Fuente de verdad:** `procure-copilot/lib/plans.ts` — alineado con código, no aspiracional.
+ 
+ ---
+ 
+ ## Comparativa rápida
+ 
+-| | **Starter** | **Pro** | **Business** |
+-|--|------------|---------|--------------|
+-| **Precio** | $29/mes | $39/mes | $149/mes |
+-| **Pago anual** | $23/mes (20% off) | $31/mes | $119/mes |
+-| **Usuarios** | 1 | 5 | 10 |
+-| **Búsquedas/día** | 50 | 500 | 2,000 |
+-| **Ideal para** | Dueño de restaurante | Cadena pequeña / hotel boutique | Cadena mediana / agroindustrial |
++| | **Free** | **Compare** | **Ops** | **Scale** |
++|--|----------|-------------|---------|-----------|
++| **Slug** | `free` | `starter` | `pro` | `builder` |
++| **Precio** | $0 | **$29/mes** | **$79/mes** | **$149/mes** |
++| **Procurement/mes** | 5 | 20 | 200 | 1,000 |
++| **Productos por búsqueda** | 3 | 5 | 20 | 50 |
++| **Retailers comparados** | 2 | 3 | 10 | 20 |
++| **Países** | 1 | 1 | 3 | 8 |
++| **Checkout integrado** | No | No | Sí | Sí |
++| **Flujo de aprobación** | No | No | Sí | Sí |
++| **Stock + delivery** | No | No | Sí | Sí |
++| **Historial precios** | 7d | 7d | 12m | completo |
++| **SLA** | best-effort | best-effort | 99.5% | 99.5% |
+ 
+----
+-
+-## Features por categoría
+-
+-### 🛒 Comparación de canastas
+-
+-| Feature | Starter | Pro | Business |
+-|---------|---------|-----|----------|
+-| Basket comparison (comparar canasta completa) | ✅ | ✅ | ✅ |
+-| Productos por canasta | Hasta 20 | Hasta 50 | Ilimitado |
+-| Retailers comparados simultáneamente | 5 | 15 | 38 (todos) |
+-| Canastas guardadas | 3 | 20 | Ilimitado |
+-| Comparación multi-país | ❌ | ✅ (8 países) | ✅ (8 países) |
+-| Comparación en moneda local vs USD | ❌ | ✅ | ✅ |
+-
+----
+-
+-### 🔔 Alertas de precio
+-
+-| Feature | Starter | Pro | Business |
+-|---------|---------|-----|----------|
+-| Alertas de precio activas | 5 | 50 | Ilimitado |
+-| Canal de alerta — Email | ✅ | ✅ | ✅ |
+-| Canal de alerta — WhatsApp | ❌ | ✅ | ✅ |
+-| Canal de alerta — Webhook/API | ❌ | ❌ | ✅ |
+-| Frecuencia de chequeo de alertas | 6h | 2h | 30min |
+-| Alerta de subida (precio sube de umbral) | ✅ | ✅ | ✅ |
+-| Alerta de bajada (precio baja de umbral) | ✅ | ✅ | ✅ |
+-| Alerta de out-of-stock | ❌ | ✅ | ✅ |
+-| Digest diario por email | ✅ | ✅ | ✅ |
+-
+----
+-
+-### 📊 Analytics y reportes
+-
+-| Feature | Starter | Pro | Business |
+-|---------|---------|-----|----------|
+-| Historial de precios | 7 días | 30 días | 12 meses |
+-| Spread analysis (% diferencia entre retailers) | Básico | Completo | Completo |
+-| Tendencia de precio (gráficas) | ❌ | ✅ | ✅ |
+-| Análisis de estacionalidad | ❌ | ❌ | ✅ |
+-| Presupuesto tracking (alerta si superas budget) | ❌ | ✅ | ✅ |
+-| Dashboard multi-usuario compartido | ❌ | ✅ | ✅ |
+-| Reporte semanal automático | ❌ | ✅ | ✅ |
+-| Reporte personalizado | ❌ | ❌ | ✅ |
+-
+----
+-
+-### 📥 Exportación e integración
+-
+-| Feature | Starter | Pro | Business |
+-|---------|---------|-----|----------|
+-| Export CSV | ✅ | ✅ | ✅ |
+-| Export Excel (.xlsx) | ✅ | ✅ | ✅ |
+-| Export JSON | ❌ | ✅ | ✅ |
+-| Export Parquet | ❌ | ❌ | ✅ |
+-| API access (REST) | ❌ | ✅ (500 req/día) | ✅ (2,000 req/día) |
+-| Webhook para sistemas externos | ❌ | ❌ | ✅ |
+-| Integración con Google Sheets | ❌ | ✅ | ✅ |
+-| Integración con ERP vía API | ❌ | ❌ | ✅ (custom) |
+-
+----
+-
+-### 👥 Usuarios y gestión de equipo
+-
+-| Feature | Starter | Pro | Business |
+-|---------|---------|-----|----------|
+-| Usuarios incluidos | 1 | 5 | 10 |
+-| Usuarios adicionales | +$5/usuario | +$5/usuario | +$10/usuario |
+-| Roles de usuario (admin/viewer) | ❌ | ✅ | ✅ |
+-| SSO / SAML | ❌ | ❌ | Próximamente |
+-| Audit log de actividad del equipo | ❌ | ❌ | ✅ |
+-| Canastas compartidas entre usuarios | ❌ | ✅ | ✅ |
+-
+----
+-
+-### 🌍 Cobertura de datos
+-
+-| Feature | Starter | Pro | Business |
+-|---------|---------|-----|----------|
+-| Retailers incluidos | 5 principales (PE) | 15+ (PE + LATAM) | 38 verificados (8 países) |
+-| Países disponibles | Perú | 8 países | 8 países |
+-| Categorías de producto | Alimentos + Higiene | Todas (8 categorías) | Todas + custom |
+-| Freshness de datos | 4 horas | 4 horas | 2 horas (prioritario) |
+-| Snapshots/mes | ~2,000 | ~20,000 | ~80,000 |
+-
+----
+-
+-### 🔧 Soporte
+-
+-| Feature | Starter | Pro | Business |
+-|---------|---------|-----|----------|
+-| Canal de soporte | Email | Email + Chat | Email + Chat + WhatsApp |
+-| SLA respuesta | 48h | 24h | 4h |
+-| Onboarding asistido | ❌ | ✅ (1 sesión 30min) | ✅ (2 sesiones 60min) |
+-| Account manager dedicado | ❌ | ❌ | ✅ |
+-| Training del equipo | ❌ | ❌ | ✅ (hasta 10 personas) |
+-| SLA de uptime | 99% | 99.5% | 99.9% |
++> **Nota anti-canibalización:** CLI Market **Build Pro ($39/mes)** es para developers que integran la API. **Procure Ops ($79/mes)** es para equipos de compras e incluye la infra API; no vender ambos al mismo buyer salvo que quieran ambos dashboards.
+ 
+ ---
+ 
+ ## ¿Cuál plan es el correcto?
+ 
+-### Elige Starter ($29/mes) si:
+-- Eres dueño/a de un restaurante o negocio pequeño
+-- Gestionas las compras solo/a o con 1 persona
+-- Tu canasta semanal tiene menos de 20 productos
+-- Compras principalmente en Lima/Perú
+-- Quieres empezar rápido y evaluar el ahorro antes de escalar
+-
+-### Elige Pro ($39/mes) si:
+-- Tienes un equipo de compras de 2-5 personas
+-- Manejas múltiples sucursales o categorías
+-- Necesitas comparar entre varios países (hotel en Perú comprando a Argentina, por ejemplo)
+-- Quieres alertas por WhatsApp y acceso a API
+-- Tu canasta semanal tiene 20-50 productos
+-
+-### Elige Business ($149/mes) si:
+-- Tienes una cadena de restaurantes, hoteles, o agroindustrial mediana
+-- Tu equipo de compras tiene 5-10 personas
+-- Necesitas integración con tu ERP vía API o webhook
+-- Quieres histórico de 12 meses para análisis de temporadas
+-- Necesitas un account manager y SLA de 4 horas
+-
+----
+-
+-## Calculadora de ahorro estimado
+-
+-| Gasto mensual compras | Ahorro típico (12-18%) | Payback Starter | Payback Business |
+-|-----------------------|------------------------|-----------------|------------------|
+-| S/ 2,000 (~$540) | S/ 240-360/mes | < 1 semana | N/A (no justifica) |
+-| S/ 5,000 (~$1,350) | S/ 600-900/mes | < 3 días | 5 meses |
+-| S/ 15,000 (~$4,050) | S/ 1,800-2,700/mes | < 1 día | < 3 semanas |
+-| S/ 50,000 (~$13,500) | S/ 6,000-9,000/mes | Inmediato | < 1 semana |
+-| S/ 200,000+ (~$56K+) | S/ 24,000+/mes | Inmediato | Inmediato |
+-
+----
+-
+-## Preguntas frecuentes sobre planes
+-
+-**¿Puedo cambiar de plan después?**
+-Sí. Upgrades son inmediatos (se prorratean). Downgrades aplican al próximo ciclo de facturación.
+-
+-**¿Hay un contrato de permanencia?**
+-No. Todos los planes son mes a mes. Pago anual disponible con 20% de descuento (sin contrato, pero sin reembolso proporcional).
++### Compare ($29/mes) si:
++- Restaurante o negocio con un local
++- Quieres comparar y calcular ahorro sin checkout todavía
++- Hasta 20 procurement/mes
+ 
+-**¿Qué pasa si excedo mis búsquedas/día?**
+-Las búsquedas adicionales se cobran a $0.01/request. Se puede configurar un límite para evitar cargos inesperados.
++### Ops ($79/mes) si:
++- Necesitas aprobaciones gerente + checkout + stock/delivery
++- Hoteles, constructoras, equipos de compras con umbral de monto
++- Hasta 200 procurement/mes
+ 
+-**¿El trial de 14 días incluye todas las features?**
+-Sí. El trial activa el plan Pro completo por 14 días sin tarjeta de crédito.
++### Scale ($149/mes) si:
++- Multi-país, alto volumen, integraciones custom
++- Hasta 1,000 procurement/mes
+ 
+-**¿Hay descuento para ONGs o educación?**
+-Sí. 50% de descuento para organizaciones sin fines de lucro verificadas. Contactar a hola@cli-market.dev.
++### Enterprise (a medida) si:
++- SLA 99.9%, soporte dedicado, procurement ilimitado
+ 
+ ---
+ 
+-**Procure Copilot · Powered by CLI Market · cli-market.dev/procure**
+-`hola@cli-market.dev` · WhatsApp: [+51 XXX XXX XXX]
++**Procure Copilot · Powered by CLI Market · https://procure-copilot.contacto-8e4.workers.dev**
+diff --git a/devto/devto-01-commerce-infrastructure.md b/devto/devto-01-commerce-infrastructure.md
+index 9e92f03..30d2b33 100644
+--- a/devto/devto-01-commerce-infrastructure.md
++++ b/devto/devto-01-commerce-infrastructure.md
+@@ -76,7 +76,7 @@ The **Collector** runs every 4 hours across all 38 retailers, refreshing prices.
+ |--------|-------|
+ | Retailers indexed | 38 |
+ | Countries | PE, AR, BR, MX, CO, CL, IT, FR |
+-| Prices indexed | 56,000+ |
++| Prices indexed | 62,000+ |
+ | Refresh rate | Every 4 hours |
+ | 7-day coverage | 100% |
+ | MCP tools | 22 curated (46 legacy) |
+diff --git a/outbound/procure-sequences.md b/outbound/procure-sequences.md
+index c68e0f0..98d949c 100644
+--- a/outbound/procure-sequences.md
++++ b/outbound/procure-sequences.md
+@@ -23,9 +23,9 @@ hub: "[[GTM-Hub]]"
+ 
+ | Secuencia | ICP | Plan objetivo | Rol a buscar |
+ |-----------|-----|---------------|--------------|
+-| **A — Horeca PE** | Restaurantes, cafeterías, dark kitchens | Starter $24/mes | Dueño, Gerente operaciones, Jefe de compras |
+-| **B — Agroindustrial** | Empresas con canasta de insumos (arroz, aceite, lácteos) | Pro $39/mes | Jefe compras, Abastecimiento, CFO operativo |
+-| **C — Hoteles / facilities** | Cadenas con aprobación gerente y delivery | Pro $39/mes | Director compras, Facilities, Gerente general |
++| **A — Horeca PE** | Restaurantes, cafeterías, dark kitchens | Compare $29/mes | Dueño, Gerente operaciones, Jefe de compras |
++| **B — Agroindustrial** | Empresas con canasta de insumos (arroz, aceite, lácteos) | Ops $79/mes | Jefe compras, Abastecimiento, CFO operativo |
++| **C — Hoteles / facilities** | Cadenas con aprobación gerente y delivery | Ops $79/mes | Director compras, Facilities, Gerente general |
+ 
+ ---
+ 
+@@ -53,7 +53,7 @@ hub: "[[GTM-Hub]]"
+ | 10 | Email | Adjuntar extracto Price Pulse (secciones 2–3) + demo Procure |
+ | 12 | Email | Breakup |
+ 
+-**Plan objetivo:** Pro ($39/mes) — flujo de aprobación + historial 12 meses
++**Plan objetivo:** Ops ($79/mes) — flujo de aprobación + checkout + historial 12 meses
+ 
+ ---
+ 
+@@ -127,7 +127,7 @@ En [Empresa], la calidad de la referencia de precios impacta directamente negoci
+ 
+ Procure Copilot no es un panel de datos: es el control plane de compras sobre CLI Market — 38 retailers verificados, 8 países, data-gate que bloquea recomendaciones si el moat está viejo.
+ 
+-Plan Pro ($39/mes) incluye:
++Plan Ops ($79/mes) incluye:
+ - Flujo de aprobación interno (empleado busca, gerente aprueba)
+ - Verificación de stock y estimación de delivery
+ - Hasta 200 procurement/mes · historial 12 meses
+-- 
+2.43.0
+

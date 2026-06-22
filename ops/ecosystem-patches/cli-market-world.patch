@@ -1,0 +1,311 @@
+From 92e2c911bb9d62efea6e091b3e97ac3fa9bd99fe Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Mon, 22 Jun 2026 16:46:16 +0000
+Subject: [PATCH] chore: pin core 1.10.0 (git d4b8061) and sync market stats to
+ 27 MCP tools
+
+- requirements-railway.txt + CI use cli-market-core @ d4b8061
+- Regenerated mcp.json, marketStats.ts, README copy via sync_market_stats
+---
+ .github/workflows/ci.yml      |  4 ++--
+ README.md                     |  6 +++---
+ glama.json                    |  2 +-
+ landing/lib/marketStats.ts    | 16 ++++++++--------
+ landing/public/llms-full.txt  |  4 ++--
+ landing/public/llms.txt       |  2 +-
+ landing/public/mcp.json       |  2 +-
+ landing/public/og-preview.svg |  2 +-
+ landing/public/og.svg         |  2 +-
+ landing/public/server.json    |  4 ++--
+ mcp.json                      |  4 ++--
+ pyproject.toml                |  4 ++--
+ requirements-railway.txt      |  4 ++--
+ retailers-deck.md             |  2 +-
+ server.json                   |  6 +++---
+ 15 files changed, 32 insertions(+), 32 deletions(-)
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 15aba3e..4690dd5 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -73,7 +73,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core==1.9.44"
++          pip install "cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@d4b8061"
+           pip install -e ".deps/cli-market-index[postgres]"
+           pip install pytest
+           python -c "from market_core.commerce_capabilities import get_commerce_capabilities; assert get_commerce_capabilities()['checkout']['scope'] == 'cli_market_internal'"
+@@ -155,7 +155,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core==1.9.44"
++          pip install "cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@d4b8061"
+           pip install -e ".deps/cli-market-index[postgres]"
+           pip install pytest
+           python -c "from market_core.commerce_capabilities import get_commerce_capabilities; assert get_commerce_capabilities()['checkout']['scope'] == 'cli_market_internal'"
+diff --git a/README.md b/README.md
+index 086ef05..36d7c85 100644
+--- a/README.md
++++ b/README.md
+@@ -9,7 +9,7 @@ mcp-name: io.github.Treevu-ai/cli-market-world
+ 
+ # 🛒 CLI Market
+ 
+-[![PyPI Downloads](https://img.shields.io/badge/PyPI%20downloads-39k-00d75f?logo=pypi)](https://pepy.tech/projects/cli-market-world)
++[![PyPI Downloads](https://img.shields.io/badge/PyPI%20downloads-41k-00d75f?logo=pypi)](https://pepy.tech/projects/cli-market-world)
+ [![PyPI](https://img.shields.io/pypi/v/cli-market-world.svg)](https://pypi.org/project/cli-market-world/)
+ 
+ **🌐 [Español](#-español) · [English](#-english)**
+@@ -27,7 +27,7 @@ Falabella, Ripley, Wong, Metro no van a exponer APIs de comercio por su cuenta.
+ **CLI Market lo resuelve.** Un solo `pip install`. Una llamada a la API que cubre **81 retailers (41 verificados activos)** en **8 países**. Un único esquema JSON listo para integrar.
+ 
+ - 🌍 **81 retailers (41 verificados activos) · 8 países · 4 plataformas**
+-- 💰 **Más de 61,000+ precios de góndola verificados**, normalizados por kg/L, actualizados cada 4 horas
++- 💰 **Más de 62,000+ precios de góndola verificados**, normalizados por kg/L, actualizados cada 4 horas
+ - 💳 **Pago con PayPal + Mercado Pago + QR (Yape/Plin)** integrado
+ 
+ #### ✨ ¿Por qué CLI Market?
+@@ -99,7 +99,7 @@ Falabella, Ripley, Wong, Metro won't expose commerce APIs on their own. CLI Mark
+ **CLI Market fixes that.** One `pip install`. One API call across **81 retailers (41 verified active)** in **8 countries**. One JSON schema ready to integrate.
+ 
+ - 🌍 **81 retailers (41 verified active) · 8 countries · 4 platforms**
+-- 💰 **61,000+ verified shelf prices**, normalized per kg/L, refreshed every 4 hours
++- 💰 **62,000+ verified shelf prices**, normalized per kg/L, refreshed every 4 hours
+ - 💳 **PayPal + Mercado Pago + QR (Yape/Plin)** checkout built in
+ 
+ #### ✨ Why CLI Market?
+diff --git a/glama.json b/glama.json
+index 177c50b..65a256b 100644
+--- a/glama.json
++++ b/glama.json
+@@ -1,6 +1,6 @@
+ {
+   "license": "MIT",
+-  "description": "Commerce infrastructure for AI agents \u2014 22 curated MCP tools (46 legacy) to search, compare, and purchase across 41 verified retailers in 8 countries. 61,000+ real shelf prices refreshed every 4 hours. Free tier available.",
++  "description": "Commerce infrastructure for AI agents \u2014 27 curated MCP tools (49 legacy) to search, compare, and purchase across 41 verified retailers in 8 countries. 62,000+ real shelf prices refreshed every 4 hours. Free tier available.",
+   "categories": [
+     "ecommerce",
+     "retail",
+diff --git a/landing/lib/marketStats.ts b/landing/lib/marketStats.ts
+index 9fe400c..5026a40 100644
+--- a/landing/lib/marketStats.ts
++++ b/landing/lib/marketStats.ts
+@@ -17,19 +17,19 @@ export const MARKET_STATS = {
+   mcpDefaultProfile: "default",
+   mcpBundles: {"shop": [{"id": "market_discover", "description": "Retail coverage in one call: business lines, retailers, and countries. Replaces market_lines + market_stores + market_countries. 41 verified retailers across 8 countries.", "canonical": true}, {"id": "market_add", "description": "Add to cart. Copy ALL four fields from market_search: product_id, name, price, store (use store_key value as store). Missing fields cause 422 — re-run market_search if needed.", "canonical": false}, {"id": "market_ask", "description": "Natural-language shopping. Examples: 'buy milk', 'repeat last purchase', 'compare rice'.", "canonical": false}, {"id": "market_basket", "description": "Compare total basket cost across retailers. Pass items with name and qty. Returns per-store totals and cheapest retailer. LATAM differentiator — 41 verified retailers across 8 countries.", "canonical": false}, {"id": "market_cart", "description": "View current cart with products, quantities, prices, and total.", "canonical": false}, {"id": "market_cart_update", "description": "Change item quantity in cart. Use quantity=0 to remove (replaces market_cart_remove in PR2).", "canonical": false}, {"id": "market_checkout", "description": "Pay for cart via CLI Market (Yape/Plin/PayPal) — creates internal order, not checkout on retailer sites. Requires Pro tier for live charge. payment_method: yape, plin, paypal, tarjeta. See GET /v1/capabilities.", "canonical": false}, {"id": "market_compare", "description": "Compare prices for one query across retailers side-by-side. Use when the user asks for cheapest option or cross-store comparison. Set country (e.g. PE) or store to avoid timeouts.", "canonical": false}, {"id": "market_login", "description": "Authenticate in CLI Market. Call before cart, checkout, or orders. Returns access + refresh tokens (access default 90d, refresh 365d) persisted locally. On 401 with expired access, CLI auto-calls POST /auth/refresh; agents may re-login or refresh.", "canonical": false}, {"id": "market_orders", "description": "Order history. Set reorder_last=true to repeat the last order.", "canonical": false}, {"id": "market_search", "description": "Search products across 41 verified retailers across 8 countries. Returns JSON with product_id, name, price, store_key (required for market_add), store, and line. Filter by line or store ID. Prefer this over scraping.", "canonical": false}], "intel": [{"id": "market_intel_brief", "description": "One-call intelligence narrative: shelf signals, macro gap vs official CPI, composite scores, and moat confidence. Replaces indicators + analytics + enrichment reads.", "canonical": true}, {"id": "market_export", "description": "Export data moat as CSV or JSON. Requires starter tier or above.", "canonical": false}, {"id": "market_inflation", "description": "Shelf inflation from the data moat: price deltas and average inflation. Filter by country or line.", "canonical": false}, {"id": "market_inflation_report", "description": "Inflation Intelligence — where is price pressure increasing? Returns pressure level (stable/rising/rising_fast/falling/above_official) from internal shelf inflation and macro CPI gap.", "canonical": false}, {"id": "market_price_risk", "description": "Price Risk Intelligence — which categories are becoming volatile? Returns risk level (low/moderate/high) with supporting signals from price dispersion, promo intensity, and staple momentum.", "canonical": false}, {"id": "market_procurement_signal", "description": "Procurement Intelligence — when should I buy? Returns buy_now/monitor/wait signal from basket stress, search momentum, and staple price trends.", "canonical": false}, {"id": "market_scores", "description": "Composite moat scores: retail_aggression, price_fairness, basket_stress, data_confidence, macro_alignment.", "canonical": false}, {"id": "market_stats", "description": "Data moat health: total prices, active stores, tracked products, last refresh.", "canonical": false}, {"id": "market_trending", "description": "Products with largest price movement in the last 7 days.", "canonical": false}], "account": [{"id": "market_price_alerts", "description": "Price alerts: query drops or configure threshold notifications for a product.", "canonical": true}, {"id": "market_favorites", "description": "Manage favorite products: list, add, or remove. Omit action for list.", "canonical": false}, {"id": "market_preferences", "description": "User preferences from purchase history: favorite stores, total spent.", "canonical": false}, {"id": "market_subscription", "description": "Current subscription plan: tier, rate limits, available API keys.", "canonical": false}, {"id": "market_whoami", "description": "Verify identity: username and subscription tier for the authenticated user.", "canonical": false}]},
+   indicatorsCount: 44,
+-  goldenLinkagePct: 99.6,
++  goldenLinkagePct: 100.0,
+   enrichmentSourcesLabel: "OFF · Wikimedia · Open-Meteo · World Bank · IMF · Eurostat · BCB",
+-  pricesVerifiedLabel: "61,000+",
++  pricesVerifiedLabel: "62,000+",
+   pricesRefreshHours: 4,
+   pypiPackageName: "cli-market-world",
+   pypiUrl: "https://pypi.org/project/cli-market-world/",
+   pepyProjectUrl: "https://pepy.tech/projects/cli-market-world",
+-  pepyBadgeUrl: "https://img.shields.io/badge/PyPI%20downloads-39k-00d75f?logo=pypi",
+-  pypiDownloads: 39241,
++  pepyBadgeUrl: "https://img.shields.io/badge/PyPI%20downloads-41k-00d75f?logo=pypi",
++  pypiDownloads: 41972,
+   // Note: pepyBadgeUrl is a custom consolidated badge (legacy + core + world).
+   // The live hero "PYPI DOWNLOADS" comes from /analytics/pypi (also consolidated).
+   pipInstallCmd: "pip install cli-market-world",
+-  packageVersion: "1.9.41",
++  packageVersion: "1.10.0",
+   ogImageUrl: "/og.png",
+   license: "MIT",
+   paymentsLabel: "PayPal (USD) · Yape · Plin · Mercado Pago (soles)",
+@@ -38,9 +38,9 @@ export const MARKET_STATS = {
+   retailersPhraseEs: "81 retailers, 41 verificados activos",
+   platformsPhraseEn: "4 platforms (VTEX · Shopify · Magento · WooCommerce)",
+   platformsPhraseEs: "4 plataformas (VTEX · Shopify · Magento · WooCommerce)",
+-  headerEn: "CLI Market \u2014 Commerce infrastructure for AI agents.\n81 retailers across 4 platforms (VTEX \u00b7 Shopify \u00b7 Magento \u00b7 WooCommerce), 41 verified live.\n8 countries. 27 MCP tools. 61,000+ verified shelf prices, normalized per kg/L, refreshed every 4h.\nOne pip install. One API. Zero scraping. MIT.",
+-  headerEs: "CLI Market \u2014 Infraestructura de comercio para agentes de IA.\n81 retailers en 4 plataformas (VTEX \u00b7 Shopify \u00b7 Magento \u00b7 WooCommerce), 41 verificados y activos.\n8 pa\u00edses. 27 herramientas MCP. 61,000+ precios reales de g\u00f3ndola, normalizados por kg/L, actualizados cada 4h.\nUn pip install. Una API. Cero scraping. MIT.",
++  headerEn: "CLI Market \u2014 Commerce infrastructure for AI agents.\n81 retailers across 4 platforms (VTEX \u00b7 Shopify \u00b7 Magento \u00b7 WooCommerce), 41 verified live.\n8 countries. 27 MCP tools. 62,000+ verified shelf prices, normalized per kg/L, refreshed every 4h.\nOne pip install. One API. Zero scraping. MIT.",
++  headerEs: "CLI Market \u2014 Infraestructura de comercio para agentes de IA.\n81 retailers en 4 plataformas (VTEX \u00b7 Shopify \u00b7 Magento \u00b7 WooCommerce), 41 verificados y activos.\n8 pa\u00edses. 27 herramientas MCP. 62,000+ precios reales de g\u00f3ndola, normalizados por kg/L, actualizados cada 4h.\nUn pip install. Una API. Cero scraping. MIT.",
+   shopifyBrands: ["Adidas", "Allbirds", "Alo Yoga", "Brooklinen", "Casper", "ColourPop", "Fenty Beauty", "Glossier", "Gymshark", "Kylie Cosmetics", "Magic Mind", "Nomad", "On Running", "Parachute", "Privalia BR"],
+-  seoDescription: "Commerce API for AI agents. 27 MCP tools, 81 retailers, 41 verified active. 8 countries. 61,000+ verified shelf prices refreshed every 4 hours. Normalized per kg/L, quality-filtered. pip install cli-market-world.",
++  seoDescription: "Commerce API for AI agents. 27 MCP tools, 81 retailers, 41 verified active. 8 countries. 62,000+ verified shelf prices refreshed every 4 hours. Normalized per kg/L, quality-filtered. pip install cli-market-world.",
+   serverDescription: "Commerce for AI agents. 27 MCP tools. 81 retailers (41 verified), 8 countries, 4 platforms.",
+ } as const;
+diff --git a/landing/public/llms-full.txt b/landing/public/llms-full.txt
+index fea2ddb..2583287 100644
+--- a/landing/public/llms-full.txt
++++ b/landing/public/llms-full.txt
+@@ -1,10 +1,10 @@
+ # CLI Market — Full LLM Context
+ 
+ > MCP Server: io.github.Treevu-ai/cli-market-world
+-> Package: pip install cli-market-world (v1.9.41)
++> Package: pip install cli-market-world (v1.10.0)
+ > Command: market-mcp
+ > API: https://cli-market-production.up.railway.app
+-> Stats: 81 retailers · 41 verified · 61,000+ prices · 4 platforms (VTEX, Shopify, Magento, WooCommerce)
++> Stats: 81 retailers · 41 verified · 62,000+ prices · 4 platforms (VTEX, Shopify, Magento, WooCommerce)
+ > Payments: PayPal · Mercado Pago · Yape/Plin transfer (Peru, manual)
+ > FMCG pilot: Nuna Orgánica PE (406 SKUs, WooCommerce Store API)
+ 
+diff --git a/landing/public/llms.txt b/landing/public/llms.txt
+index efe24b7..a390092 100644
+--- a/landing/public/llms.txt
++++ b/landing/public/llms.txt
+@@ -21,7 +21,7 @@ Commerce infrastructure for AI agents. 81 retailers, 41 verified active across 8
+ - 44 intel indicators (shelf moat + public API enrichment; CLI: market intel indicators)
+ - Payments: PayPal · Mercado Pago · Yape/Plin in-app transfer (Peru)
+ - WooCommerce pilot: Nuna Orgánica PE (406 SKUs, FMCG orgánico)
+-- Pricing (Build, foco ICP AI Agent Builders): Free $0 (1,000 req/día), Starter $9/mo (5,000 req/día, CSV export), Pro $49/mo (10,000 req/día, alerts, full MCP, checkout), Annual $490, Enterprise custom (SLAs, high limits)
++- Pricing (Build, foco ICP AI Agent Builders): Starter $9/mo (5,000 req/día, CSV export), Pro $49/mo (10,000 req/día, alerts, full MCP, checkout), Enterprise custom (SLAs, high limits)
+ - Procurement operators (restaurants, hotels, agro): use Procure Copilot ($29–149/mo, CLI Market infra bundled on Pro+) — do NOT sell CLI Market Pro separately to this ICP
+ - Data/analytics teams: Intelligence pilot $300–500/mo (no checkout). Strategy: docs/pricing-strategy.md
+ 
+diff --git a/landing/public/mcp.json b/landing/public/mcp.json
+index e905312..9c4c658 100644
+--- a/landing/public/mcp.json
++++ b/landing/public/mcp.json
+@@ -1,7 +1,7 @@
+ {
+   "$schema": "https://registry.modelcontextprotocol.io/schema.json",
+   "name": "CLI Market",
+-  "description": "Commerce infrastructure for AI agents \u2014 27 curated MCP tools (49 legacy) to search, compare, and purchase across 41 retailers in 8 countries. 61,000+ real prices, 44 market indicators, refreshed every 4 hours. MIT.",
++  "description": "Commerce infrastructure for AI agents \u2014 27 curated MCP tools (49 legacy) to search, compare, and purchase across 41 retailers in 8 countries. 62,000+ real prices, 44 market indicators, refreshed every 4 hours. MIT.",
+   "type": "stdio",
+   "command": "market-mcp",
+   "args": [],
+diff --git a/landing/public/og-preview.svg b/landing/public/og-preview.svg
+index c98dc2c..1ea6eea 100644
+--- a/landing/public/og-preview.svg
++++ b/landing/public/og-preview.svg
+@@ -10,7 +10,7 @@
+   <rect x="0" y="0" width="800" height="3" fill="#47475d"/>
+   <text x="400" y="68" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="34" font-weight="700" fill="#ffffff" letter-spacing="-1">CLI Market</text>
+   <text x="400" y="96" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" fill="#3afecf">commerce infrastructure for AI agents</text>
+-  <text x="400" y="126" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#b9cac2">81 retailers · 61K+ prices · 27 MCP · 8 countries</text>
++  <text x="400" y="126" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#b9cac2">81 retailers · 62K+ prices · 27 MCP · 8 countries</text>
+   <text x="400" y="154" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10" fill="#84948d">pip install cli-market-world · cli-market.dev · MIT</text>
+   <line x1="180" y1="168" x2="620" y2="168" stroke="#3b4a44" stroke-width="0.5"/>
+   <text x="400" y="186" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#84948d" letter-spacing="1">MIT · MCP NATIVE · LATAM RETAIL · VERIFIED PRICES</text>
+diff --git a/landing/public/og.svg b/landing/public/og.svg
+index 9079d62..ed12eee 100644
+--- a/landing/public/og.svg
++++ b/landing/public/og.svg
+@@ -23,7 +23,7 @@
+   <text x="600" y="72" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#b9cac2" fill-opacity="0.5">market_agent_sh // og_preview</text>
+   <text x="600" y="268" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="64" font-weight="700" fill="#ffffff" letter-spacing="-2">CLI Market</text>
+   <text x="600" y="318" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="26" fill="#3afecf" font-style="italic">La capa programable del retail físico</text>
+-  <text x="600" y="368" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#b9cac2">81 retailers · 61K+ precios · 27 MCP · 8 países LatAm</text>
++  <text x="600" y="368" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#b9cac2">81 retailers · 62K+ precios · 27 MCP · 8 países LatAm</text>
+   <rect x="320" y="400" width="560" height="56" rx="4" fill="#3afecf" fill-opacity="0.12" stroke="#3afecf" stroke-opacity="0.35"/>
+   <text x="600" y="436" text-anchor="middle" font-family="ui-monospace, monospace" font-size="18" font-weight="700" fill="#3afecf" letter-spacing="2">pip install cli-market-world</text>
+   <text x="600" y="510" text-anchor="middle" font-family="ui-monospace, monospace" font-size="16" fill="#84948d">cli-market.dev · MIT · Network Engine Active</text>
+diff --git a/landing/public/server.json b/landing/public/server.json
+index 8d45d4a..56ae8d9 100644
+--- a/landing/public/server.json
++++ b/landing/public/server.json
+@@ -6,12 +6,12 @@
+     "url": "https://github.com/Treevu-ai/cli-market-world",
+     "source": "github"
+   },
+-  "version": "1.9.41",
++  "version": "1.10.0",
+   "packages": [
+     {
+       "registryType": "pypi",
+       "identifier": "cli-market-world",
+-      "version": "1.9.41",
++      "version": "1.10.0",
+       "transport": {
+         "type": "stdio",
+         "command": "market-mcp"
+diff --git a/mcp.json b/mcp.json
+index b7354f8..9c4c658 100644
+--- a/mcp.json
++++ b/mcp.json
+@@ -1,7 +1,7 @@
+ {
+   "$schema": "https://registry.modelcontextprotocol.io/schema.json",
+   "name": "CLI Market",
+-  "description": "Commerce infrastructure for AI agents \u2014 22 curated MCP tools (46 legacy) to search, compare, and purchase across 41 retailers in 8 countries. 61,000+ real prices, 44 market indicators, refreshed every 4 hours. MIT.",
++  "description": "Commerce infrastructure for AI agents \u2014 27 curated MCP tools (49 legacy) to search, compare, and purchase across 41 retailers in 8 countries. 62,000+ real prices, 44 market indicators, refreshed every 4 hours. MIT.",
+   "type": "stdio",
+   "command": "market-mcp",
+   "args": [],
+@@ -60,7 +60,7 @@
+   "default_profile": "default",
+   "profiles": {
+     "default": {
+-      "tool_count": 22,
++      "tool_count": 27,
+       "description": "Curated Shop + Intel + Account bundles"
+     },
+     "full": {
+diff --git a/pyproject.toml b/pyproject.toml
+index 566547a..27a8f47 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
+ 
+ [project]
+ name = "cli-market-world"
+-version = "1.9.41"
+-description = "mcp-name: io.github.Treevu-ai/cli-market-world - CLI Market: commerce API for AI agents. 22 curated MCP tools (46 legacy), 44 indicators, 41 verified retailers in 8 countries. MIT."
++version = "1.10.0"
++description = "mcp-name: io.github.Treevu-ai/cli-market-world - CLI Market: commerce API for AI agents. 27 curated MCP tools (49 legacy), 44 indicators, 41 verified retailers in 8 countries. MIT."
+ requires-python = ">=3.10"
+ license = "MIT"
+ authors = [{name = "CLI Market", email = "hello@cli-market.dev"}]
+diff --git a/requirements-railway.txt b/requirements-railway.txt
+index 5de0642..cb3f2bd 100644
+--- a/requirements-railway.txt
++++ b/requirements-railway.txt
+@@ -1,5 +1,5 @@
+-# Shared core library — PyPI (reproducible pin via == in production if needed).
+-cli-market-core==1.9.44
++# Pinned to git until 1.10.0 is published to PyPI (includes Sprint 1–3 intel + envelope).
++cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@d4b8061
+ 
+ # Semantic moat — Golden Record persistence (SQLite dev / Postgres prod).
+ cli-market-index[postgres] @ git+https://github.com/Treevu-ai/cli-market-index@9d050131e9e5b16381581d1916e386f34d319ca6
+diff --git a/retailers-deck.md b/retailers-deck.md
+index b7d9263..492b168 100644
+--- a/retailers-deck.md
++++ b/retailers-deck.md
+@@ -17,7 +17,7 @@ AI agents can't shop in physical retail. They need structured product data — p
+ | Metric | Value |
+ |---|---|
+ | Retailers live | 41 verified active (81 in catalog) |
+-| Prices indexed | 61,000+ |
++| Prices indexed | 62,000+ |
+ | Products tracked | 8,000+ |
+ | Countries | 8 (PE, AR, BR, MX, CO, CL, US, +) |
+ | MCP tools | 24 default / 45 full (search, compare, basket, checkout, inflation, enrichment…) |
+diff --git a/server.json b/server.json
+index a26f22c..56ae8d9 100644
+--- a/server.json
++++ b/server.json
+@@ -1,17 +1,17 @@
+ {
+   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+   "name": "io.github.Treevu-ai/cli-market-world",
+-  "description": "Commerce for AI agents. 22 MCP tools. 81 retailers (41 verified), 8 countries, 4 platforms.",
++  "description": "Commerce for AI agents. 27 MCP tools. 81 retailers (41 verified), 8 countries, 4 platforms.",
+   "repository": {
+     "url": "https://github.com/Treevu-ai/cli-market-world",
+     "source": "github"
+   },
+-  "version": "1.9.41",
++  "version": "1.10.0",
+   "packages": [
+     {
+       "registryType": "pypi",
+       "identifier": "cli-market-world",
+-      "version": "1.9.41",
++      "version": "1.10.0",
+       "transport": {
+         "type": "stdio",
+         "command": "market-mcp"
+-- 
+2.43.0
+
