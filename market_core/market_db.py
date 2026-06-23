@@ -331,10 +331,14 @@ def init_db_pg(db: _DB) -> None:
             username TEXT PRIMARY KEY,
             password_hash TEXT NOT NULL,
             token TEXT,
+            email TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     """)
+    db.execute(
+        "ALTER TABLE app_users ADD COLUMN IF NOT EXISTS email TEXT"
+    )
 
     db.execute("""
         CREATE TABLE IF NOT EXISTS app_carts (
@@ -589,6 +593,7 @@ _SQLITE_DDL = """\
             username TEXT PRIMARY KEY,
             password_hash TEXT NOT NULL,
             token TEXT,
+            email TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
