@@ -6,6 +6,8 @@ Depends on Phase 0 (`cli-market-world-phase0-marketing.patch`) if not already on
 
 ## Apply
 
+### Bash (Linux / macOS / Git Bash)
+
 ```bash
 cd cli-market-world
 git checkout main && git pull
@@ -13,6 +15,28 @@ git checkout -b cursor/phase1-public-copy-9eee
 git am ../cli-market-core/ops/ecosystem-patches/cli-market-world-phase1-marketing.patch
 git push -u origin cursor/phase1-public-copy-9eee
 ```
+
+### PowerShell (Windows)
+
+Use `;` instead of `&&` on PowerShell 5.x. Fetch the patch from **core** first (it lives on branch `cursor/phase1-public-copy-9eee` until PR #82 merges):
+
+```powershell
+cd C:\Users\acuba\cli-market-core
+git fetch origin cursor/phase1-public-copy-9eee
+git checkout cursor/phase1-public-copy-9eee
+
+cd C:\Users\acuba\cli-market-world
+git checkout main
+git pull
+git branch -D cursor/phase1-public-copy-9eee
+git checkout -b cursor/phase1-public-copy-9eee
+git am ..\cli-market-core\ops\ecosystem-patches\cli-market-world-phase1-marketing.patch
+git push -u origin cursor/phase1-public-copy-9eee --force-with-lease
+```
+
+`--force-with-lease` is needed if you already pushed an empty branch (as in the failed `git am` attempt).
+
+**Patch missing?** Merge [cli-market-core PR #82](https://github.com/Treevu-ai/cli-market-core/pull/82) on GitHub, then `git pull` in `cli-market-core` on `main`.
 
 Regenerate locally (optional, needs prod API for 63k prices):
 
