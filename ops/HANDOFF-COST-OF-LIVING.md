@@ -1,7 +1,7 @@
 # HANDOFF — Cost-of-Living OS (Waves 1–4)
 
-> **Core:** `main` @ `8469854` (merge PR #75)  
-> **Backend:** pin `cli-market-core @ …8469854` — ver `ops/ecosystem-patches/BUMP-CORE-8469854.md`
+> **Core:** `main` @ `8469854` → PyPI **`1.11.0`** (Cost-of-Living OS Waves 1–4)  
+> **Backend / world:** `cli-market-core==1.11.0` — ver `ops/ecosystem-patches/BUMP-CORE-1.11.0.md`
 
 ## North star
 
@@ -132,7 +132,7 @@ CI=true MARKET_SKIP_LIVE=1 python3 -m pytest -q -m "not integration"
 | Live VTEX shipping sim | connectors | Hoy: defaults PE + optional live API |
 | L4 partner API (Rappi/PedidosYa) | partnerships | Stub listo; contrato pendiente |
 | Receipt PII policy | legal/ops | PRD checklist |
-| PyPI release `1.11.0` | core | Dejar de git-pin cuando publiquen |
+| PyPI release `1.11.0` | core | Publicado — dejar de git-pin en world/backend |
 
 ---
 
