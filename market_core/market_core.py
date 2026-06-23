@@ -469,6 +469,14 @@ def _migrate_store_credentials(db) -> None:
             pass
 
 
+def _migrate_app_users_email(db) -> None:
+    """Add email column to app_users if missing (SQLite only — PG uses ALTER TABLE IF NOT EXISTS)."""
+    try:
+        db.execute("ALTER TABLE app_users ADD COLUMN email TEXT")
+    except Exception:
+        pass
+
+
 def _migrate_indicator_schema(db) -> None:
     """Indicator moat tables — safe to run on existing deployments."""
     if USE_PG:
@@ -610,6 +618,7 @@ def init_db() -> None:
         _migrate_store_credentials(db)
         _migrate_price_snapshots_v7(db)
         _migrate_indicator_schema(db)
+        _migrate_app_users_email(db)
     db.commit()
     db.close()
 
@@ -624,17 +633,26 @@ def init_db() -> None:
 def db_get_users() -> dict:
     """Return all users as a dict (for backwards compat with existing code)."""
     db = get_db()
-    rows = db.execute("SELECT username, password_hash, token FROM app_users").fetchall()
+    rows = db.execute("SELECT username, password_hash, token, email FROM app_users").fetchall()
     db.close()
-    return {r["username"]: {"password": r["password_hash"], "token": r["token"]} for r in rows}
+    return {r["username"]: {"password": r["password_hash"], "token": r["token"], "email": r["email"]} for r in rows}
 
-def db_save_user(username: str, password_hash: str, token: str | None = None) -> None:
+def db_save_user(username: str, password_hash: str, token: str | None = None, email: str | None = None) -> None:
     db = get_db()
-    db.execute(
-        "INSERT INTO app_users (username, password_hash, token, updated_at) VALUES (?,?,?,datetime('now')) "
-        "ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash, token=excluded.token, updated_at=datetime('now')",
-        (username, password_hash, token)
-    )
+    if USE_PG:
+        db.execute(
+            "INSERT INTO app_users (username, password_hash, token, email, updated_at) VALUES (%s,%s,%s,%s,NOW()) "
+            "ON CONFLICT(username) DO UPDATE SET password_hash=EXCLUDED.password_hash, token=EXCLUDED.token, "
+            "email=COALESCE(EXCLUDED.email, app_users.email), updated_at=NOW()",
+            (username, password_hash, token, email)
+        )
+    else:
+        db.execute(
+            "INSERT INTO app_users (username, password_hash, token, email, updated_at) VALUES (?,?,?,?,datetime('now')) "
+            "ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash, token=excluded.token, "
+            "email=COALESCE(excluded.email, app_users.email), updated_at=datetime('now')",
+            (username, password_hash, token, email)
+        )
     db.commit()
     db.close()
 
