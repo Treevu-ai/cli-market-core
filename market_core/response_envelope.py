@@ -194,6 +194,44 @@ def timing():
         ctx.elapsed_ms = (time.perf_counter() - start) * 1000
 
 
+# ── Provenance (wave 1 — Cost-of-Living OS) ───────────────────────────────────
+
+def build_provenance(
+    *,
+    primary_source: str,
+    sources_used: list[str] | None = None,
+    stores_responded: int | None = None,
+    stores_queried: int | None = None,
+    methodology: str = "shelf_observed_online_v1",
+    staleness_warning: bool = False,
+) -> dict[str, Any]:
+    """Build ``meta.provenance`` block for enveloped responses."""
+    sources = list(sources_used or [primary_source])
+    coverage_pct = None
+    if stores_queried and stores_queried > 0 and stores_responded is not None:
+        coverage_pct = round(stores_responded / stores_queried * 100, 1)
+    return {
+        "primary_source": primary_source,
+        "sources_used": sources,
+        "stores_responded": stores_responded,
+        "stores_queried": stores_queried,
+        "coverage_pct": coverage_pct,
+        "staleness_warning": staleness_warning,
+        "methodology": methodology,
+    }
+
+
+def confidence_from_coverage(coverage_pct: float | None, *, fallback: str = "ok") -> str:
+    """Map store coverage to envelope confidence tier."""
+    if coverage_pct is None:
+        return fallback
+    if coverage_pct < 40:
+        return "low"
+    if coverage_pct < 70:
+        return "warn"
+    return "ok"
+
+
 # ── Internal helpers ────────────────────────────────────────────────────────────
 
 def _now_iso() -> str:

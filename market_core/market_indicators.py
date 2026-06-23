@@ -1365,6 +1365,19 @@ def build_intel_brief(
     }
     if include_catalog:
         result["catalog"] = get_indicator_catalog()
+    try:
+        from .market_intel_products import compute_affordability
+
+        aff = compute_affordability(db, country=country, line=line, days=max(days, 30))
+        result["affordability"] = {
+            "score": aff.get("affordability_score"),
+            "band": aff.get("affordability_band"),
+            "band_es": aff.get("affordability_band_es"),
+            "headline_es": aff.get("headline_es"),
+            "canasta_min": aff.get("components", {}).get("canasta_min"),
+        }
+    except Exception:
+        result["affordability"] = {}
     return result
 
 

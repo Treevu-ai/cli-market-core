@@ -24,16 +24,19 @@ from .data_v1_service import (
     query_flagged,
     query_prices,
 )
-from .market_basket import build_canasta_snapshot
+from .market_basket import build_basket_tco, build_canasta_snapshot
 from .market_core import get_db
 from .market_intel_products import (
+    compute_affordability,
     compute_inflation_report,
     compute_price_risk,
     compute_procurement_signal,
 )
 from .market_quality import build_data_quality_scores
+from .market_regulatory import list_regulatory_events
+from .market_substitutes import find_substitutes
 from .market_slas import slas_by_retailer, slas_summary
-from .response_envelope import envelope, timing
+from .response_envelope import build_provenance, envelope, timing
 
 router = APIRouter(tags=["intel", "quality", "health"])
 
@@ -54,8 +57,14 @@ def _v1_auth(authorization: str | None = Header(None)) -> str:
     return "anonymous"
 
 
-def _wrap(data: Any, latency_ms: float | None = None) -> dict:
-    return envelope(data=data, freshness_seconds=None, confidence="ok", latency_ms=latency_ms)
+def _wrap(data: Any, latency_ms: float | None = None, **extra_meta) -> dict:
+    return envelope(
+        data=data,
+        freshness_seconds=None,
+        confidence=extra_meta.pop("confidence", "ok"),
+        latency_ms=latency_ms,
+        extra_meta=extra_meta or None,
+    )
 
 
 # ── Intel products ─────────────────────────────────────────────────────────────
@@ -106,6 +115,117 @@ def intel_procurement_signal(
         with timing() as t:
             result = compute_procurement_signal(db, country=country, line=line)
         return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+    finally:
+        db.close()
+
+
+@router.get("/intel/affordability")
+def intel_affordability(
+    country: str = Query(..., description="PE, AR, MX, BR, CO, CL"),
+    line: str = Query("supermercados"),
+    days: int = Query(30, ge=1, le=365),
+    enveloped: bool = Query(True),
+):
+    """Affordability OS — cost-of-living composite from shelf + macro signals."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = compute_affordability(db, country=country, line=line, days=days)
+        confidence = "ok" if result.get("components", {}).get("canasta_min") else "low"
+        prov = build_provenance(primary_source="price_snapshots", methodology="affordability_os_v1")
+        if enveloped:
+            return _wrap(result, latency_ms=t.elapsed_ms, confidence=confidence, provenance=prov)
+        return result
+    finally:
+        db.close()
+
+
+@router.get("/intel/regulatory")
+def intel_regulatory(
+    country: str = Query(..., description="PE, AR, MX, BR, CO, CL"),
+    days: int = Query(90, ge=1, le=365),
+    category: str | None = Query(None, description="food, energy, fx, pharma, transport"),
+    enveloped: bool = Query(True),
+):
+    """Regulatory context events that may explain shelf price moves."""
+    db = get_db()
+    try:
+        with timing() as t:
+            events = list_regulatory_events(db, country=country, days=days, category=category)
+            result = {"country": country.upper(), "days": days, "events": events}
+        if enveloped:
+            return _wrap(
+                result,
+                latency_ms=t.elapsed_ms,
+                provenance=build_provenance(primary_source="regulatory_events", methodology="curated_v1"),
+            )
+        return result
+    finally:
+        db.close()
+
+
+@router.get("/products/substitutes")
+def products_substitutes(
+    query: str = Query(..., description="Product search term"),
+    country: str = Query("PE"),
+    store: str | None = Query(None),
+    limit: int = Query(3, ge=1, le=10),
+    enveloped: bool = Query(True),
+):
+    """Substitute products with unit-normalized price comparison."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = find_substitutes(db, query=query, country=country, store=store, limit=limit)
+        if enveloped:
+            return _wrap(
+                result,
+                latency_ms=t.elapsed_ms,
+                confidence="warn" if result.get("method", "").startswith("fuzzy") else "ok",
+                provenance=build_provenance(
+                    primary_source="price_snapshots",
+                    sources_used=["price_snapshots", "golden_taxonomy"],
+                    methodology=result.get("method", "substitutes_v1"),
+                ),
+            )
+        return result
+    finally:
+        db.close()
+
+
+@router.get("/basket/tco")
+def basket_tco_v1(
+    country: str = Query("PE"),
+    store: str = Query(..., description="Store key from market_discover"),
+    items: str = Query(..., description='JSON array [{"name":"leche","qty":2}]'),
+    payment_method: str = Query("yape"),
+    include_delivery: bool = Query(True),
+    enveloped: bool = Query(True),
+):
+    """Total cost of ownership for a basket at one store."""
+    import json
+
+    db = get_db()
+    try:
+        parsed = json.loads(items)
+        if not isinstance(parsed, list):
+            parsed = []
+        with timing() as t:
+            result = build_basket_tco(
+                db,
+                country=country,
+                store=store,
+                items=parsed,
+                payment_method=payment_method,
+                include_delivery=include_delivery,
+            )
+        if enveloped:
+            return _wrap(
+                result,
+                latency_ms=t.elapsed_ms,
+                provenance=build_provenance(primary_source="price_snapshots", methodology="tco_v1"),
+            )
+        return result
     finally:
         db.close()
 

@@ -36,6 +36,27 @@ FOUNDING_SEAT_LIMIT = int(os.getenv("FOUNDING_SEAT_LIMIT", "100"))
 VALID_BILLING_PLANS = frozenset({"starter", "pro", "pro_founding", "pro_annual"})
 PLAN_ALIASES = {"founding": "pro_founding", "annual": "pro_annual", "pro-founding": "pro_founding"}
 
+# Wave 1 feature gates (tier slug → allowed tiers)
+FEATURE_TIERS: dict[str, frozenset[str]] = {
+    "affordability": frozenset({"free", "starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
+    "tco_delivery": frozenset({"starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
+    "substitutes_3": frozenset({"starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
+    "substitutes_1": frozenset({"free", "starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
+}
+
+
+def feature_allowed(tier: str | None, feature_slug: str) -> bool:
+    """Return whether *tier* may use *feature_slug*."""
+    allowed = FEATURE_TIERS.get(feature_slug)
+    if not allowed:
+        return True
+    t = (tier or "free").strip().lower()
+    return t in allowed or t == "enterprise"
+
+
+def substitute_limit_for_tier(tier: str | None) -> int:
+    return 3 if feature_allowed(tier, "substitutes_3") else 1
+
 
 def normalize_billing_plan(plan: str) -> str:
     p = (plan or "pro").strip().lower().replace("-", "_")

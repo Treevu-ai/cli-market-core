@@ -181,12 +181,30 @@ def _tool_handlers() -> dict:
             else api("GET", "/orders")
         ),
         "market_ask": lambda a: api("POST", "/agent/ask", {"prompt": a["prompt"]}),
-        "market_basket": lambda a: api("POST", "/v1/basket/compare", {"items": a["items"], "stores": a.get("stores")}),
+        "market_basket": lambda a: api(
+            "POST",
+            "/v1/basket/compare",
+            {
+                "items": a["items"],
+                "stores": a.get("stores"),
+                "include_tco": a.get("include_tco", False),
+            },
+        ),
         "market_intel_brief": _intel_brief_api,
         "market_inflation": lambda a: api(
             "GET",
             f"/v1/intel/inflation?country={a.get('country', '')}&line={a.get('line', '')}"
             f"&days={a.get('days', 7)}",
+        ),
+        "market_affordability": lambda a: api(
+            "GET",
+            f"/v1/intel/affordability?country={a.get('country', 'PE')}&line={a.get('line', 'supermercados')}"
+            f"&days={a.get('days', 30)}",
+        ),
+        "market_substitutes": lambda a: api(
+            "GET",
+            f"/v1/products/substitutes?query={a['query']}&country={a.get('country', 'PE')}"
+            f"&store={a.get('store', '')}&limit={a.get('limit', 3)}",
         ),
         "market_scores": lambda a: api("GET", f"/v1/intel/scores?country={a.get('country', '')}&line={a.get('line', '')}"),
         "market_price_risk": lambda a: api(

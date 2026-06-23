@@ -25,13 +25,13 @@ BUNDLE_PREFIXES = ("[Shop]", "[Intel]", "[Account]", "[Advanced]", "[Admin]")
 
 
 def test_registry_has_46_tools():
-    assert len(TOOLS) == 49
+    assert len(TOOLS) == 51
     names = [t["name"] for t in TOOLS]
     assert len(names) == len(set(names))
 
 
 def test_original_43_names_still_registered():
-    assert len(ORIGINAL_TOOL_NAMES) == 43
+    assert len(ORIGINAL_TOOL_NAMES) == 45
     for name in ORIGINAL_TOOL_NAMES:
         assert name in {t["name"] for t in TOOLS}
 
@@ -81,7 +81,7 @@ def test_get_profile_legacy_env(monkeypatch):
 
 
 def test_legacy_profile_lists_all_46():
-    assert len(list_tools("legacy")) == 49
+    assert len(list_tools("legacy")) == 51
 
 
 def test_default_profile_includes_pr2_canonicals():
@@ -98,12 +98,18 @@ def test_default_profile_includes_pr2_canonicals():
 
 def test_default_profile_is_curated_size():
     default_count = public_tool_count("default")
-    assert 20 <= default_count <= 28  # +3 intel products (Sprint 3)
+    assert 20 <= default_count <= 30  # wave 1: +affordability, +substitutes
 
 
 def test_admin_profile_includes_scan():
     names = {t["name"] for t in list_tools("admin")}
     assert "market_scan" in names
+
+
+def test_default_profile_includes_wave1_intel():
+    names = {t["name"] for t in list_tools("default")}
+    assert "market_affordability" in names
+    assert "market_substitutes" in names
 
 
 def test_default_profile_hides_admin_and_advanced():
@@ -167,6 +173,10 @@ def test_handle_tool_accepts_original_43_names(name: str):
             raw = handle_tool(name, {"amount": 10, "from_currency": "PEN", "to_currency": "USD"})
         elif name == "market_delivery":
             raw = handle_tool(name, {"product_id": "1", "store": "metro"})
+        elif name == "market_affordability":
+            raw = handle_tool(name, {"country": "PE"})
+        elif name == "market_substitutes":
+            raw = handle_tool(name, {"query": "leche", "country": "PE"})
         else:
             raw = handle_tool(name, {})
     data = json.loads(raw)

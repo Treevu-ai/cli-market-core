@@ -533,6 +533,24 @@ def _migrate_indicator_schema(db) -> None:
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_enrich_cache_at ON enrichment_cache(recorded_at DESC)")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS regulatory_events (
+                id TEXT PRIMARY KEY,
+                country TEXT NOT NULL,
+                category TEXT NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT DEFAULT '',
+                effective_at TEXT NOT NULL,
+                source_url TEXT DEFAULT '',
+                impact_hint TEXT DEFAULT 'neutral',
+                lines_affected_json TEXT DEFAULT '[]',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_regulatory_country_at "
+            "ON regulatory_events(country, effective_at DESC)"
+        )
     else:
         db.executescript("""
             CREATE TABLE IF NOT EXISTS indicator_definitions (
@@ -574,6 +592,20 @@ def _migrate_indicator_schema(db) -> None:
                 recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
             CREATE INDEX IF NOT EXISTS idx_enrich_cache_at ON enrichment_cache(recorded_at);
+            CREATE TABLE IF NOT EXISTS regulatory_events (
+                id TEXT PRIMARY KEY,
+                country TEXT NOT NULL,
+                category TEXT NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT DEFAULT '',
+                effective_at TEXT NOT NULL,
+                source_url TEXT DEFAULT '',
+                impact_hint TEXT DEFAULT 'neutral',
+                lines_affected_json TEXT DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_regulatory_country_at
+                ON regulatory_events(country, effective_at DESC);
         """)
     try:
         from .market_indicators import seed_indicator_definitions
@@ -581,6 +613,12 @@ def _migrate_indicator_schema(db) -> None:
         seed_indicator_definitions(db)
     except Exception as e:
         logger.warning("Indicator definition seed skipped: %s", e)
+    try:
+        from .market_regulatory import seed_default_regulatory_events
+
+        seed_default_regulatory_events(db)
+    except Exception as e:
+        logger.warning("Regulatory event seed skipped: %s", e)
 
 
 def append_price_history(db, product_id: str, store: str, price: float, list_price: float, discount) -> None:
