@@ -45,6 +45,9 @@ FEATURE_TIERS: dict[str, frozenset[str]] = {
     "optimize_purchase": frozenset({"starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
     "household_read": frozenset({"starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
     "household_write": frozenset({"pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
+    "receipt_crowd": frozenset({"starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
+    "ecosystem_radar": frozenset({"pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
+    "procurement_bulk": frozenset({"enterprise", "builder"}),
 }
 
 

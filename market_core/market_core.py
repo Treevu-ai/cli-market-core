@@ -569,6 +569,30 @@ def _migrate_indicator_schema(db) -> None:
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_export_expires ON shopping_list_exports(expires_at)"
         )
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS receipt_submissions (
+                id TEXT PRIMARY KEY,
+                username TEXT,
+                country TEXT,
+                store TEXT,
+                image_url TEXT,
+                ocr_json TEXT,
+                moat_diff_json TEXT,
+                status TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_receipt_created ON receipt_submissions(created_at DESC)"
+        )
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS ecosystem_launches_cache (
+                cache_key TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
     else:
         db.executescript("""
             CREATE TABLE IF NOT EXISTS indicator_definitions (
@@ -636,6 +660,24 @@ def _migrate_indicator_schema(db) -> None:
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_export_expires ON shopping_list_exports(expires_at);
+        CREATE TABLE IF NOT EXISTS receipt_submissions (
+            id TEXT PRIMARY KEY,
+            username TEXT,
+            country TEXT,
+            store TEXT,
+            image_url TEXT,
+            ocr_json TEXT,
+            moat_diff_json TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_receipt_created ON receipt_submissions(created_at DESC);
+        CREATE TABLE IF NOT EXISTS ecosystem_launches_cache (
+            cache_key TEXT PRIMARY KEY,
+            source TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
         """)
     try:
         from .market_indicators import seed_indicator_definitions

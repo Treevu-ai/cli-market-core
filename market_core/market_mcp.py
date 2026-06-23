@@ -43,6 +43,28 @@ def _checkout_api(args: dict) -> dict:
     return api("POST", routes.get(pm, "/checkout/yape"), {})
 
 
+def _ticket_api(args: dict) -> dict:
+    result = api(
+        "POST",
+        "/v1/ticket/scan-url",
+        {"url": args["url"], "country": args.get("country")},
+    )
+    if args.get("submit_to_crowd"):
+        crowd = api(
+            "POST",
+            "/v1/receipts/submit",
+            {
+                "url": args["url"],
+                "country": args.get("country", "PE"),
+                "line_items": args.get("line_items"),
+            },
+        )
+        if isinstance(result, dict):
+            return {**result, "crowd_submission": crowd}
+        return {"scan": result, "crowd_submission": crowd}
+    return result
+
+
 def _discover_api(args: dict) -> dict:
     """Compose lines + stores + countries; optional legacy slice for alias callers."""
     lines = api("GET", "/lines")
@@ -240,7 +262,7 @@ def _tool_handlers() -> dict:
         "market_categories": lambda a: api("GET", f"/categories/{a['store']}"),
         "market_barcode": lambda a: api("GET", f"/products/barcode/{a['code']}"),
         "market_enrich": lambda a: api("GET", f"/products/enrich?query={a['query']}&limit={a.get('limit', 5)}"),
-        "market_ticket": lambda a: api("POST", "/v1/ticket/scan-url", {"url": a["url"], "country": a.get("country")}),
+        "market_ticket": _ticket_api,
         "market_voice": lambda a: api("POST", "/v1/voice/transcribe-url", {"url": a["url"]}),
         "market_price_history": lambda a: api(
             "GET",
@@ -271,6 +293,27 @@ def _tool_handlers() -> dict:
         "market_trending": lambda a: api(
             "GET",
             f"/analytics/trending?country={a.get('country', '')}&line={a.get('line', '')}&limit={a.get('limit', 10)}",
+        ),
+        "market_moat_confidence": lambda a: api(
+            "GET",
+            f"/v1/moat/confidence?product_id={a.get('product_id', '')}&store={a.get('store', '')}"
+            f"&name={a.get('name', '')}",
+        ),
+        "market_ecosystem_radar": lambda a: api(
+            "GET",
+            f"/v1/ecosystem/launches?topic={a.get('topic', 'food')}&days={a.get('days', 7)}"
+            f"&limit={a.get('limit', 20)}",
+        ),
+        "market_procurement_bulk": lambda a: api(
+            "POST",
+            "/v1/intel/procurement-bulk",
+            {
+                "country": a.get("country", "PE"),
+                "organization_id": a.get("organization_id"),
+                "lines": a["lines"],
+                "include_substitutes": a.get("include_substitutes", True),
+                "output": a.get("output", "json"),
+            },
         ),
         "market_scan": lambda a: api("POST", "/v1/admin/scan-stores", {"line": a.get("line")}),
         "market_stock": lambda a: api("GET", f"/products/stock/{a['product_id']}?store={a['store']}"),
