@@ -25,7 +25,7 @@ from .data_v1_service import (
     query_prices,
 )
 from .market_action_links import get_shopping_list_export
-from .market_basket import build_basket_tco, build_canasta_snapshot
+from .market_basket import build_basket_compare, build_basket_tco, build_canasta_snapshot
 from .market_core import get_db
 from .market_household import (
     DEFAULT_HOUSEHOLD,
@@ -35,6 +35,7 @@ from .market_household import (
     put_household,
 )
 from .market_ecosystem import list_ecosystem_launches
+from .market_feature_flags import crowd_receipts_enabled, ecosystem_radar_enabled, household_enabled
 from .market_missions import run_optimize_purchase
 from .market_procurement_bulk import run_procurement_bulk
 from .market_receipts import compute_moat_confidence, get_receipt, submit_receipt
@@ -48,7 +49,8 @@ from .market_quality import build_data_quality_scores
 from .market_regulatory import list_regulatory_events
 from .market_substitutes import find_substitutes
 from .market_slas import slas_by_retailer, slas_summary
-from .response_envelope import build_provenance, envelope, timing
+from .market_observatory import record_affiliate_click
+from .response_envelope import build_provenance, confidence_from_coverage, envelope, timing
 
 router = APIRouter(tags=["intel", "quality", "health"])
 
@@ -79,6 +81,32 @@ def _wrap(data: Any, latency_ms: float | None = None, **extra_meta) -> dict:
     )
 
 
+def _wrap_provenance(
+    data: Any,
+    latency_ms: float | None,
+    *,
+    primary_source: str,
+    methodology: str,
+    confidence: str = "ok",
+    sources_used: list[str] | None = None,
+    stores_responded: int | None = None,
+    stores_queried: int | None = None,
+) -> dict:
+    prov = build_provenance(
+        primary_source=primary_source,
+        methodology=methodology,
+        sources_used=sources_used,
+        stores_responded=stores_responded,
+        stores_queried=stores_queried,
+    )
+    conf = confidence_from_coverage(prov.get("coverage_pct"), fallback=confidence)
+    return _wrap(data, latency_ms=latency_ms, confidence=conf, provenance=prov)
+
+
+def _feature_disabled(feature: str) -> None:
+    raise HTTPException(status_code=503, detail=f"{feature} is temporarily disabled")
+
+
 def _require_auth(username: str) -> str:
     if not username or username == "anonymous":
         raise HTTPException(status_code=401, detail="authentication required")
@@ -99,7 +127,14 @@ def intel_price_risk(
     try:
         with timing() as t:
             result = compute_price_risk(db, country=country, line=line, days=days)
-        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+        if enveloped:
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="price_snapshots",
+                methodology="price_risk_v1",
+            )
+        return result
     finally:
         db.close()
 
@@ -116,7 +151,14 @@ def intel_inflation_report(
     try:
         with timing() as t:
             result = compute_inflation_report(db, country=country, line=line, days=days)
-        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+        if enveloped:
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="price_snapshots",
+                methodology="inflation_report_v1",
+            )
+        return result
     finally:
         db.close()
 
@@ -132,7 +174,14 @@ def intel_procurement_signal(
     try:
         with timing() as t:
             result = compute_procurement_signal(db, country=country, line=line)
-        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+        if enveloped:
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="price_snapshots",
+                methodology="procurement_signal_v1",
+            )
+        return result
     finally:
         db.close()
 
@@ -218,6 +267,7 @@ def basket_tco_v1(
     items: str = Query(..., description='JSON array [{"name":"leche","qty":2}]'),
     payment_method: str = Query("yape"),
     include_delivery: bool = Query(True),
+    zipcode: str | None = Query(None),
     enveloped: bool = Query(True),
 ):
     """Total cost of ownership for a basket at one store."""
@@ -236,12 +286,18 @@ def basket_tco_v1(
                 items=parsed,
                 payment_method=payment_method,
                 include_delivery=include_delivery,
+                zipcode=zipcode,
             )
         if enveloped:
-            return _wrap(
+            sources = ["price_snapshots"]
+            if include_delivery and result.get("delivery", {}).get("available"):
+                sources.append("delivery")
+            return _wrap_provenance(
                 result,
-                latency_ms=t.elapsed_ms,
-                provenance=build_provenance(primary_source="price_snapshots", methodology="tco_v1"),
+                t.elapsed_ms,
+                primary_source="price_snapshots",
+                sources_used=sources,
+                methodology="tco_v1",
             )
         return result
     finally:
@@ -256,13 +312,22 @@ def household_get(
     enveloped: bool = Query(True),
 ):
     """Persistent household budget and dietary restrictions."""
+    if not household_enabled():
+        _feature_disabled("household")
     user = _require_auth(username)
     db = get_db()
     try:
         with timing() as t:
             profile = get_household(db, user)
             data = profile if profile is not None else dict(DEFAULT_HOUSEHOLD)
-        return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
+        if enveloped:
+            return _wrap_provenance(
+                data,
+                t.elapsed_ms,
+                primary_source="household_profiles",
+                methodology="household_v1",
+            )
+        return data
     finally:
         db.close()
 
@@ -273,12 +338,21 @@ def household_summary_v1(
     enveloped: bool = Query(True),
 ):
     """Derived budget summary for the authenticated household."""
+    if not household_enabled():
+        _feature_disabled("household")
     user = _require_auth(username)
     db = get_db()
     try:
         with timing() as t:
             data = household_summary(db, user)
-        return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
+        if enveloped:
+            return _wrap_provenance(
+                data,
+                t.elapsed_ms,
+                primary_source="household_profiles",
+                methodology="household_summary_v1",
+            )
+        return data
     finally:
         db.close()
 
@@ -290,6 +364,8 @@ def household_put(
     enveloped: bool = Query(True),
 ):
     """Replace household profile (schema v1)."""
+    if not household_enabled():
+        _feature_disabled("household")
     user = _require_auth(username)
     db = get_db()
     try:
@@ -298,7 +374,14 @@ def household_put(
                 data = put_household(db, user, payload)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
+        if enveloped:
+            return _wrap_provenance(
+                data,
+                t.elapsed_ms,
+                primary_source="household_profiles",
+                methodology="household_v1",
+            )
+        return data
     finally:
         db.close()
 
@@ -310,6 +393,8 @@ def household_patch(
     enveloped: bool = Query(True),
 ):
     """Partial update of household profile."""
+    if not household_enabled():
+        _feature_disabled("household")
     user = _require_auth(username)
     db = get_db()
     try:
@@ -318,7 +403,59 @@ def household_patch(
                 data = patch_household(db, user, payload)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
+        if enveloped:
+            return _wrap_provenance(
+                data,
+                t.elapsed_ms,
+                primary_source="household_profiles",
+                methodology="household_v1",
+            )
+        return data
+    finally:
+        db.close()
+
+
+# ── Basket compare (wave 4) ────────────────────────────────────────────────────
+
+@router.post("/basket/compare")
+def basket_compare_v1(
+    payload: dict[str, Any] = Body(...),
+    enveloped: bool = Query(True),
+):
+    """Compare basket totals across retailers with optional TCO and action links."""
+    db = get_db()
+    try:
+        store_filter = None
+        stores = payload.get("stores")
+        if stores:
+            store_filter = {str(s).strip() for s in stores if str(s).strip()}
+        with timing() as t:
+            result = build_basket_compare(
+                db,
+                items=payload.get("items") or [],
+                store_filter=store_filter,
+                include_tco=bool(payload.get("include_tco", False)),
+                payment_method=str(payload.get("payment_method") or "yape"),
+                include_delivery=bool(payload.get("include_delivery", True)),
+                zipcode=payload.get("zipcode"),
+                include_action_links=bool(payload.get("include_action_links", False)),
+                country=str(payload.get("country") or "PE"),
+            )
+        if enveloped:
+            store_rows = result.get("stores") or []
+            sources = ["price_snapshots"]
+            if any((s.get("tco") or {}).get("delivery", {}).get("available") for s in store_rows):
+                sources.append("delivery")
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="price_snapshots",
+                sources_used=sources,
+                stores_responded=len(store_rows),
+                stores_queried=len(store_rows) or None,
+                methodology="basket_compare_v1",
+            )
+        return result
     finally:
         db.close()
 
@@ -345,7 +482,21 @@ def mission_optimize_purchase(
             )
         if enveloped:
             conf = "ok" if result.get("status") == "ok" else "warn"
-            return _wrap(result, latency_ms=t.elapsed_ms, confidence=conf)
+            compare = (result.get("sections") or {}).get("compare") or {}
+            store_rows = compare.get("stores") or []
+            sources = ["price_snapshots", "golden_taxonomy"]
+            if any((s.get("tco") or {}).get("delivery", {}).get("available") for s in store_rows):
+                sources.append("delivery")
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="price_snapshots",
+                sources_used=sources,
+                stores_responded=len(store_rows),
+                stores_queried=len(store_rows) or None,
+                methodology="optimize_purchase_v1",
+                confidence=conf,
+            )
         return result
     finally:
         db.close()
@@ -368,6 +519,29 @@ def export_shopping_list(
         db.close()
 
 
+@router.post("/action/affiliate-click")
+def action_affiliate_click(
+    payload: dict[str, Any] = Body(...),
+    username: str = Depends(_v1_auth),
+    enveloped: bool = Query(True),
+):
+    """Record L3 affiliate deeplink click for observatory reporting."""
+    store = str(payload.get("store") or "").strip()
+    if not store:
+        raise HTTPException(status_code=422, detail="store required")
+    with timing() as t:
+        telemetry = record_affiliate_click(
+            store=store,
+            url=payload.get("url"),
+            product_id=payload.get("product_id"),
+            agent_id=username if username != "anonymous" else "anonymous",
+            country=payload.get("country"),
+            linked_username=username if username != "anonymous" else None,
+        )
+        data = {"recorded": bool(telemetry.get("ok")), "store": store, **telemetry}
+    return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
+
+
 # ── Wave 3: crowd truth, ecosystem, procurement bulk ───────────────────────────
 
 @router.post("/receipts/submit")
@@ -377,6 +551,8 @@ def receipts_submit(
     enveloped: bool = Query(True),
 ):
     """Submit a receipt image URL for crowd moat validation (OCR inline or pending)."""
+    if not crowd_receipts_enabled():
+        _feature_disabled("crowd_receipts")
     db = get_db()
     try:
         with timing() as t:
@@ -389,7 +565,15 @@ def receipts_submit(
                 line_items=payload.get("line_items"),
             )
         conf = "ok" if result.get("status") == "confirmed" else "warn"
-        return _wrap(result, latency_ms=t.elapsed_ms, confidence=conf) if enveloped else result
+        if enveloped:
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="receipt_submissions",
+                methodology="receipt_crowd_v1",
+                confidence=conf,
+            )
+        return result
     finally:
         db.close()
 
@@ -406,7 +590,14 @@ def receipts_get(
             result = get_receipt(db, receipt_id)
             if result is None:
                 raise HTTPException(status_code=404, detail="receipt not found")
-        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+        if enveloped:
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="receipt_submissions",
+                methodology="receipt_crowd_v1",
+            )
+        return result
     finally:
         db.close()
 
@@ -423,7 +614,14 @@ def moat_confidence_v1(
     try:
         with timing() as t:
             result = compute_moat_confidence(db, product_id=product_id, store=store, name=name)
-        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+        if enveloped:
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="receipt_submissions",
+                methodology="moat_confidence_v1",
+            )
+        return result
     finally:
         db.close()
 
@@ -436,11 +634,20 @@ def ecosystem_launches_v1(
     enveloped: bool = Query(True),
 ):
     """Ecosystem radar — curated and cached Product Hunt launches."""
+    if not ecosystem_radar_enabled():
+        _feature_disabled("ecosystem_radar")
     db = get_db()
     try:
         with timing() as t:
             result = list_ecosystem_launches(db, topic=topic, days=days, limit=limit)
-        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+        if enveloped:
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="ecosystem_launches_cache",
+                methodology="ecosystem_radar_v1",
+            )
+        return result
     finally:
         db.close()
 
@@ -465,7 +672,15 @@ def intel_procurement_bulk(
                 output=str(payload.get("output") or "json"),
             )
         conf = "ok" if result.get("status") == "ok" else "warn"
-        return _wrap(result, latency_ms=t.elapsed_ms, confidence=conf) if enveloped else result
+        if enveloped:
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="price_snapshots",
+                methodology="procurement_bulk_v1",
+                confidence=conf,
+            )
+        return result
     finally:
         db.close()
 

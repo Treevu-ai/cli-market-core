@@ -290,6 +290,16 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                         "default": False,
                         "description": "Include total cost of ownership (shelf + payment fees; delivery when available)",
                     },
+                    "include_action_links": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Attach retailer deeplink + export list action closure links",
+                    },
+                    "include_delivery": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Include delivery fee in TCO when include_tco=true",
+                    },
                 },
                 required=["items"],
             ),
@@ -308,7 +318,7 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                     },
                     "constraints": {
                         "type": "object",
-                        "description": "max_budget, preferred_stores, include_tco, allow_substitutes, payment_method",
+                        "description": "max_budget, preferred_stores, include_tco, allow_substitutes, payment_method, include_action_links",
                     },
                     "include_intel": {"type": "boolean", "default": True},
                 },

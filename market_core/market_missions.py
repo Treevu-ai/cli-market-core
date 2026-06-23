@@ -296,6 +296,8 @@ def run_optimize_purchase(
         include_tco=include_tco,
         payment_method=payment_method,
         include_delivery=include_tco,
+        zipcode=constraints.get("zipcode"),
+        country=country,
     )
 
     profile = get_household(db, username) if username and username != "anonymous" else None
@@ -389,13 +391,15 @@ def run_optimize_purchase(
     if leader.get("store_name"):
         rationale_parts.append(f"mejor TCO en {leader['store_name']}")
 
-    action_links = build_action_links(
-        db,
-        store=primary_store or "wong",
-        items=items_resolved,
-        country=country,
-        totals={"shelf": shelf_total, "tco": tco_total, "currency": currency},
-    )
+    action_links = []
+    if constraints.get("include_action_links", True):
+        action_links = build_action_links(
+            db,
+            store=primary_store or "wong",
+            items=items_resolved,
+            country=country,
+            totals={"shelf": shelf_total, "tco": tco_total, "currency": currency},
+        )
 
     return {
         "mission": "optimize_purchase",

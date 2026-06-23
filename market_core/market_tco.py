@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any
+
+from .market_core import API, STORES
+
+logger = logging.getLogger("market.tco")
 
 # Default payment surcharge (aggregator methods). Yape/Plin manual = 0%.
 PAYMENT_FEE_PCT: dict[str, float] = {
@@ -15,12 +21,112 @@ PAYMENT_FEE_PCT: dict[str, float] = {
     "tarjeta": 0.034,
 }
 
+# Offline fallback for PE VTEX grocers (wave 4 — used when live sim unavailable).
+_PE_DELIVERY_DEFAULTS: dict[str, dict[str, float]] = {
+    "wong": {"fee": 7.0, "min_order": 50.0},
+    "metro": {"fee": 6.5, "min_order": 45.0},
+    "plazavea": {"fee": 7.5, "min_order": 50.0},
+}
+
 
 def payment_fee_amount(subtotal: float, payment_method: str) -> tuple[float, float]:
     """Return (fee_pct, fee_amount) for *subtotal*."""
     method = (payment_method or "yape").strip().lower()
     pct = PAYMENT_FEE_PCT.get(method, 0.0)
     return pct, round(subtotal * pct, 2)
+
+
+def _delivery_from_defaults(store: str, subtotal: float) -> dict[str, Any] | None:
+    cfg = STORES.get(store) or {}
+    if cfg.get("platform") != "vtex":
+        return None
+    defaults = _PE_DELIVERY_DEFAULTS.get(store)
+    if not defaults:
+        return None
+    min_order = float(defaults["min_order"])
+    fee = float(defaults["fee"])
+    gap = round(max(0.0, min_order - subtotal), 2) if subtotal < min_order else 0.0
+    return {
+        "fee": fee,
+        "min_order": min_order,
+        "min_order_gap": gap if gap > 0 else None,
+        "available": True,
+        "source": "vtex_shipping_defaults",
+    }
+
+
+def _fetch_live_delivery_quote(
+    *,
+    store: str,
+    product_id: str | None,
+    zipcode: str | None,
+) -> dict[str, Any] | None:
+    if not product_id:
+        return None
+    if os.getenv("MARKET_SKIP_LIVE", "").strip() in {"1", "true", "yes"}:
+        return None
+    if os.getenv("CI", "").strip().lower() in {"1", "true", "yes"}:
+        return None
+    try:
+        import httpx
+
+        qs = f"store={store}"
+        if zipcode:
+            qs += f"&zipcode={zipcode}"
+        url = f"{API.rstrip('/')}/products/delivery/{product_id}?{qs}"
+        timeout = float(os.getenv("MARKET_DELIVERY_TIMEOUT", "8"))
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(url)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        if isinstance(data, dict) and "data" in data:
+            data = data["data"]
+        if not isinstance(data, dict):
+            return None
+        fee = data.get("fee")
+        if fee is None and data.get("delivery_fee") is not None:
+            fee = data.get("delivery_fee")
+        if fee is None:
+            return None
+        return {
+            "fee": round(float(fee), 2),
+            "min_order": data.get("min_order"),
+            "min_order_gap": data.get("min_order_gap"),
+            "available": True,
+            "source": "vtex_shipping_simulation",
+        }
+    except Exception as exc:
+        logger.debug("live delivery quote failed for %s: %s", store, exc)
+        return None
+
+
+def simulate_delivery_quote(
+    store: str,
+    *,
+    subtotal: float,
+    product_id: str | None = None,
+    zipcode: str | None = None,
+) -> dict[str, Any]:
+    """Best-effort delivery fee for TCO (live VTEX sim → static defaults → unavailable)."""
+    live = _fetch_live_delivery_quote(store=store, product_id=product_id, zipcode=zipcode)
+    if live:
+        min_order = live.get("min_order")
+        if min_order is not None and subtotal < float(min_order):
+            live["min_order_gap"] = round(float(min_order) - subtotal, 2)
+        return live
+
+    defaults = _delivery_from_defaults(store, subtotal)
+    if defaults:
+        return defaults
+
+    return {
+        "fee": 0.0,
+        "min_order": None,
+        "min_order_gap": None,
+        "available": False,
+        "source": None,
+    }
 
 
 def compute_line_tco(
