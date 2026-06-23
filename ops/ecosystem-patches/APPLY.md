@@ -42,6 +42,9 @@ Cada `.patch` es **solo para un repo**. Si aplicas el patch equivocado (ej. back
 | Patch | Repo | Archivos que toca |
 |-------|------|-------------------|
 | `cli-market-backend.patch` | **cli-market-backend** | `collect_prices.py`, `Dockerfile.collector`, `railway.collector.toml`, `requirements.txt` |
+| `cli-market-backend-core-1ed299e.patch` | **cli-market-backend** | Bump Wave 1–3 (superseded by 8469854) |
+| `BUMP-CORE-8469854.md` | **cli-market-backend** | Bump Wave 4 — pin + smoke (doc only) |
+| `BUMP-CORE-1ed299e.md` | — | Historial Wave 1–3 |
 | `cli-market-world.patch` | **cli-market-world** | `ci.yml`, `mcp.json`, `marketStats.ts`, `requirements-railway.txt`, `server.json`, … (15 archivos) |
 | `cli-market-content.patch` | **cli-market-content** | `outbound/procure-sequences.md`, `commercial/procure-copilot-feature-matrix.md`, … |
 | `procure-copilot.patch` | **procure-copilot** | `app/checkout/success`, `app/checkout/cancel`, `lib/market-stats.ts` |
@@ -54,11 +57,11 @@ Cada `.patch` es **solo para un repo**. Si aplicas el patch equivocado (ej. back
 grep run_rotating_catalog collect_prices.py   # backend: sí
 ```
 
-**World** — NO debe ganar `run_rotating_catalog` por este patch; sí debe tener `mcpTools: 27`:
+**World** — NO debe ganar `run_rotating_catalog` por este patch; actualizar `mcpTools` a **32** (default profile post Wave 4):
 
 ```bash
 grep run_rotating_catalog collect_prices.py   # world: no (0 matches)
-grep mcpTools landing/lib/marketStats.ts      # world: mcpTools: 27
+grep mcpTools landing/lib/marketStats.ts      # world: mcpTools: 32 (o public_tool_count)
 ```
 
 ### Si la rama remota quedó vieja (push devuelve OK pero GitHub sigue en False)
