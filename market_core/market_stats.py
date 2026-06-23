@@ -18,8 +18,8 @@ def _default_store_keys():
     return get_default_stores()
 
 def _mcp_tools_count():
-    from .market_mcp_registry import TOOLS
-    return len(TOOLS)
+    from .market_mcp_registry import public_tool_count
+    return public_tool_count("default")
 
 def _indicators_count():
     from .market_indicators import INDICATOR_DEFINITIONS
@@ -45,8 +45,9 @@ MCP_TOOLS = _mcp_tools_count()
 INDICATORS_COUNT = _indicators_count()
 ENRICHMENT_SOURCES_LABEL = "OFF · Wikimedia · Open-Meteo · World Bank · IMF · Eurostat · BCB"
 PRICES_REFRESH_HOURS = 4
+CANONICAL_OPTIMIZE_TOOL = "market_optimize_purchase"  # Cost-of-Living OS one-call entry point
 
-def _live_price_label(fallback: str = "45,000+") -> str:
+def _live_price_label(fallback: str = "63,000+") -> str:
     """Fetch total snapshots from health/db endpoint and round to nearest thousand."""
     try:
         import httpx
