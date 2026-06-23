@@ -970,9 +970,29 @@ PRD L3 mínimo: campo `action_links[].affiliate` + reporting en observatory (`qu
 - CLI `market optimize` command (opcional)
 - Docs en cli-market.dev
 
-### Fase 3 (oleada 2–3)
+### Fase 3 (oleada 2–3 + wave 4)
 
 - Feature flags: `HOUSEHOLD_ENABLED`, `CROWD_RECEIPTS_ENABLED`, `ECOSYSTEM_RADAR_ENABLED`
+- Affiliate L3: `AFFILIATE_STORES`, `POST /v1/action/affiliate-click`
+- Delivery TCO: `simulate_delivery_quote` + `POST /v1/basket/compare`
+
+---
+
+## 8.5 Oleada 4 — Action closure L3+ y hardening (post-PRD)
+
+> Implementado en PR #75 (`8469854`). Extiende §8.4 y §7.3.
+
+| Entregable | Estado |
+|------------|--------|
+| L3 `affiliate: true` + UTM en deeplinks | ✓ `AFFILIATE_STORES` / `AFFILIATE_ENABLED` |
+| Observatory `query_type=affiliate_click` | ✓ `POST /v1/action/affiliate-click` |
+| L4 `external_cart_handoff` stub | ✓ `EXTERNAL_CART_HANDOFF_ENABLED` |
+| TCO delivery (VTEX sim → defaults) | ✓ `market_tco.simulate_delivery_quote` |
+| `POST /v1/basket/compare` + `include_action_links` | ✓ |
+| `meta.provenance` rollout intel/shop/missions | ✓ |
+| Feature flags household/receipts/ecosystem | ✓ |
+
+**Fuera de scope wave 4:** L5 fulfillment, partner API live, PyPI 1.11.
 
 ---
 
