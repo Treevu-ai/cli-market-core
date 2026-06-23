@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 
 from .data_v1_service import (
     build_coverage_matrix,
@@ -24,8 +24,17 @@ from .data_v1_service import (
     query_flagged,
     query_prices,
 )
+from .market_action_links import get_shopping_list_export
 from .market_basket import build_basket_tco, build_canasta_snapshot
 from .market_core import get_db
+from .market_household import (
+    DEFAULT_HOUSEHOLD,
+    get_household,
+    household_summary,
+    patch_household,
+    put_household,
+)
+from .market_missions import run_optimize_purchase
 from .market_intel_products import (
     compute_affordability,
     compute_inflation_report,
@@ -65,6 +74,12 @@ def _wrap(data: Any, latency_ms: float | None = None, **extra_meta) -> dict:
         latency_ms=latency_ms,
         extra_meta=extra_meta or None,
     )
+
+
+def _require_auth(username: str) -> str:
+    if not username or username == "anonymous":
+        raise HTTPException(status_code=401, detail="authentication required")
+    return username
 
 
 # ── Intel products ─────────────────────────────────────────────────────────────
@@ -226,6 +241,126 @@ def basket_tco_v1(
                 provenance=build_provenance(primary_source="price_snapshots", methodology="tco_v1"),
             )
         return result
+    finally:
+        db.close()
+
+
+# ── Household profile (wave 2) ─────────────────────────────────────────────────
+
+@router.get("/household")
+def household_get(
+    username: str = Depends(_v1_auth),
+    enveloped: bool = Query(True),
+):
+    """Persistent household budget and dietary restrictions."""
+    user = _require_auth(username)
+    db = get_db()
+    try:
+        with timing() as t:
+            profile = get_household(db, user)
+            data = profile if profile is not None else dict(DEFAULT_HOUSEHOLD)
+        return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
+    finally:
+        db.close()
+
+
+@router.get("/household/summary")
+def household_summary_v1(
+    username: str = Depends(_v1_auth),
+    enveloped: bool = Query(True),
+):
+    """Derived budget summary for the authenticated household."""
+    user = _require_auth(username)
+    db = get_db()
+    try:
+        with timing() as t:
+            data = household_summary(db, user)
+        return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
+    finally:
+        db.close()
+
+
+@router.put("/household")
+def household_put(
+    payload: dict[str, Any] = Body(...),
+    username: str = Depends(_v1_auth),
+    enveloped: bool = Query(True),
+):
+    """Replace household profile (schema v1)."""
+    user = _require_auth(username)
+    db = get_db()
+    try:
+        with timing() as t:
+            try:
+                data = put_household(db, user, payload)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
+    finally:
+        db.close()
+
+
+@router.patch("/household")
+def household_patch(
+    payload: dict[str, Any] = Body(...),
+    username: str = Depends(_v1_auth),
+    enveloped: bool = Query(True),
+):
+    """Partial update of household profile."""
+    user = _require_auth(username)
+    db = get_db()
+    try:
+        with timing() as t:
+            try:
+                data = patch_household(db, user, payload)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
+    finally:
+        db.close()
+
+
+# ── Missions (wave 2) ──────────────────────────────────────────────────────────
+
+@router.post("/missions/optimize-purchase")
+def mission_optimize_purchase(
+    payload: dict[str, Any] = Body(...),
+    username: str = Depends(_v1_auth),
+    enveloped: bool = Query(True),
+):
+    """Composite mission: basket compare + TCO + substitutes + intel + action links."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = run_optimize_purchase(
+                db,
+                country=str(payload.get("country") or "PE"),
+                items=payload.get("items") or [],
+                constraints=payload.get("constraints"),
+                include_intel=bool(payload.get("include_intel", True)),
+                username=username,
+            )
+        if enveloped:
+            conf = "ok" if result.get("status") == "ok" else "warn"
+            return _wrap(result, latency_ms=t.elapsed_ms, confidence=conf)
+        return result
+    finally:
+        db.close()
+
+
+@router.get("/export/shopping-list/{token}")
+def export_shopping_list(
+    token: str,
+    enveloped: bool = Query(False),
+):
+    """Retrieve an exported shopping list by token (L2 action closure)."""
+    db = get_db()
+    try:
+        with timing() as t:
+            data = get_shopping_list_export(db, token)
+            if data is None:
+                raise HTTPException(status_code=404, detail="export not found or expired")
+        return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
     finally:
         db.close()
 

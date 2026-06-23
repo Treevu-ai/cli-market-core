@@ -25,13 +25,13 @@ BUNDLE_PREFIXES = ("[Shop]", "[Intel]", "[Account]", "[Advanced]", "[Admin]")
 
 
 def test_registry_has_46_tools():
-    assert len(TOOLS) == 51
+    assert len(TOOLS) == 54
     names = [t["name"] for t in TOOLS]
     assert len(names) == len(set(names))
 
 
 def test_original_43_names_still_registered():
-    assert len(ORIGINAL_TOOL_NAMES) == 45
+    assert len(ORIGINAL_TOOL_NAMES) == 48
     for name in ORIGINAL_TOOL_NAMES:
         assert name in {t["name"] for t in TOOLS}
 
@@ -81,7 +81,7 @@ def test_get_profile_legacy_env(monkeypatch):
 
 
 def test_legacy_profile_lists_all_46():
-    assert len(list_tools("legacy")) == 51
+    assert len(list_tools("legacy")) == 54
 
 
 def test_default_profile_includes_pr2_canonicals():
@@ -98,7 +98,7 @@ def test_default_profile_includes_pr2_canonicals():
 
 def test_default_profile_is_curated_size():
     default_count = public_tool_count("default")
-    assert 20 <= default_count <= 30  # wave 1: +affordability, +substitutes
+    assert 20 <= default_count <= 35  # wave 2: +optimize_purchase, +household_get/update
 
 
 def test_admin_profile_includes_scan():
@@ -110,6 +110,13 @@ def test_default_profile_includes_wave1_intel():
     names = {t["name"] for t in list_tools("default")}
     assert "market_affordability" in names
     assert "market_substitutes" in names
+
+
+def test_default_profile_includes_wave2_mission():
+    names = {t["name"] for t in list_tools("default")}
+    assert "market_optimize_purchase" in names
+    assert "market_household_get" in names
+    assert "market_household_update" in names
 
 
 def test_default_profile_hides_admin_and_advanced():
@@ -177,6 +184,12 @@ def test_handle_tool_accepts_original_43_names(name: str):
             raw = handle_tool(name, {"country": "PE"})
         elif name == "market_substitutes":
             raw = handle_tool(name, {"query": "leche", "country": "PE"})
+        elif name == "market_optimize_purchase":
+            raw = handle_tool(name, {"items": [{"name": "leche", "qty": 1}], "country": "PE"})
+        elif name == "market_household_get":
+            raw = handle_tool(name, {})
+        elif name == "market_household_update":
+            raw = handle_tool(name, {"payload": {"size": 2, "country": "PE"}})
         else:
             raw = handle_tool(name, {})
     data = json.loads(raw)
