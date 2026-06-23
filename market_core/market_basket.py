@@ -132,6 +132,9 @@ def build_basket_compare(
     include_tco: bool = False,
     payment_method: str = "yape",
     include_delivery: bool = True,
+    zipcode: str | None = None,
+    include_action_links: bool = False,
+    country: str = "PE",
 ) -> dict[str, Any]:
     """Compare total basket cost across retailers for arbitrary items.
 
@@ -154,7 +157,7 @@ def build_basket_compare(
             continue
 
         rows = db.execute(
-            """SELECT store, store_name, name, price, currency
+            """SELECT store, store_name, name, price, currency, product_id
                FROM price_snapshots
                WHERE price > 0 AND price < 999999
                  AND LOWER(name) LIKE LOWER(?)
@@ -162,18 +165,18 @@ def build_basket_compare(
             (f"%{query}%",),
         ).fetchall()
 
-        store_best: dict[str, tuple[float, str, str]] = {}
+        store_best: dict[str, tuple[float, str, str, str | None]] = {}
         for r in rows:
             store = r["store"]
             if store_filter and store not in store_filter:
                 continue
             price = float(r["price"])
             if store not in store_best or price < store_best[store][0]:
-                store_best[store] = (price, r["store_name"], r["currency"])
+                store_best[store] = (price, r["store_name"], r["currency"], r["product_id"])
 
         if store_best:
             items_found += 1
-            for store, (price, store_name, currency) in store_best.items():
+            for store, (price, store_name, currency, _product_id) in store_best.items():
                 item_total = round(price * qty, 2)
                 if store not in store_totals:
                     store_totals[store] = {
@@ -196,17 +199,40 @@ def build_basket_compare(
     stores = sorted(store_totals.values(), key=lambda x: x["total"])
 
     if include_tco:
-        from .market_tco import attach_tco_to_store
+        from .market_tco import attach_tco_to_store, simulate_delivery_quote
 
-        stores = [
-            attach_tco_to_store(
-                s,
-                delivery=None,
-                payment_method=payment_method,
-                include_delivery=include_delivery,
+        enriched: list[dict[str, Any]] = []
+        for s in stores:
+            product_id = None
+            for br in s.get("breakdown") or []:
+                row = db.execute(
+                    """
+                    SELECT product_id FROM price_snapshots
+                    WHERE store = ? AND LOWER(name) LIKE LOWER(?)
+                    ORDER BY price ASC LIMIT 1
+                    """,
+                    (s["store"], f"%{br.get('item', '')}%"),
+                ).fetchone()
+                if row and row["product_id"]:
+                    product_id = row["product_id"]
+                    break
+            delivery = None
+            if include_delivery:
+                delivery = simulate_delivery_quote(
+                    s["store"],
+                    subtotal=float(s.get("total") or 0),
+                    product_id=product_id,
+                    zipcode=zipcode,
+                )
+            enriched.append(
+                attach_tco_to_store(
+                    s,
+                    delivery=delivery,
+                    payment_method=payment_method,
+                    include_delivery=include_delivery,
+                )
             )
-            for s in stores
-        ]
+        stores = enriched
         if stores:
             shelf_leader = min(stores, key=lambda x: x["total"])
             tco_leader = min(stores, key=lambda x: x.get("tco_total", x["total"]))
@@ -219,6 +245,44 @@ def build_basket_compare(
     if include_tco and stores:
         result["cheapest_shelf_store"] = shelf_leader.get("store_name")
         result["cheapest_tco_store"] = tco_leader.get("store_name")
+        shelf_total = float(shelf_leader.get("total") or 0)
+        tco_total = float(tco_leader.get("tco_total") or shelf_total)
+        if shelf_total > 0:
+            result["tco_vs_shelf_delta_pct"] = round((tco_total - shelf_total) / shelf_total * 100, 1)
+    if include_action_links and stores:
+        from .market_action_links import build_action_links
+
+        leader = min(stores, key=lambda x: x.get("tco_total", x.get("total", 999999)))
+        resolved_items: list[dict[str, Any]] = []
+        for entry in items:
+            name = str(entry.get("name", "")).strip()
+            qty = max(1, int(entry.get("qty", 1) or 1))
+            product_id = None
+            for br in leader.get("breakdown") or []:
+                if br.get("item", "").lower() == name.lower():
+                    row = db.execute(
+                        """
+                        SELECT product_id FROM price_snapshots
+                        WHERE store = ? AND LOWER(name) LIKE LOWER(?)
+                        ORDER BY price ASC LIMIT 1
+                        """,
+                        (leader.get("store"), f"%{name}%"),
+                    ).fetchone()
+                    if row:
+                        product_id = row["product_id"]
+                    break
+            resolved_items.append({"name": name, "qty": qty, "product_id": product_id})
+        result["action_links"] = build_action_links(
+            db,
+            store=leader.get("store") or "wong",
+            items=resolved_items,
+            country=country,
+            totals={
+                "shelf": leader.get("total"),
+                "tco": leader.get("tco_total", leader.get("total")),
+                "currency": leader.get("currency", "PEN"),
+            },
+        )
     if not enveloped:
         return result
     return envelope(
@@ -237,6 +301,7 @@ def build_basket_tco(
     items: list[dict[str, Any]],
     payment_method: str = "yape",
     include_delivery: bool = True,
+    zipcode: str | None = None,
 ) -> dict[str, Any]:
     """TCO breakdown for a single store and item list."""
     from .market_core import STORES
@@ -278,13 +343,24 @@ def build_basket_tco(
             }
         )
 
+    delivery = None
+    if include_delivery and line_items:
+        from .market_tco import simulate_delivery_quote
+
+        delivery = simulate_delivery_quote(
+            store,
+            subtotal=subtotal,
+            product_id=line_items[0].get("product_id"),
+            zipcode=zipcode,
+        )
+
     tco = compute_line_tco(
         shelf_subtotal=subtotal,
-        delivery=None,
+        delivery=delivery,
         payment_method=payment_method,
         include_delivery=include_delivery,
     )
-    return {
+    out = {
         "country": country.upper(),
         "store": store,
         "currency": currency,
@@ -292,3 +368,6 @@ def build_basket_tco(
         **tco,
         "tco_per_item": round(tco["tco_total"] / max(1, len(line_items)), 2) if line_items else None,
     }
+    if subtotal > 0 and tco["tco_total"] != subtotal:
+        out["tco_vs_shelf_delta_pct"] = round((tco["tco_total"] - subtotal) / subtotal * 100, 1)
+    return out

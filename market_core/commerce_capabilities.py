@@ -32,17 +32,27 @@ def get_commerce_capabilities() -> dict:
             "health_endpoint": "/v1/sources/health",
         },
         "tco": {
-            "scope": "shelf_plus_payment_fees",
+            "scope": "shelf_plus_payment_fees_plus_delivery",
             "description": (
                 "TCO = subtotal_shelf + delivery (when available) + payment fee. "
                 "Free tier: shelf + payment only (include_delivery=false). "
                 "Starter+: full TCO when delivery data exists."
             ),
-            "delivery_data": "vtex_shipping_when_integrated",
+            "delivery_data": "vtex_shipping_simulation_with_defaults_fallback",
+            "delivery_sources": ["vtex_shipping_simulation", "vtex_shipping_defaults"],
         },
         "action_closure": {
-            "levels_available": ["analysis"],
+            "levels_available": ["analysis", "retailer_deeplink", "export_list", "affiliate", "external_cart_handoff"],
             "deeplinks": "wave_2",
+            "affiliate_utm": "wave_4_l3",
             "export_list": "wave_2",
+            "external_cart_handoff": "wave_4_l4_stub",
+            "feature_flags": [
+                "HOUSEHOLD_ENABLED",
+                "CROWD_RECEIPTS_ENABLED",
+                "ECOSYSTEM_RADAR_ENABLED",
+                "AFFILIATE_ENABLED",
+                "EXTERNAL_CART_HANDOFF_ENABLED",
+            ],
         },
     }

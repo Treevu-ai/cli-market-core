@@ -49,6 +49,7 @@ _EXACT_ROUTES: dict[tuple[str, str], tuple[str, str]] = {
     ("PUT", "/v1/household"): ("market_household_update", "household"),
     ("PATCH", "/v1/household"): ("market_household_update", "household"),
     ("POST", "/v1/missions/optimize-purchase"): ("market_optimize_purchase", "mission"),
+    ("POST", "/v1/action/affiliate-click"): ("market_affiliate_click", "affiliate_click"),
     ("POST", "/v1/receipts/submit"): ("market_ticket", "receipt_crowd"),
     ("GET", "/v1/moat/confidence"): ("market_moat_confidence", "receipt_crowd"),
     ("GET", "/v1/ecosystem/launches"): ("market_ecosystem_radar", "ecosystem"),
@@ -520,6 +521,29 @@ def record_agent_event(
     except Exception as exc:
         logger.warning("agent_events insert failed (fail-open): %s", exc)
         return {"ok": False, "error": str(exc)}
+
+
+def record_affiliate_click(
+    *,
+    store: str,
+    url: str | None = None,
+    product_id: str | None = None,
+    agent_id: str = "anonymous",
+    country: str | None = None,
+    linked_username: str | None = None,
+) -> dict[str, Any]:
+    """Record L3 affiliate deeplink click for observatory reporting."""
+    return record_agent_event(
+        agent_id=agent_id,
+        tool_name="market_affiliate_click",
+        success=True,
+        route="POST /v1/action/affiliate-click",
+        country=country,
+        retailer=store,
+        query_type="affiliate_click",
+        linked_username=linked_username,
+        metadata={"url": url, "product_id": product_id, "store": store},
+    )
 
 
 def _parse_ts(value: Any) -> datetime | None:
