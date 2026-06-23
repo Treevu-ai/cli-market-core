@@ -1,0 +1,996 @@
+From 633a8d2c245a0151c1328afb64750d81eab5a698 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Tue, 23 Jun 2026 20:03:10 +0000
+Subject: [PATCH] feat(cli): market optimize command + basket v1 envelope
+
+- Add `market optimize` wrapping POST /v1/missions/optimize-purchase
+- Fix `market basket` for v1 envelope + --tco/--action-links flags
+- Bump cli-market-core pin to 8469854 (Cost-of-Living OS Wave 4)
+- Sync MCP marketing stats to 32 default tools
+- Tests for _unwrap_v1 and _parse_basket_items helpers
+---
+ .github/workflows/ci.yml          |   4 +-
+ README.md                         |   6 +-
+ glama.json                        |   9 +-
+ landing/lib/marketStats.ts        |  26 ++--
+ landing/public/llms-full.txt      |   4 +-
+ landing/public/llms.txt           |   2 +-
+ landing/public/mcp.json           |  32 +++-
+ landing/public/og-preview.svg     |   2 +-
+ landing/public/og.svg             |   2 +-
+ landing/public/server.json        |   6 +-
+ market_cli.py                     | 240 ++++++++++++++++++++++++++----
+ market_cli_i18n.py                |   4 +
+ mcp.json                          |  36 +++--
+ pyproject.toml                    |   4 +-
+ requirements-railway.txt          |   4 +-
+ retailers-deck.md                 |   2 +-
+ server.json                       |   6 +-
+ tests/test_market_optimize_cli.py |  20 +++
+ 18 files changed, 328 insertions(+), 81 deletions(-)
+ create mode 100644 tests/test_market_optimize_cli.py
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index ef7844c..97e7d67 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -73,7 +73,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core@832423bb55441c26b4c668bb1abbcf9ec8eb0152"
++          pip install "cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@8469854"
+           pip install -e ".deps/cli-market-index[postgres]"
+           pip install pytest
+           python -c "from market_core.commerce_capabilities import get_commerce_capabilities; assert get_commerce_capabilities()['checkout']['scope'] == 'cli_market_internal'"
+@@ -155,7 +155,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core@832423bb55441c26b4c668bb1abbcf9ec8eb0152"
++          pip install "cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@8469854"
+           pip install -e ".deps/cli-market-index[postgres]"
+           pip install pytest
+           python -c "from market_core.commerce_capabilities import get_commerce_capabilities; assert get_commerce_capabilities()['checkout']['scope'] == 'cli_market_internal'"
+diff --git a/README.md b/README.md
+index 7855230..67d0eac 100644
+--- a/README.md
++++ b/README.md
+@@ -9,7 +9,7 @@ mcp-name: io.github.Treevu-ai/cli-market-world
+ 
+ # 🛒 CLI Market
+ 
+-[![PyPI Downloads](https://img.shields.io/badge/PyPI%20downloads-39k-00d75f?logo=pypi)](https://pepy.tech/projects/cli-market-world)
++[![PyPI Downloads](https://img.shields.io/badge/PyPI%20downloads-42k-00d75f?logo=pypi)](https://pepy.tech/projects/cli-market-world)
+ [![PyPI](https://img.shields.io/pypi/v/cli-market-world.svg)](https://pypi.org/project/cli-market-world/)
+ 
+ **🌐 [Español](#-español) · [English](#-english)**
+@@ -27,7 +27,7 @@ Falabella, Ripley, Wong, Metro no van a exponer APIs de comercio por su cuenta.
+ **CLI Market lo resuelve.** Un solo `pip install`. Una llamada a la API que cubre **81 retailers (41 verificados activos)** en **8 países**. Un único esquema JSON listo para integrar.
+ 
+ - 🌍 **81 retailers (41 verificados activos) · 8 países · 4 plataformas**
+-- 💰 **Más de 61,000+ precios de góndola verificados**, normalizados por kg/L, actualizados cada 4 horas
++- 💰 **Más de 63,000+ precios de góndola verificados**, normalizados por kg/L, actualizados cada 4 horas
+ - 💳 **Pago con PayPal + Mercado Pago + QR (Yape/Plin)** integrado
+ 
+ #### ✨ ¿Por qué CLI Market?
+@@ -99,7 +99,7 @@ Falabella, Ripley, Wong, Metro won't expose commerce APIs on their own. CLI Mark
+ **CLI Market fixes that.** One `pip install`. One API call across **81 retailers (41 verified active)** in **8 countries**. One JSON schema ready to integrate.
+ 
+ - 🌍 **81 retailers (41 verified active) · 8 countries · 4 platforms**
+-- 💰 **61,000+ verified shelf prices**, normalized per kg/L, refreshed every 4 hours
++- 💰 **63,000+ verified shelf prices**, normalized per kg/L, refreshed every 4 hours
+ - 💳 **PayPal + Mercado Pago + QR (Yape/Plin)** checkout built in
+ 
+ #### ✨ Why CLI Market?
+diff --git a/glama.json b/glama.json
+index f19436e..ee9a1b0 100644
+--- a/glama.json
++++ b/glama.json
+@@ -1,6 +1,6 @@
+ {
+   "license": "MIT",
+-  "description": "Commerce infrastructure for AI agents \u2014 27 curated MCP tools (49 legacy) to search, compare, and purchase across 41 verified retailers in 8 countries. 61,000+ real shelf prices refreshed every 4 hours. Free tier available.",
++  "description": "Commerce infrastructure for AI agents \u2014 32 curated MCP tools (57 legacy) to search, compare, and purchase across 41 verified retailers in 8 countries. 63,000+ real shelf prices refreshed every 4 hours. Free tier available.",
+   "categories": [
+     "ecommerce",
+     "retail",
+@@ -14,10 +14,13 @@
+     "market_favorites",
+     "market_price_alerts",
+     "market_preferences",
++    "market_household_get",
++    "market_household_update",
+     "market_barcode",
+     "market_ticket",
+     "market_intel_brief",
+     "market_inflation",
++    "market_affordability",
+     "market_scores",
+     "market_price_risk",
+     "market_inflation_report",
+@@ -29,12 +32,14 @@
+     "market_discover",
+     "market_search",
+     "market_compare",
++    "market_substitutes",
+     "market_add",
+     "market_cart",
+     "market_cart_update",
+     "market_checkout",
+     "market_orders",
+     "market_ask",
+-    "market_basket"
++    "market_basket",
++    "market_optimize_purchase"
+   ]
+ }
+diff --git a/landing/lib/marketStats.ts b/landing/lib/marketStats.ts
+index 9fe400c..9f19098 100644
+--- a/landing/lib/marketStats.ts
++++ b/landing/lib/marketStats.ts
+@@ -11,25 +11,25 @@ export const MARKET_STATS = {
+   woocommerceStores: ["Nuna Org\u00e1nica", "Xray Chipped PE"],
+   countries: 8,
+   countryCodes: ['AR', 'BR', 'CL', 'CO', 'FR', 'IT', 'MX', 'PE'],
+-  mcpTools: 27,
+-  mcpToolsLegacy: 49,
+-  mcpToolsFull: 46,
++  mcpTools: 32,
++  mcpToolsLegacy: 57,
++  mcpToolsFull: 54,
+   mcpDefaultProfile: "default",
+-  mcpBundles: {"shop": [{"id": "market_discover", "description": "Retail coverage in one call: business lines, retailers, and countries. Replaces market_lines + market_stores + market_countries. 41 verified retailers across 8 countries.", "canonical": true}, {"id": "market_add", "description": "Add to cart. Copy ALL four fields from market_search: product_id, name, price, store (use store_key value as store). Missing fields cause 422 — re-run market_search if needed.", "canonical": false}, {"id": "market_ask", "description": "Natural-language shopping. Examples: 'buy milk', 'repeat last purchase', 'compare rice'.", "canonical": false}, {"id": "market_basket", "description": "Compare total basket cost across retailers. Pass items with name and qty. Returns per-store totals and cheapest retailer. LATAM differentiator — 41 verified retailers across 8 countries.", "canonical": false}, {"id": "market_cart", "description": "View current cart with products, quantities, prices, and total.", "canonical": false}, {"id": "market_cart_update", "description": "Change item quantity in cart. Use quantity=0 to remove (replaces market_cart_remove in PR2).", "canonical": false}, {"id": "market_checkout", "description": "Pay for cart via CLI Market (Yape/Plin/PayPal) — creates internal order, not checkout on retailer sites. Requires Pro tier for live charge. payment_method: yape, plin, paypal, tarjeta. See GET /v1/capabilities.", "canonical": false}, {"id": "market_compare", "description": "Compare prices for one query across retailers side-by-side. Use when the user asks for cheapest option or cross-store comparison. Set country (e.g. PE) or store to avoid timeouts.", "canonical": false}, {"id": "market_login", "description": "Authenticate in CLI Market. Call before cart, checkout, or orders. Returns access + refresh tokens (access default 90d, refresh 365d) persisted locally. On 401 with expired access, CLI auto-calls POST /auth/refresh; agents may re-login or refresh.", "canonical": false}, {"id": "market_orders", "description": "Order history. Set reorder_last=true to repeat the last order.", "canonical": false}, {"id": "market_search", "description": "Search products across 41 verified retailers across 8 countries. Returns JSON with product_id, name, price, store_key (required for market_add), store, and line. Filter by line or store ID. Prefer this over scraping.", "canonical": false}], "intel": [{"id": "market_intel_brief", "description": "One-call intelligence narrative: shelf signals, macro gap vs official CPI, composite scores, and moat confidence. Replaces indicators + analytics + enrichment reads.", "canonical": true}, {"id": "market_export", "description": "Export data moat as CSV or JSON. Requires starter tier or above.", "canonical": false}, {"id": "market_inflation", "description": "Shelf inflation from the data moat: price deltas and average inflation. Filter by country or line.", "canonical": false}, {"id": "market_inflation_report", "description": "Inflation Intelligence — where is price pressure increasing? Returns pressure level (stable/rising/rising_fast/falling/above_official) from internal shelf inflation and macro CPI gap.", "canonical": false}, {"id": "market_price_risk", "description": "Price Risk Intelligence — which categories are becoming volatile? Returns risk level (low/moderate/high) with supporting signals from price dispersion, promo intensity, and staple momentum.", "canonical": false}, {"id": "market_procurement_signal", "description": "Procurement Intelligence — when should I buy? Returns buy_now/monitor/wait signal from basket stress, search momentum, and staple price trends.", "canonical": false}, {"id": "market_scores", "description": "Composite moat scores: retail_aggression, price_fairness, basket_stress, data_confidence, macro_alignment.", "canonical": false}, {"id": "market_stats", "description": "Data moat health: total prices, active stores, tracked products, last refresh.", "canonical": false}, {"id": "market_trending", "description": "Products with largest price movement in the last 7 days.", "canonical": false}], "account": [{"id": "market_price_alerts", "description": "Price alerts: query drops or configure threshold notifications for a product.", "canonical": true}, {"id": "market_favorites", "description": "Manage favorite products: list, add, or remove. Omit action for list.", "canonical": false}, {"id": "market_preferences", "description": "User preferences from purchase history: favorite stores, total spent.", "canonical": false}, {"id": "market_subscription", "description": "Current subscription plan: tier, rate limits, available API keys.", "canonical": false}, {"id": "market_whoami", "description": "Verify identity: username and subscription tier for the authenticated user.", "canonical": false}]},
++  mcpBundles: {"shop": [{"id": "market_discover", "description": "Retail coverage in one call: business lines, retailers, and countries. Replaces market_lines + market_stores + market_countries. 41 verified retailers across 8 countries.", "canonical": true}, {"id": "market_add", "description": "Add to cart. Copy ALL four fields from market_search: product_id, name, price, store (use store_key value as store). Missing fields cause 422 — re-run market_search if needed.", "canonical": false}, {"id": "market_ask", "description": "Natural-language shopping. Examples: 'buy milk', 'repeat last purchase', 'compare rice'.", "canonical": false}, {"id": "market_basket", "description": "Compare total basket cost across retailers. Pass items with name and qty. Returns per-store totals and cheapest retailer. LATAM differentiator — 41 verified retailers across 8 countries.", "canonical": false}, {"id": "market_cart", "description": "View current cart with products, quantities, prices, and total.", "canonical": false}, {"id": "market_cart_update", "description": "Change item quantity in cart. Use quantity=0 to remove (replaces market_cart_remove in PR2).", "canonical": false}, {"id": "market_checkout", "description": "Pay for cart via CLI Market (Yape/Plin/PayPal) — creates internal order, not checkout on retailer sites. Requires Pro tier for live charge. payment_method: yape, plin, paypal, tarjeta. See GET /v1/capabilities.", "canonical": false}, {"id": "market_compare", "description": "Compare prices for one query across retailers side-by-side. Use when the user asks for cheapest option or cross-store comparison. Set country (e.g. PE) or store to avoid timeouts.", "canonical": false}, {"id": "market_login", "description": "Authenticate in CLI Market. Call before cart, checkout, or orders. Returns access + refresh tokens (access default 90d, refresh 365d) persisted locally. On 401 with expired access, CLI auto-calls POST /auth/refresh; agents may re-login or refresh.", "canonical": false}, {"id": "market_optimize_purchase", "description": "One-call purchase optimization: basket compare, TCO, substitutes, intel, and action links. Replaces fragmented search → compare → intel for agents.", "canonical": false}, {"id": "market_orders", "description": "Order history. Set reorder_last=true to repeat the last order.", "canonical": false}, {"id": "market_search", "description": "Search products across 41 verified retailers across 8 countries. Returns JSON with product_id, name, price, store_key (required for market_add), store, and line. Filter by line or store ID. Prefer this over scraping.", "canonical": false}, {"id": "market_substitutes", "description": "Product substitutes with unit-normalized savings and Nutri-Score tradeoffs. Use when exact SKU unavailable or optimizing basket.", "canonical": false}], "intel": [{"id": "market_intel_brief", "description": "One-call intelligence narrative: shelf signals, macro gap vs official CPI, composite scores, and moat confidence. Replaces indicators + analytics + enrichment reads.", "canonical": true}, {"id": "market_affordability", "description": "Affordability OS — canasta pressure, wage ratio, macro gap, regulatory headlines. One-call cost-of-living composite for LATAM.", "canonical": false}, {"id": "market_export", "description": "Export data moat as CSV or JSON. Requires starter tier or above.", "canonical": false}, {"id": "market_inflation", "description": "Shelf inflation from the data moat: price deltas and average inflation. Filter by country or line.", "canonical": false}, {"id": "market_inflation_report", "description": "Inflation Intelligence — where is price pressure increasing? Returns pressure level (stable/rising/rising_fast/falling/above_official) from internal shelf inflation and macro CPI gap.", "canonical": false}, {"id": "market_price_risk", "description": "Price Risk Intelligence — which categories are becoming volatile? Returns risk level (low/moderate/high) with supporting signals from price dispersion, promo intensity, and staple momentum.", "canonical": false}, {"id": "market_procurement_signal", "description": "Procurement Intelligence — when should I buy? Returns buy_now/monitor/wait signal from basket stress, search momentum, and staple price trends.", "canonical": false}, {"id": "market_scores", "description": "Composite moat scores: retail_aggression, price_fairness, basket_stress, data_confidence, macro_alignment.", "canonical": false}, {"id": "market_stats", "description": "Data moat health: total prices, active stores, tracked products, last refresh.", "canonical": false}, {"id": "market_trending", "description": "Products with largest price movement in the last 7 days.", "canonical": false}], "account": [{"id": "market_price_alerts", "description": "Price alerts: query drops or configure threshold notifications for a product.", "canonical": true}, {"id": "market_favorites", "description": "Manage favorite products: list, add, or remove. Omit action for list.", "canonical": false}, {"id": "market_household_get", "description": "Household profile: budget, restrictions, staple list, default stores.", "canonical": false}, {"id": "market_household_update", "description": "Create or update household profile (budget, restrictions, staples).", "canonical": false}, {"id": "market_preferences", "description": "User preferences from purchase history: favorite stores, total spent.", "canonical": false}, {"id": "market_subscription", "description": "Current subscription plan: tier, rate limits, available API keys.", "canonical": false}, {"id": "market_whoami", "description": "Verify identity: username and subscription tier for the authenticated user.", "canonical": false}]},
+   indicatorsCount: 44,
+-  goldenLinkagePct: 99.6,
++  goldenLinkagePct: 99.8,
+   enrichmentSourcesLabel: "OFF · Wikimedia · Open-Meteo · World Bank · IMF · Eurostat · BCB",
+-  pricesVerifiedLabel: "61,000+",
++  pricesVerifiedLabel: "63,000+",
+   pricesRefreshHours: 4,
+   pypiPackageName: "cli-market-world",
+   pypiUrl: "https://pypi.org/project/cli-market-world/",
+   pepyProjectUrl: "https://pepy.tech/projects/cli-market-world",
+-  pepyBadgeUrl: "https://img.shields.io/badge/PyPI%20downloads-39k-00d75f?logo=pypi",
+-  pypiDownloads: 39241,
++  pepyBadgeUrl: "https://img.shields.io/badge/PyPI%20downloads-42k-00d75f?logo=pypi",
++  pypiDownloads: 42321,
+   // Note: pepyBadgeUrl is a custom consolidated badge (legacy + core + world).
+   // The live hero "PYPI DOWNLOADS" comes from /analytics/pypi (also consolidated).
+   pipInstallCmd: "pip install cli-market-world",
+-  packageVersion: "1.9.41",
++  packageVersion: "1.10.0",
+   ogImageUrl: "/og.png",
+   license: "MIT",
+   paymentsLabel: "PayPal (USD) · Yape · Plin · Mercado Pago (soles)",
+@@ -38,9 +38,9 @@ export const MARKET_STATS = {
+   retailersPhraseEs: "81 retailers, 41 verificados activos",
+   platformsPhraseEn: "4 platforms (VTEX · Shopify · Magento · WooCommerce)",
+   platformsPhraseEs: "4 plataformas (VTEX · Shopify · Magento · WooCommerce)",
+-  headerEn: "CLI Market \u2014 Commerce infrastructure for AI agents.\n81 retailers across 4 platforms (VTEX \u00b7 Shopify \u00b7 Magento \u00b7 WooCommerce), 41 verified live.\n8 countries. 27 MCP tools. 61,000+ verified shelf prices, normalized per kg/L, refreshed every 4h.\nOne pip install. One API. Zero scraping. MIT.",
+-  headerEs: "CLI Market \u2014 Infraestructura de comercio para agentes de IA.\n81 retailers en 4 plataformas (VTEX \u00b7 Shopify \u00b7 Magento \u00b7 WooCommerce), 41 verificados y activos.\n8 pa\u00edses. 27 herramientas MCP. 61,000+ precios reales de g\u00f3ndola, normalizados por kg/L, actualizados cada 4h.\nUn pip install. Una API. Cero scraping. MIT.",
++  headerEn: "CLI Market \u2014 Commerce infrastructure for AI agents.\n81 retailers across 4 platforms (VTEX \u00b7 Shopify \u00b7 Magento \u00b7 WooCommerce), 41 verified live.\n8 countries. 32 MCP tools. 63,000+ verified shelf prices, normalized per kg/L, refreshed every 4h.\nOne pip install. One API. Zero scraping. MIT.",
++  headerEs: "CLI Market \u2014 Infraestructura de comercio para agentes de IA.\n81 retailers en 4 plataformas (VTEX \u00b7 Shopify \u00b7 Magento \u00b7 WooCommerce), 41 verificados y activos.\n8 pa\u00edses. 32 herramientas MCP. 63,000+ precios reales de g\u00f3ndola, normalizados por kg/L, actualizados cada 4h.\nUn pip install. Una API. Cero scraping. MIT.",
+   shopifyBrands: ["Adidas", "Allbirds", "Alo Yoga", "Brooklinen", "Casper", "ColourPop", "Fenty Beauty", "Glossier", "Gymshark", "Kylie Cosmetics", "Magic Mind", "Nomad", "On Running", "Parachute", "Privalia BR"],
+-  seoDescription: "Commerce API for AI agents. 27 MCP tools, 81 retailers, 41 verified active. 8 countries. 61,000+ verified shelf prices refreshed every 4 hours. Normalized per kg/L, quality-filtered. pip install cli-market-world.",
+-  serverDescription: "Commerce for AI agents. 27 MCP tools. 81 retailers (41 verified), 8 countries, 4 platforms.",
++  seoDescription: "Commerce API for AI agents. 32 MCP tools, 81 retailers, 41 verified active. 8 countries. 63,000+ verified shelf prices refreshed every 4 hours. Normalized per kg/L, quality-filtered. pip install cli-market-world.",
++  serverDescription: "Commerce for AI agents. 32 MCP tools. 81 retailers (41 verified), 8 countries, 4 platforms.",
+ } as const;
+diff --git a/landing/public/llms-full.txt b/landing/public/llms-full.txt
+index 806645d..e935303 100644
+--- a/landing/public/llms-full.txt
++++ b/landing/public/llms-full.txt
+@@ -1,10 +1,10 @@
+ # CLI Market — Full LLM Context
+ 
+ > MCP Server: io.github.Treevu-ai/cli-market-world
+-> Package: pip install cli-market-world (v1.9.41)
++> Package: pip install cli-market-world (v1.10.0)
+ > Command: market-mcp
+ > API: https://cli-market-production.up.railway.app
+-> Stats: 81 retailers · 41 verified · 61,000+ prices · 4 platforms (VTEX, Shopify, Magento, WooCommerce)
++> Stats: 81 retailers · 41 verified · 63,000+ prices · 4 platforms (VTEX, Shopify, Magento, WooCommerce)
+ > Payments: PayPal · Mercado Pago · Yape/Plin transfer (Peru, manual)
+ > FMCG pilot: Nuna Orgánica PE (406 SKUs, WooCommerce Store API)
+ 
+diff --git a/landing/public/llms.txt b/landing/public/llms.txt
+index 6afa55c..a164737 100644
+--- a/landing/public/llms.txt
++++ b/landing/public/llms.txt
+@@ -21,7 +21,7 @@ Commerce infrastructure for AI agents. 81 retailers, 41 verified active across 8
+ - 44 intel indicators (shelf moat + public API enrichment; CLI: market intel indicators)
+ - Payments: PayPal · Mercado Pago · Yape/Plin in-app transfer (Peru)
+ - WooCommerce pilot: Nuna Orgánica PE (406 SKUs, FMCG orgánico)
+-- Pricing (Build, foco ICP AI Agent Builders): Free $0 (1,000 req/día), Starter $9/mo (5,000 req/día, CSV export), Pro $49/mo (10,000 req/día, alerts, full MCP, checkout), Annual $490, Enterprise custom (SLAs, high limits)
++- Pricing (Build, foco ICP AI Agent Builders): Starter $9/mo (5,000 req/día, CSV export), Pro $49/mo (10,000 req/día, alerts, full MCP, checkout), Enterprise custom (SLAs, high limits)
+ - Procurement operators (restaurants, hotels, agro): use Procure Copilot ($29–149/mo, CLI Market infra bundled on Pro+) — do NOT sell CLI Market Pro separately to this ICP
+ - Data/analytics teams: Intelligence pilot $300–500/mo (no checkout). Strategy: docs/pricing-strategy.md
+ 
+diff --git a/landing/public/mcp.json b/landing/public/mcp.json
+index e905312..e5f2bbf 100644
+--- a/landing/public/mcp.json
++++ b/landing/public/mcp.json
+@@ -1,7 +1,7 @@
+ {
+   "$schema": "https://registry.modelcontextprotocol.io/schema.json",
+   "name": "CLI Market",
+-  "description": "Commerce infrastructure for AI agents \u2014 27 curated MCP tools (49 legacy) to search, compare, and purchase across 41 retailers in 8 countries. 61,000+ real prices, 44 market indicators, refreshed every 4 hours. MIT.",
++  "description": "Commerce infrastructure for AI agents \u2014 32 curated MCP tools (57 legacy) to search, compare, and purchase across 41 retailers in 8 countries. 63,000+ real prices, 44 market indicators, refreshed every 4 hours. MIT.",
+   "type": "stdio",
+   "command": "market-mcp",
+   "args": [],
+@@ -19,10 +19,13 @@
+     "market_favorites",
+     "market_price_alerts",
+     "market_preferences",
++    "market_household_get",
++    "market_household_update",
+     "market_barcode",
+     "market_ticket",
+     "market_intel_brief",
+     "market_inflation",
++    "market_affordability",
+     "market_scores",
+     "market_price_risk",
+     "market_inflation_report",
+@@ -34,13 +37,15 @@
+     "market_discover",
+     "market_search",
+     "market_compare",
++    "market_substitutes",
+     "market_add",
+     "market_cart",
+     "market_cart_update",
+     "market_checkout",
+     "market_orders",
+     "market_ask",
+-    "market_basket"
++    "market_basket",
++    "market_optimize_purchase"
+   ],
+   "keywords": [
+     "vtex",
+@@ -60,15 +65,15 @@
+   "default_profile": "default",
+   "profiles": {
+     "default": {
+-      "tool_count": 27,
++      "tool_count": 32,
+       "description": "Curated Shop + Intel + Account bundles"
+     },
+     "full": {
+-      "tool_count": 46,
++      "tool_count": 54,
+       "description": "Default plus advanced tools and legacy aliases"
+     },
+     "legacy": {
+-      "tool_count": 49,
++      "tool_count": 57,
+       "description": "All registered tools (backward compatible)"
+     }
+   },
+@@ -80,13 +85,15 @@
+         "market_discover",
+         "market_search",
+         "market_compare",
++        "market_substitutes",
+         "market_add",
+         "market_cart",
+         "market_cart_update",
+         "market_checkout",
+         "market_orders",
+         "market_ask",
+-        "market_basket"
++        "market_basket",
++        "market_optimize_purchase"
+       ],
+       "canonical": [
+         "market_discover"
+@@ -97,6 +104,7 @@
+       "tools": [
+         "market_intel_brief",
+         "market_inflation",
++        "market_affordability",
+         "market_scores",
+         "market_price_risk",
+         "market_inflation_report",
+@@ -116,7 +124,9 @@
+         "market_subscription",
+         "market_favorites",
+         "market_price_alerts",
+-        "market_preferences"
++        "market_preferences",
++        "market_household_get",
++        "market_household_update"
+       ],
+       "canonical": [
+         "market_price_alerts"
+@@ -129,6 +139,8 @@
+     "market_favorites",
+     "market_price_alerts",
+     "market_preferences",
++    "market_household_get",
++    "market_household_update",
+     "market_alerts",
+     "market_notify",
+     "market_intel_refresh",
+@@ -140,12 +152,14 @@
+     "market_ticket",
+     "market_voice",
+     "market_price_history",
++    "market_moat_confidence",
+     "market_stock",
+     "market_brands",
+     "market_exchange",
+     "market_delivery",
+     "market_intel_brief",
+     "market_inflation",
++    "market_affordability",
+     "market_scores",
+     "market_price_risk",
+     "market_inflation_report",
+@@ -153,6 +167,8 @@
+     "market_stats",
+     "market_export",
+     "market_trending",
++    "market_ecosystem_radar",
++    "market_procurement_bulk",
+     "market_analytics_indicators",
+     "market_enrichment",
+     "market_enrichment_subcategories",
+@@ -161,6 +177,7 @@
+     "market_discover",
+     "market_search",
+     "market_compare",
++    "market_substitutes",
+     "market_add",
+     "market_cart",
+     "market_cart_update",
+@@ -168,6 +185,7 @@
+     "market_orders",
+     "market_ask",
+     "market_basket",
++    "market_optimize_purchase",
+     "market_cart_remove",
+     "market_countries",
+     "market_lines",
+diff --git a/landing/public/og-preview.svg b/landing/public/og-preview.svg
+index c98dc2c..41f1f3a 100644
+--- a/landing/public/og-preview.svg
++++ b/landing/public/og-preview.svg
+@@ -10,7 +10,7 @@
+   <rect x="0" y="0" width="800" height="3" fill="#47475d"/>
+   <text x="400" y="68" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="34" font-weight="700" fill="#ffffff" letter-spacing="-1">CLI Market</text>
+   <text x="400" y="96" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" fill="#3afecf">commerce infrastructure for AI agents</text>
+-  <text x="400" y="126" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#b9cac2">81 retailers · 61K+ prices · 27 MCP · 8 countries</text>
++  <text x="400" y="126" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#b9cac2">81 retailers · 63K+ prices · 32 MCP · 8 countries</text>
+   <text x="400" y="154" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10" fill="#84948d">pip install cli-market-world · cli-market.dev · MIT</text>
+   <line x1="180" y1="168" x2="620" y2="168" stroke="#3b4a44" stroke-width="0.5"/>
+   <text x="400" y="186" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#84948d" letter-spacing="1">MIT · MCP NATIVE · LATAM RETAIL · VERIFIED PRICES</text>
+diff --git a/landing/public/og.svg b/landing/public/og.svg
+index 9079d62..9fd2aa9 100644
+--- a/landing/public/og.svg
++++ b/landing/public/og.svg
+@@ -23,7 +23,7 @@
+   <text x="600" y="72" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#b9cac2" fill-opacity="0.5">market_agent_sh // og_preview</text>
+   <text x="600" y="268" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="64" font-weight="700" fill="#ffffff" letter-spacing="-2">CLI Market</text>
+   <text x="600" y="318" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="26" fill="#3afecf" font-style="italic">La capa programable del retail físico</text>
+-  <text x="600" y="368" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#b9cac2">81 retailers · 61K+ precios · 27 MCP · 8 países LatAm</text>
++  <text x="600" y="368" text-anchor="middle" font-family="ui-monospace, monospace" font-size="22" fill="#b9cac2">81 retailers · 63K+ precios · 32 MCP · 8 países LatAm</text>
+   <rect x="320" y="400" width="560" height="56" rx="4" fill="#3afecf" fill-opacity="0.12" stroke="#3afecf" stroke-opacity="0.35"/>
+   <text x="600" y="436" text-anchor="middle" font-family="ui-monospace, monospace" font-size="18" font-weight="700" fill="#3afecf" letter-spacing="2">pip install cli-market-world</text>
+   <text x="600" y="510" text-anchor="middle" font-family="ui-monospace, monospace" font-size="16" fill="#84948d">cli-market.dev · MIT · Network Engine Active</text>
+diff --git a/landing/public/server.json b/landing/public/server.json
+index 8d45d4a..00bb622 100644
+--- a/landing/public/server.json
++++ b/landing/public/server.json
+@@ -1,17 +1,17 @@
+ {
+   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+   "name": "io.github.Treevu-ai/cli-market-world",
+-  "description": "Commerce for AI agents. 27 MCP tools. 81 retailers (41 verified), 8 countries, 4 platforms.",
++  "description": "Commerce for AI agents. 32 MCP tools. 81 retailers (41 verified), 8 countries, 4 platforms.",
+   "repository": {
+     "url": "https://github.com/Treevu-ai/cli-market-world",
+     "source": "github"
+   },
+-  "version": "1.9.41",
++  "version": "1.10.0",
+   "packages": [
+     {
+       "registryType": "pypi",
+       "identifier": "cli-market-world",
+-      "version": "1.9.41",
++      "version": "1.10.0",
+       "transport": {
+         "type": "stdio",
+         "command": "market-mcp"
+diff --git a/market_cli.py b/market_cli.py
+index 4f5d355..01bcfbd 100644
+--- a/market_cli.py
++++ b/market_cli.py
+@@ -345,6 +345,26 @@ def cli_api(method: str, path: str, json_data: dict | None = None) -> dict:
+         sys.exit(1)
+     return result
+ 
++
++def _unwrap_v1(payload: dict) -> dict:
++    """Extract ``data`` from v1 envelope responses."""
++    if isinstance(payload, dict) and "data" in payload and "meta" in payload:
++        inner = payload.get("data")
++        return inner if isinstance(inner, dict) else {}
++    return payload if isinstance(payload, dict) else {}
++
++
++def _parse_basket_items(raw_items: list[str]) -> list[dict]:
++    items: list[dict] = []
++    for arg in raw_items:
++        token = str(arg).strip().strip('"')
++        if ":" in token:
++            name, qty = token.split(":", 1)
++            items.append({"name": name.strip(), "qty": max(1, int(qty))})
++        else:
++            items.append({"name": token, "qty": 1})
++    return items
++
+ # ── Commands ─────────────────────────────────────────────────────────────────
+ 
+ def cmd_login(args):
+@@ -1078,36 +1098,156 @@ def cmd_procure(args):
+ 
+ 
+ def cmd_basket(args):
+-    items = []
+-    for arg in args.items:
+-        if ":" in arg:
+-            name, qty = arg.strip(chr(34)).split(":", 1)
+-            items.append({"name": name, "qty": int(qty)})
+-        else:
+-            items.append({"name": arg, "qty": 1})
++    items = _parse_basket_items(args.items)
++    country = getattr(args, "country", None) or "PE"
+     stores = []
+     if args.country:
+         stores = [k for k, v in STORES.items() if v["country"] == args.country]
+-    with console.status("[cyan]Comparando canasta..."):
+-        data = cli_api("POST", "/v1/basket/compare", {"items": items, "stores": stores or None})
+-    if getattr(args, "json", False):
+-        console.print(json.dumps(data, indent=2, ensure_ascii=False))
++    payload = {
++        "items": items,
++        "country": country,
++        "stores": stores or None,
++        "include_tco": bool(getattr(args, "tco", False)),
++        "include_delivery": not bool(getattr(args, "no_delivery", False)),
++        "include_action_links": bool(getattr(args, "action_links", False)),
++    }
++    is_en = ui.is_en()
++    with console.status(
++        "[cyan]Comparando canasta con TCO..." if payload["include_tco"] and not is_en
++        else "[cyan]Comparing basket with TCO..." if payload["include_tco"]
++        else "[cyan]Comparando canasta..." if not is_en
++        else "[cyan]Comparing basket..."
++    ):
++        raw = cli_api("POST", "/v1/basket/compare", payload)
++    if getattr(args, "json", False) or ui.is_json_mode():
++        console.print(json.dumps(raw, indent=2, ensure_ascii=False))
+         return
+-    comp = data.get("comparison", {})
+-    if not comp:
+-        console.print("[yellow]No se encontraron productos en ninguna tienda[/]")
++    data = _unwrap_v1(raw)
++    store_rows = data.get("stores") or []
++    if not store_rows:
++        console.print(
++            "[yellow]No se encontraron productos en ninguna tienda[/]"
++            if not is_en
++            else "[yellow]No products found at any store[/]"
++        )
+         return
+-    table = Table(title="[bold white]Comparativa de canasta[/]", border_style=ui.TABLE_BORDER)
+-    table.add_column("Tienda", style="bold")
+-    table.add_column("Productos", max_width=50)
+-    table.add_column("Total", style="bold yellow", justify="right")
+-    for _store_key, info in sorted(comp.items(), key=lambda x: x[1]["total"]):
+-        items_str = ", ".join(f"{i['qty']}x {i['name'][:15]}" for i in info["items"][:3])
+-        table.add_row(info["store_name"], items_str, f"{info['currency']} {info['total']:.2f}")
++    title = "Comparativa de canasta (TCO)" if payload["include_tco"] and not is_en else (
++        "Basket comparison (TCO)" if payload["include_tco"] else (
++            "Comparativa de canasta" if not is_en else "Basket comparison"
++        )
++    )
++    table = Table(title=f"[bold white]{title}[/]", border_style=ui.TABLE_BORDER)
++    table.add_column("Tienda" if not is_en else "Store", style="bold")
++    table.add_column("Items", max_width=40)
++    total_col = "TCO" if payload["include_tco"] else ("Total" if is_en else "Total")
++    table.add_column(total_col, style="bold yellow", justify="right")
++    for row in sorted(
++        store_rows,
++        key=lambda s: float(s.get("tco_total") or s.get("total") or 999999),
++    ):
++        breakdown = row.get("breakdown") or []
++        items_str = ", ".join(
++            f"{b.get('qty', 1)}x {(b.get('item') or '?')[:12]}" for b in breakdown[:3]
++        )
++        amount = float(row.get("tco_total") or row.get("total") or 0)
++        currency = row.get("currency") or "PEN"
++        table.add_row(row.get("store_name") or row.get("store", "?"), items_str, f"{currency} {amount:.2f}")
+     console.print(table)
+-    best = data.get("best_store")
+-    if best:
+-        console.print(f"\n[#00FF88]✓ Mejor opción: {comp[best]['store_name']} — {comp[best]['currency']} {comp[best]['total']:.2f}[/]")
++    leader = min(store_rows, key=lambda s: float(s.get("tco_total") or s.get("total") or 999999))
++    shelf_hint = data.get("cheapest_shelf_store")
++    tco_hint = data.get("cheapest_tco_store")
++    if shelf_hint and tco_hint and shelf_hint != tco_hint:
++        console.print(
++            f"\n[dim]{'Góndola' if not is_en else 'Shelf'}: {shelf_hint} · TCO: {tco_hint}[/]"
++        )
++    console.print(
++        f"\n[#00FF88]✓ {'Mejor opción' if not is_en else 'Best option'}: "
++        f"{leader.get('store_name')} — {leader.get('currency', 'PEN')} "
++        f"{float(leader.get('tco_total') or leader.get('total') or 0):.2f}[/]"
++    )
++    links = data.get("action_links") or []
++    if links:
++        console.print(f"\n[bold]{'Enlaces' if not is_en else 'Action links'}:[/]")
++        for link in links[:4]:
++            kind = link.get("type", "?")
++            url = link.get("url") or link.get("token") or ""
++            aff = " [affiliate]" if link.get("affiliate") else ""
++            console.print(f"  [cyan]{kind}[/]{aff} {url[:80]}")
++
++
++def cmd_optimize(args):
++    """One-call purchase optimization — basket + TCO + substitutes + intel + action links."""
++    items = _parse_basket_items(args.items)
++    if not items:
++        console.print("[yellow]Sin productos[/]" if not ui.is_en() else "[yellow]No items[/]")
++        return
++    country = getattr(args, "country", None) or "PE"
++    constraints: dict = {
++        "include_tco": not bool(getattr(args, "no_tco", False)),
++        "allow_substitutes": not bool(getattr(args, "no_substitutes", False)),
++        "include_action_links": True,
++    }
++    if getattr(args, "budget", None) is not None:
++        constraints["max_budget"] = float(args.budget)
++    if getattr(args, "payment", None):
++        constraints["payment_method"] = args.payment
++    payload = {
++        "country": country,
++        "items": items,
++        "constraints": constraints,
++        "include_intel": not bool(getattr(args, "no_intel", False)),
++    }
++    is_en = ui.is_en()
++    with console.status(
++        "[cyan]Optimizando compra..." if not is_en else "[cyan]Optimizing purchase..."
++    ):
++        raw = cli_api("POST", "/v1/missions/optimize-purchase", payload)
++    if getattr(args, "json", False) or ui.is_json_mode():
++        console.print(json.dumps(raw, indent=2, ensure_ascii=False))
++        return
++    data = _unwrap_v1(raw)
++    if data.get("status") != "ok":
++        err = data.get("error") or ("Error en misión" if not is_en else "Mission error")
++        console.print(f"[red]{err}[/]")
++        return
++    rec = data.get("recommendation") or {}
++    action = rec.get("action", "monitor")
++    action_color = {"buy_now": "#00FF88", "wait": "#FF6B35", "monitor": "yellow"}.get(action, "white")
++    currency = rec.get("currency") or "PEN"
++    console.print(
++        f"\n[bold]{'Recomendación' if not is_en else 'Recommendation'}:[/] "
++        f"[{action_color}]{action.upper()}[/]"
++    )
++    console.print(
++        f"  {'Tienda' if not is_en else 'Store'}: {rec.get('primary_store_name') or rec.get('primary_store')}"
++    )
++    console.print(
++        f"  {'Góndola' if not is_en else 'Shelf'}: {currency} {float(rec.get('shelf_total') or 0):.2f} · "
++        f"TCO: {currency} {float(rec.get('tco_total') or 0):.2f}"
++    )
++    headroom = rec.get("budget_headroom")
++    if headroom is not None:
++        console.print(f"  {'Presupuesto restante' if not is_en else 'Budget headroom'}: {currency} {headroom:.2f}")
++    rationale = rec.get("rationale_es") or rec.get("rationale")
++    if rationale:
++        console.print(f"\n[dim]{rationale}[/]")
++    links = data.get("action_links") or []
++    if links:
++        console.print(f"\n[bold]{'Siguiente paso' if not is_en else 'Next step'}:[/]")
++        for link in links[:4]:
++            kind = link.get("type", "?")
++            url = link.get("url") or ""
++            if link.get("type") == "export_list" and link.get("token"):
++                url = f"/v1/export/shopping-list/{link['token']}"
++            aff = " [affiliate]" if link.get("affiliate") else ""
++            console.print(f"  [cyan]{kind}[/]{aff} {url[:90]}")
++    ui.print_hints(
++        console,
++        [
++            f"market basket {' '.join(args.items)} --country {country} --tco",
++            "market checkout --payment yape",
++        ],
++    )
+ 
+ def cmd_inflation(args):
+     params = []
+@@ -2174,7 +2314,7 @@ def cmd_shell(args):
+                 _shell_mission_help(console)
+             else:
+                 console.print(
+-                    "[bold]Búsqueda:[/]  [cyan]search QUERY[/]  [cyan]compare QUERY[/]  [cyan]basket item:qty ...[/]\n"
++                    "[bold]Búsqueda:[/]  [cyan]search QUERY[/]  [cyan]compare QUERY[/]  [cyan]basket item:qty ...[/]  [cyan]optimize item:qty ...[/]\n"
+                     "[bold]Carrito:[/]   [cyan]add ID[/]  [cyan]cart[/]  [cyan]cart-remove ID[/]  [cyan]cart-clear[/]  [cyan]checkout[/]\n"
+                     "[bold]Pedidos:[/]   [cyan]orders[/]  [cyan]reorder[/]  [cyan]ask PROMPT[/]\n"
+                     "[bold]Datos:[/]     [cyan]brief[/]  [cyan]inflation[/]  [cyan]indicators[/]  [cyan]scores[/]  [cyan]enrichment[/]\n"
+@@ -2239,6 +2379,12 @@ def cmd_shell(args):
+             demo=False,
+             ide=None,
+             dry_run=False,
++            tco=False,
++            no_delivery=False,
++            action_links=False,
++            budget=None,
++            no_tco=False,
++            no_substitutes=False,
+         )
+         handlers = {
+             "login": cmd_login,
+@@ -2268,6 +2414,7 @@ def cmd_shell(args):
+             "barcode": cmd_barcode,
+             "enrich": cmd_enrich,
+             "basket": cmd_basket,
++            "optimize": cmd_optimize,
+             "indicators": cmd_indicators,
+             "enrichment": cmd_enrichment,
+             "scores": cmd_scores,
+@@ -2340,6 +2487,31 @@ def cmd_shell(args):
+             for i, tok in enumerate(rest):
+                 if tok in ("--country", "-c") and i + 1 < len(rest):
+                     ns.country = rest[i + 1]
++                elif tok == "--tco":
++                    ns.tco = True
++                elif tok == "--no-delivery":
++                    ns.no_delivery = True
++                elif tok == "--action-links":
++                    ns.action_links = True
++        elif cmd == "optimize" and rest:
++            pos = [t for t in rest if not t.startswith("-")]
++            ns.items = pos
++            for i, tok in enumerate(rest):
++                if tok in ("--country", "-c") and i + 1 < len(rest):
++                    ns.country = rest[i + 1]
++                elif tok in ("--budget", "-b") and i + 1 < len(rest):
++                    try:
++                        ns.budget = float(rest[i + 1])
++                    except ValueError:
++                        pass
++                elif tok == "--payment" and i + 1 < len(rest):
++                    ns.payment = rest[i + 1]
++                elif tok == "--no-intel":
++                    ns.no_intel = True
++                elif tok == "--no-tco":
++                    ns.no_tco = True
++                elif tok == "--no-substitutes":
++                    ns.no_substitutes = True
+         elif cmd == "alerts" and rest:
+             ns.action = rest[0] if rest[0] in ("list", "create") else "list"
+             for i, tok in enumerate(rest):
+@@ -2353,7 +2525,7 @@ def cmd_shell(args):
+                 elif tok == "--email" and i + 1 < len(rest):
+                     ns.email = rest[i + 1]
+         elif cmd in ("discover", "inflation", "indicators", "enrichment", "scores",
+-                     "brief", "intel-brief", "basket") and rest:
++                     "brief", "intel-brief", "basket", "optimize") and rest:
+             for i, tok in enumerate(rest):
+                 if tok in ("--country", "-c") and i + 1 < len(rest):
+                     ns.country = rest[i + 1]
+@@ -3109,11 +3281,23 @@ def main():
+     p.add_argument("--budget", "-b", type=float, required=True, help="Maximum budget in local currency")
+     p.add_argument("--country", "-c", choices=list(COUNTRIES.keys()), default=None)
+ 
++    # optimize (Cost-of-Living OS compound mission)
++    p = sub.add_parser("optimize", help=t("optimize"))
++    p.add_argument("items", nargs="+", help="Items with optional qty, e.g. leche:2 arroz:1")
++    p.add_argument("--country", "-c", choices=list(COUNTRIES.keys()), default="PE")
++    p.add_argument("--budget", "-b", type=float, default=None, help="Max budget in local currency")
++    p.add_argument("--payment", choices=["yape", "plin", "paypal", "tarjeta"], default="yape")
++    p.add_argument("--no-intel", action="store_true", help="Skip procurement/affordability intel")
++    p.add_argument("--no-tco", action="store_true", help="Shelf price only (no delivery/payment fees)")
++    p.add_argument("--no-substitutes", action="store_true", help="Do not auto-substitute products")
+ 
+     # basket
+-    p = sub.add_parser("basket", help="Comparar canasta completa entre retailers")
++    p = sub.add_parser("basket", help=t("basket"))
+     p.add_argument("items", nargs="+", help="Productos con cantidad, ej: leche:2 arroz:1")
+     p.add_argument("--country", "-c", choices=list(COUNTRIES.keys()), default=None)
++    p.add_argument("--tco", action="store_true", help="Include delivery + payment fees in totals")
++    p.add_argument("--no-delivery", action="store_true", help="Exclude delivery fee from TCO")
++    p.add_argument("--action-links", action="store_true", help="Attach deeplink + export list")
+ 
+     # intelligence (Price Pulse / data moat — not default commerce CLI)
+     p_intel = sub.add_parser("intel", help=t("intel"))
+@@ -3226,7 +3410,7 @@ def main():
+         "ask": cmd_ask, "preferences": cmd_preferences,
+         "countries": cmd_countries, "lines": cmd_lines, "discover": cmd_discover,
+         "categories": cmd_categories, "barcode": cmd_barcode,
+-        "enrich": cmd_enrich, "basket": cmd_basket,
++        "enrich": cmd_enrich, "basket": cmd_basket, "optimize": cmd_optimize,
+         "brief": cmd_intel_brief, "intel-brief": cmd_intel_brief,
+         "inflation": cmd_inflation, "indicators": cmd_indicators, "enrichment": cmd_enrichment, "scores": cmd_scores,
+         "tools": cmd_tools,
+diff --git a/market_cli_i18n.py b/market_cli_i18n.py
+index 297718d..7221344 100644
+--- a/market_cli_i18n.py
++++ b/market_cli_i18n.py
+@@ -55,6 +55,8 @@ T = {
+         "mcp_setup": "Configuración one-liner de MCP para Cursor/Claude/etc.",
+         "mcp": "Centro MCP (solo lectura): tools + salud doctor",
+         "discover": "Cobertura de retailers en una llamada: líneas, tiendas y países",
++        "basket": "Comparar canasta entre retailers (opción --tco)",
++        "optimize": "Optimizar compra en una llamada: canasta + TCO + sustitutos + intel",
+     },
+     "en": {
+         "desc": "Agentic Market CLI — purchases from the terminal.",
+@@ -102,6 +104,8 @@ T = {
+         "mcp_setup": "One-liner MCP setup for Cursor/Claude/etc.",
+         "mcp": "MCP center (read-only): tools + doctor health",
+         "discover": "Retail coverage in one call: lines, stores, and countries",
++        "basket": "Compare basket across retailers (--tco for full cost)",
++        "optimize": "One-call purchase optimization: basket + TCO + substitutes + intel",
+     },
+ }
+ 
+diff --git a/mcp.json b/mcp.json
+index bd2c39f..e5f2bbf 100644
+--- a/mcp.json
++++ b/mcp.json
+@@ -1,7 +1,7 @@
+ {
+   "$schema": "https://registry.modelcontextprotocol.io/schema.json",
+   "name": "CLI Market",
+-  "description": "Commerce infrastructure for AI agents \u2014 22 curated MCP tools (46 legacy) to search, compare, and purchase across 41 retailers in 8 countries. 61,000+ real prices, 44 market indicators, refreshed every 4 hours. MIT.",
++  "description": "Commerce infrastructure for AI agents \u2014 32 curated MCP tools (57 legacy) to search, compare, and purchase across 41 retailers in 8 countries. 63,000+ real prices, 44 market indicators, refreshed every 4 hours. MIT.",
+   "type": "stdio",
+   "command": "market-mcp",
+   "args": [],
+@@ -19,10 +19,13 @@
+     "market_favorites",
+     "market_price_alerts",
+     "market_preferences",
++    "market_household_get",
++    "market_household_update",
+     "market_barcode",
+     "market_ticket",
+     "market_intel_brief",
+     "market_inflation",
++    "market_affordability",
+     "market_scores",
+     "market_price_risk",
+     "market_inflation_report",
+@@ -34,14 +37,15 @@
+     "market_discover",
+     "market_search",
+     "market_compare",
+-    "market_optimize_purchase",
++    "market_substitutes",
+     "market_add",
+     "market_cart",
+     "market_cart_update",
+     "market_checkout",
+     "market_orders",
+     "market_ask",
+-    "market_basket"
++    "market_basket",
++    "market_optimize_purchase"
+   ],
+   "keywords": [
+     "vtex",
+@@ -61,15 +65,15 @@
+   "default_profile": "default",
+   "profiles": {
+     "default": {
+-      "tool_count": 23,
++      "tool_count": 32,
+       "description": "Curated Shop + Intel + Account bundles"
+     },
+     "full": {
+-      "tool_count": 46,
++      "tool_count": 54,
+       "description": "Default plus advanced tools and legacy aliases"
+     },
+     "legacy": {
+-      "tool_count": 49,
++      "tool_count": 57,
+       "description": "All registered tools (backward compatible)"
+     }
+   },
+@@ -81,17 +85,18 @@
+         "market_discover",
+         "market_search",
+         "market_compare",
+-        "market_optimize_purchase",
++        "market_substitutes",
+         "market_add",
+         "market_cart",
+         "market_cart_update",
+         "market_checkout",
+         "market_orders",
+         "market_ask",
+-        "market_basket"
++        "market_basket",
++        "market_optimize_purchase"
+       ],
+       "canonical": [
+-        "market_optimize_purchase"
++        "market_discover"
+       ]
+     },
+     "intel": {
+@@ -99,6 +104,7 @@
+       "tools": [
+         "market_intel_brief",
+         "market_inflation",
++        "market_affordability",
+         "market_scores",
+         "market_price_risk",
+         "market_inflation_report",
+@@ -118,7 +124,9 @@
+         "market_subscription",
+         "market_favorites",
+         "market_price_alerts",
+-        "market_preferences"
++        "market_preferences",
++        "market_household_get",
++        "market_household_update"
+       ],
+       "canonical": [
+         "market_price_alerts"
+@@ -131,6 +139,8 @@
+     "market_favorites",
+     "market_price_alerts",
+     "market_preferences",
++    "market_household_get",
++    "market_household_update",
+     "market_alerts",
+     "market_notify",
+     "market_intel_refresh",
+@@ -142,12 +152,14 @@
+     "market_ticket",
+     "market_voice",
+     "market_price_history",
++    "market_moat_confidence",
+     "market_stock",
+     "market_brands",
+     "market_exchange",
+     "market_delivery",
+     "market_intel_brief",
+     "market_inflation",
++    "market_affordability",
+     "market_scores",
+     "market_price_risk",
+     "market_inflation_report",
+@@ -155,6 +167,8 @@
+     "market_stats",
+     "market_export",
+     "market_trending",
++    "market_ecosystem_radar",
++    "market_procurement_bulk",
+     "market_analytics_indicators",
+     "market_enrichment",
+     "market_enrichment_subcategories",
+@@ -163,6 +177,7 @@
+     "market_discover",
+     "market_search",
+     "market_compare",
++    "market_substitutes",
+     "market_add",
+     "market_cart",
+     "market_cart_update",
+@@ -170,6 +185,7 @@
+     "market_orders",
+     "market_ask",
+     "market_basket",
++    "market_optimize_purchase",
+     "market_cart_remove",
+     "market_countries",
+     "market_lines",
+diff --git a/pyproject.toml b/pyproject.toml
+index ebba80f..cf15d00 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
+ 
+ [project]
+ name = "cli-market-world"
+-version = "1.9.41"
+-description = "mcp-name: io.github.Treevu-ai/cli-market-world - CLI Market: commerce API for AI agents. 27 curated MCP tools (49 legacy), 41 verified retailers in 8 countries. MIT."
++version = "1.10.0"
++description = "mcp-name: io.github.Treevu-ai/cli-market-world - CLI Market: commerce API for AI agents. 32 curated MCP tools (57 legacy), 44 indicators, 41 verified retailers in 8 countries. MIT."
+ requires-python = ">=3.10"
+ license = "MIT"
+ authors = [{name = "CLI Market", email = "hello@cli-market.dev"}]
+diff --git a/requirements-railway.txt b/requirements-railway.txt
+index 972ef66..83e689b 100644
+--- a/requirements-railway.txt
++++ b/requirements-railway.txt
+@@ -1,5 +1,5 @@
+-# Shared core library — PyPI (reproducible pin via == in production if needed).
+-cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core@7dfe4b663925248f7fa4a95499cc60388ada7952
++# Pinned to git until Cost-of-Living OS waves ship on PyPI.
++cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@8469854
+ 
+ # Semantic moat — Golden Record persistence (SQLite dev / Postgres prod).
+ cli-market-index[postgres] @ git+https://github.com/Treevu-ai/cli-market-index@9d050131e9e5b16381581d1916e386f34d319ca6
+diff --git a/retailers-deck.md b/retailers-deck.md
+index b7d9263..2ea0411 100644
+--- a/retailers-deck.md
++++ b/retailers-deck.md
+@@ -17,7 +17,7 @@ AI agents can't shop in physical retail. They need structured product data — p
+ | Metric | Value |
+ |---|---|
+ | Retailers live | 41 verified active (81 in catalog) |
+-| Prices indexed | 61,000+ |
++| Prices indexed | 63,000+ |
+ | Products tracked | 8,000+ |
+ | Countries | 8 (PE, AR, BR, MX, CO, CL, US, +) |
+ | MCP tools | 24 default / 45 full (search, compare, basket, checkout, inflation, enrichment…) |
+diff --git a/server.json b/server.json
+index a26f22c..00bb622 100644
+--- a/server.json
++++ b/server.json
+@@ -1,17 +1,17 @@
+ {
+   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+   "name": "io.github.Treevu-ai/cli-market-world",
+-  "description": "Commerce for AI agents. 22 MCP tools. 81 retailers (41 verified), 8 countries, 4 platforms.",
++  "description": "Commerce for AI agents. 32 MCP tools. 81 retailers (41 verified), 8 countries, 4 platforms.",
+   "repository": {
+     "url": "https://github.com/Treevu-ai/cli-market-world",
+     "source": "github"
+   },
+-  "version": "1.9.41",
++  "version": "1.10.0",
+   "packages": [
+     {
+       "registryType": "pypi",
+       "identifier": "cli-market-world",
+-      "version": "1.9.41",
++      "version": "1.10.0",
+       "transport": {
+         "type": "stdio",
+         "command": "market-mcp"
+diff --git a/tests/test_market_optimize_cli.py b/tests/test_market_optimize_cli.py
+new file mode 100644
+index 0000000..5fc9033
+--- /dev/null
++++ b/tests/test_market_optimize_cli.py
+@@ -0,0 +1,20 @@
++"""Tests for market optimize command helpers."""
++
++from __future__ import annotations
++
++from market_cli import _parse_basket_items, _unwrap_v1
++
++
++def test_unwrap_v1_envelope():
++    payload = {"data": {"status": "ok", "mission": "optimize_purchase"}, "meta": {}, "trace": {}}
++    assert _unwrap_v1(payload)["status"] == "ok"
++    assert _unwrap_v1({"status": "ok"})["status"] == "ok"
++
++
++def test_parse_basket_items():
++    items = _parse_basket_items(["leche:2", "arroz", "aceite:3"])
++    assert items == [
++        {"name": "leche", "qty": 2},
++        {"name": "arroz", "qty": 1},
++        {"name": "aceite", "qty": 3},
++    ]
+-- 
+2.43.0
+

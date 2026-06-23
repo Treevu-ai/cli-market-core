@@ -36,6 +36,8 @@ market optimize leche arroz --country PE --budget 80
 # muestra: recommendation.action, tco_total, action_links, rationale_es
 ```
 
+Patch listo: `ops/ecosystem-patches/cli-market-world-optimize.patch` — ver `APPLY-WORLD-OPTIMIZE.md`.
+
 Parámetros MCP útiles:
 - `constraints.include_tco: true`
 - `constraints.include_action_links: true` (o leer `action_links` de la respuesta mission)

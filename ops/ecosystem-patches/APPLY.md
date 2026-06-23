@@ -45,7 +45,8 @@ Cada `.patch` es **solo para un repo**. Si aplicas el patch equivocado (ej. back
 | `cli-market-backend-core-1ed299e.patch` | **cli-market-backend** | Bump Wave 1–3 (superseded by 8469854) |
 | `BUMP-CORE-8469854.md` | **cli-market-backend** | Bump Wave 4 — pin + smoke (doc only) |
 | `BUMP-CORE-1ed299e.md` | — | Historial Wave 1–3 |
-| `cli-market-world.patch` | **cli-market-world** | `ci.yml`, `mcp.json`, `marketStats.ts`, `requirements-railway.txt`, `server.json`, … (15 archivos) |
+| `cli-market-world.patch` | **cli-market-world** | `ci.yml`, `mcp.json`, `marketStats.ts`, … (stats sync) |
+| `cli-market-world-optimize.patch` | **cli-market-world** | `market optimize`, basket v1 envelope, core @8469854 |
 | `cli-market-content.patch` | **cli-market-content** | `outbound/procure-sequences.md`, `commercial/procure-copilot-feature-matrix.md`, … |
 | `procure-copilot.patch` | **procure-copilot** | `app/checkout/success`, `app/checkout/cancel`, `lib/market-stats.ts` |
 
