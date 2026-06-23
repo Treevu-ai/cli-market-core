@@ -1,0 +1,122 @@
+From e60b9ab40cb9197453276a4815c40bd3260130a3 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Tue, 23 Jun 2026 20:32:28 +0000
+Subject: [PATCH] feat(server): mount core api_routes for Wave 4 production
+
+Mount market_core.api_routes with prefix /v1 after world routers so
+optimize-purchase, affordability, affiliate-click and other Cost-of-Living
+endpoints are live on Railway without overriding existing world handlers.
+
+Wire core auth to require_api_key and bump Dockerfile CACHE_BUST to
+force redeploy with core @8469854.
+---
+ Dockerfile                        |  2 +-
+ market_server.py                  | 10 +++++++
+ tests/test_market_optimize_cli.py | 44 ++++++++++++++++++++++++++++++-
+ 3 files changed, 54 insertions(+), 2 deletions(-)
+
+diff --git a/Dockerfile b/Dockerfile
+index 23dca98..7e58db3 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -15,7 +15,7 @@ ARG GITHUB_TOKEN
+ ARG GH_PAT
+ 
+ COPY requirements-railway.txt .
+-ARG CACHE_BUST=202606181800
++ARG CACHE_BUST=2026-06-23-core-8469854
+ RUN set -eux; \
+     TOKEN="${GITHUB_TOKEN:-${GH_PAT:-}}"; \
+     if [ -z "${TOKEN}" ]; then \
+diff --git a/market_server.py b/market_server.py
+index 54fc0ef..3d19abe 100644
+--- a/market_server.py
++++ b/market_server.py
+@@ -48,6 +48,7 @@ from server_deps import (  # noqa: F401
+     verify_password,
+     check_auth_brute_force,
+     record_auth_failure,
++    require_api_key,
+     require_user,
+     check_rate_limit,
+     DEFAULT_TOKEN,
+@@ -233,6 +234,15 @@ for r in (
+ ):
+     app.include_router(r)
+ 
++# Cost-of-Living OS v1 routes from cli-market-core (Waves 1–4).
++# Mounted after world routers so existing handlers win on duplicate paths;
++# adds missions (optimize-purchase), intel affordability, affiliate-click, etc.
++from market_core import api_routes as core_api_routes
++from market_core.api_routes import router as core_v1_router
++
++core_api_routes._auth_fn = require_api_key
++app.include_router(core_v1_router, prefix="/v1")
++
+ 
+ # ── Entrypoint ───────────────────────────────────────────────────────────────
+ 
+diff --git a/tests/test_market_optimize_cli.py b/tests/test_market_optimize_cli.py
+index 5fc9033..6b8aadb 100644
+--- a/tests/test_market_optimize_cli.py
++++ b/tests/test_market_optimize_cli.py
+@@ -1,9 +1,16 @@
+-"""Tests for market optimize command helpers."""
++"""Tests for market optimize command helpers and core v1 route mount."""
+ 
+ from __future__ import annotations
+ 
++from pathlib import Path
++
++import pytest
++from fastapi.testclient import TestClient
++
+ from market_cli import _parse_basket_items, _unwrap_v1
+ 
++REPO_ROOT = Path(__file__).resolve().parent.parent
++
+ 
+ def test_unwrap_v1_envelope():
+     payload = {"data": {"status": "ok", "mission": "optimize_purchase"}, "meta": {}, "trace": {}}
+@@ -18,3 +25,38 @@ def test_parse_basket_items():
+         {"name": "arroz", "qty": 1},
+         {"name": "aceite", "qty": 3},
+     ]
++
++
++def test_market_server_mounts_core_v1_router():
++    text = (REPO_ROOT / "market_server.py").read_text(encoding="utf-8")
++    assert "from market_core.api_routes import router as core_v1_router" in text
++    assert "core_api_routes._auth_fn = require_api_key" in text
++    assert 'app.include_router(core_v1_router, prefix="/v1")' in text
++
++
++def _load_server_app():
++    try:
++        from market_core import ensure_db_initialized
++        from market_server import app
++
++        ensure_db_initialized()
++        return app
++    except ModuleNotFoundError as exc:
++        pytest.skip(f"world server runtime deps missing: {exc}")
++
++
++def test_optimize_purchase_route_mounted():
++    client = TestClient(_load_server_app())
++    response = client.post(
++        "/v1/missions/optimize-purchase",
++        json={"items": [{"name": "leche", "qty": 1}], "country": "PE"},
++    )
++    assert response.status_code != 404
++    assert response.status_code in (401, 200, 402)
++
++
++def test_affordability_route_mounted():
++    client = TestClient(_load_server_app())
++    response = client.get("/v1/intel/affordability", params={"country": "PE"})
++    assert response.status_code != 404
++    assert response.status_code in (401, 200)
+-- 
+2.43.0
+
