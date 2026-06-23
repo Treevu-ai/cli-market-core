@@ -185,6 +185,11 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                     "country": {"type": "string", "description": "Country code: PE, AR, MX, BR, CO, CL, ES, US"},
                     "line": {"type": "string", "description": "Business line filter"},
                     "limit": {"type": "integer", "default": 10},
+                    "include_tco": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Add TCO block per store (shelf + payment fees)",
+                    },
                 },
                 required=["query"],
             ),
@@ -277,6 +282,11 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                         "description": 'Items, e.g. [{"name":"milk","qty":2},{"name":"rice","qty":1}]',
                     },
                     "stores": {"type": "array", "description": "Optional store filter. Empty = all retailers."},
+                    "include_tco": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Include total cost of ownership (shelf + payment fees; delivery when available)",
+                    },
                 },
                 required=["items"],
             ),
@@ -316,6 +326,44 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                 }
             ),
             meta=_meta(bundle="intel", order=1, icp=["research", "fintech", "trade"]),
+        ),
+        _tool(
+            "market_affordability",
+            "[Intel] Affordability OS — canasta pressure, wage ratio, macro gap, regulatory headlines. "
+            "One-call cost-of-living composite for LATAM.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"},
+                    "line": {"type": "string", "default": "supermercados"},
+                    "days": {"type": "integer", "default": 30, "description": "Analysis window in days"},
+                }
+            ),
+            meta=_meta(
+                bundle="intel",
+                order=2,
+                icp=["research", "fintech", "trade", "builder"],
+                pairs_with=["market_intel_brief", "market_inflation_report"],
+            ),
+        ),
+        _tool(
+            "market_substitutes",
+            "[Shop] Product substitutes with unit-normalized savings and Nutri-Score tradeoffs. "
+            "Use when exact SKU unavailable or optimizing basket.",
+            _schema_object(
+                {
+                    "query": {"type": "string", "description": "Product name to match"},
+                    "country": {"type": "string", "description": "PE, AR, MX, BR, CO, CL"},
+                    "store": {"type": "string", "description": "Optional store key"},
+                    "limit": {"type": "integer", "default": 3},
+                },
+                required=["query", "country"],
+            ),
+            meta=_meta(
+                bundle="shop",
+                order=4,
+                icp=["builder", "agent"],
+                pairs_with=["market_search", "market_compare", "market_basket"],
+            ),
         ),
         _tool(
             "market_indicators",

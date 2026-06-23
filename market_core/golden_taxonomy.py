@@ -108,6 +108,76 @@ def canonical_price_buckets(db, country: str | None, line: str | None = None) ->
     return buckets
 
 
+def resolve_canonical_id(db, product_id: str, name: str = "") -> str | None:
+    """Resolve canonical_product_id from snapshot row or taxonomy registry name match."""
+    if product_id:
+        try:
+            row = db.execute(
+                """
+                SELECT canonical_product_id FROM price_snapshots
+                WHERE product_id = ? AND canonical_product_id IS NOT NULL
+                  AND canonical_product_id != ''
+                ORDER BY queried_at DESC LIMIT 1
+                """,
+                (product_id,),
+            ).fetchone()
+            if row and row["canonical_product_id"]:
+                return str(row["canonical_product_id"])
+        except Exception:
+            pass
+
+    registry = get_taxonomy_registry(db)
+    if not registry or not name:
+        return None
+    name_l = name.lower().strip()
+    for pid, meta in registry.items():
+        reg_name = str(meta.get("name") or "").lower()
+        if reg_name and (name_l in reg_name or reg_name in name_l):
+            return pid
+    return None
+
+
+def equivalent_products(
+    db,
+    canonical_id: str,
+    country: str,
+    *,
+    exclude_product_id: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Shelf rows sharing the same canonical_product_id in *country*."""
+    from .market_core import STORES
+
+    cc = (country or "").upper()
+    stores = [k for k, v in STORES.items() if v.get("country") == cc and not v.get("disabled")]
+    if not stores or not canonical_id:
+        return []
+
+    placeholders = ",".join("?" * len(stores))
+    try:
+        rows = db.execute(
+            f"""
+            SELECT product_id, name, store, store_name, price, currency, canonical_product_id
+            FROM price_snapshots
+            WHERE store IN ({placeholders})
+              AND canonical_product_id = ?
+              AND price > 0
+            ORDER BY price ASC
+            LIMIT ?
+            """,
+            [*stores, canonical_id, limit + 1],
+        ).fetchall()
+    except Exception:
+        return []
+
+    out: list[dict] = []
+    for row in rows:
+        if exclude_product_id and str(row["product_id"]) == exclude_product_id:
+            continue
+        out.append(dict(row))
+    return out[:limit]
+
+
 def staple_price_deltas_golden(db, country: str | None, days: int = 7) -> list[float]:
     """% price changes for canasta staples linked via Golden Record IDs."""
     from datetime import datetime, timedelta, timezone

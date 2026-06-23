@@ -129,6 +129,9 @@ def build_basket_compare(
     items: list[dict[str, Any]],
     store_filter: set[str] | None = None,
     enveloped: bool = False,
+    include_tco: bool = False,
+    payment_method: str = "yape",
+    include_delivery: bool = True,
 ) -> dict[str, Any]:
     """Compare total basket cost across retailers for arbitrary items.
 
@@ -191,11 +194,30 @@ def build_basket_compare(
 
     stores = sorted(store_totals.values(), key=lambda x: x["total"])
 
+    if include_tco:
+        from .market_tco import attach_tco_to_store
+
+        stores = [
+            attach_tco_to_store(
+                s,
+                delivery=None,
+                payment_method=payment_method,
+                include_delivery=include_delivery,
+            )
+            for s in stores
+        ]
+        if stores:
+            shelf_leader = min(stores, key=lambda x: x["total"])
+            tco_leader = min(stores, key=lambda x: x.get("tco_total", x["total"]))
+
     result = {
         "items_searched": len(items),
         "items_found": items_found,
         "stores": stores[:10],
     }
+    if include_tco and stores:
+        result["cheapest_shelf_store"] = shelf_leader.get("store_name")
+        result["cheapest_tco_store"] = tco_leader.get("store_name")
     if not enveloped:
         return result
     return envelope(
@@ -204,3 +226,68 @@ def build_basket_compare(
         confidence="ok",
         extra_meta=result,
     )
+
+
+def build_basket_tco(
+    db,
+    *,
+    country: str,
+    store: str,
+    items: list[dict[str, Any]],
+    payment_method: str = "yape",
+    include_delivery: bool = True,
+) -> dict[str, Any]:
+    """TCO breakdown for a single store and item list."""
+    from .market_core import STORES
+    from .market_tco import compute_line_tco
+    from .market_units import price_per_base_unit
+
+    store = (store or "").strip()
+    cfg = STORES.get(store, {})
+    currency = cfg.get("currency", "PEN")
+
+    line_items: list[dict[str, Any]] = []
+    subtotal = 0.0
+    for entry in items:
+        query = str(entry.get("name", "")).strip()
+        qty = max(1, int(entry.get("qty", 1) or 1))
+        if not query:
+            continue
+        row = db.execute(
+            """
+            SELECT product_id, name, price FROM price_snapshots
+            WHERE store = ? AND price > 0 AND LOWER(name) LIKE LOWER(?)
+            ORDER BY price ASC LIMIT 1
+            """,
+            (store, f"%{query}%"),
+        ).fetchone()
+        if not row:
+            continue
+        unit_price = float(row["price"])
+        item_sub = round(unit_price * qty, 2)
+        subtotal += item_sub
+        line_items.append(
+            {
+                "name": query,
+                "qty": qty,
+                "unit_price": unit_price,
+                "subtotal": item_sub,
+                "product_id": row["product_id"],
+                "unit_normalized": price_per_base_unit(unit_price, str(row["name"])),
+            }
+        )
+
+    tco = compute_line_tco(
+        shelf_subtotal=subtotal,
+        delivery=None,
+        payment_method=payment_method,
+        include_delivery=include_delivery,
+    )
+    return {
+        "country": country.upper(),
+        "store": store,
+        "currency": currency,
+        "line_items": line_items,
+        **tco,
+        "tco_per_item": round(tco["tco_total"] / max(1, len(line_items)), 2) if line_items else None,
+    }
