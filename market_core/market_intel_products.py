@@ -155,7 +155,7 @@ def compute_affordability(
     if min_wage and canasta_min and canasta_min > 0:
         canastas_per_wage = round(min_wage / canasta_min, 2)
 
-    score, band, band_es = _affordability_score(
+    score, band, band_es, data_quality = _affordability_score(
         basket_stress=basket_stress,
         real_wage_ratio=real_wage_ratio,
         gap_pp=gap,
@@ -177,6 +177,7 @@ def compute_affordability(
         "affordability_score": score,
         "affordability_band": band,
         "affordability_band_es": band_es,
+        "score_data_quality": data_quality,
         "headline_es": headline,
         "components": {
             "canasta_min": canasta_min,
@@ -349,19 +350,22 @@ def _affordability_score(
     basket_stress: float | None,
     real_wage_ratio: float | None,
     gap_pp: float | None,
-) -> tuple[int, str, str]:
+) -> tuple[int, str, str, str]:
     stress = float(basket_stress or 100.0)
-    ratio = float(real_wage_ratio or 2.5)
+    # Only apply real_wage_ratio bonus when the indicator is actually populated in DB.
+    # Default of 2.5 would add a spurious +12.5 upward bias and push scores to 100.
+    ratio_bonus = (float(real_wage_ratio) * 5) if real_wage_ratio is not None else 0
     gap = max(0.0, float(gap_pp or 0))
-    raw = 100 - stress + ratio * 5 - gap * 3
+    raw = 100 - stress + ratio_bonus - gap * 3
     score = int(max(0, min(100, round(raw))))
+    data_quality = "low" if real_wage_ratio is None else "ok"
     if score >= 70:
-        return score, "comfortable", "cómodo"
+        return score, "comfortable", "cómodo", data_quality
     if score >= 50:
-        return score, "moderate", "moderado"
+        return score, "moderate", "moderado", data_quality
     if score >= 35:
-        return score, "strained", "presionado"
-    return score, "critical", "crítico"
+        return score, "strained", "presionado", data_quality
+    return score, "critical", "crítico", data_quality
 
 
 def _affordability_headline(
