@@ -47,6 +47,7 @@ Cada `.patch` es **solo para un repo**. Si aplicas el patch equivocado (ej. back
 | `BUMP-CORE-1ed299e.md` | — | Historial Wave 1–3 |
 | `cli-market-world.patch` | **cli-market-world** | `ci.yml`, `mcp.json`, `marketStats.ts`, … (stats sync) |
 | `cli-market-world-optimize.patch` | **cli-market-world** | `market optimize`, basket v1 envelope, core @8469854 |
+| `cli-market-world-mount-api-routes.patch` | **cli-market-world** | Mount `api_routes` on `market_server.py` for production Wave 4 |
 | `cli-market-content.patch` | **cli-market-content** | `outbound/procure-sequences.md`, `commercial/procure-copilot-feature-matrix.md`, … |
 | `procure-copilot.patch` | **procure-copilot** | `app/checkout/success`, `app/checkout/cancel`, `lib/market-stats.ts` |
 
