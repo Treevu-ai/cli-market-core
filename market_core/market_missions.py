@@ -256,3 +256,172 @@ def run_investigate(
     if errors:
         payload["errors"] = errors
     return payload
+
+
+def run_optimize_purchase(
+    db,
+    *,
+    country: str = "PE",
+    items: list[dict[str, Any]],
+    constraints: dict[str, Any] | None = None,
+    include_intel: bool = True,
+    username: str | None = None,
+) -> dict[str, Any]:
+    """Composite mission: basket + TCO + substitutes + intel + action links."""
+    from .market_basket import build_basket_compare
+    from .market_household import get_household, household_summary, substitute_constraints_from_household
+    from .market_intel_products import compute_affordability, compute_procurement_signal
+    from .market_substitutes import find_substitutes
+    from .market_action_links import build_action_links
+    from .market_core import STORES
+
+    country = (country or "PE").strip().upper()
+    constraints = constraints or {}
+    if not items:
+        return {"mission": "optimize_purchase", "status": "error", "error": "items required"}
+
+    store_filter = None
+    preferred = constraints.get("preferred_stores") or []
+    if preferred:
+        store_filter = {s for s in preferred if s in STORES}
+
+    include_tco = bool(constraints.get("include_tco", True))
+    allow_subs = bool(constraints.get("allow_substitutes", True))
+    payment_method = str(constraints.get("payment_method") or "yape")
+
+    basket = build_basket_compare(
+        db,
+        items=items,
+        store_filter=store_filter,
+        include_tco=include_tco,
+        payment_method=payment_method,
+        include_delivery=include_tco,
+    )
+
+    profile = get_household(db, username) if username and username != "anonymous" else None
+    sub_constraints = substitute_constraints_from_household(profile)
+
+    items_resolved: list[dict[str, Any]] = []
+    for entry in items:
+        name = str(entry.get("name") or "").strip()
+        qty = max(1, int(entry.get("qty", 1) or 1))
+        resolved = {
+            "requested": name,
+            "qty": qty,
+            "resolved_product_id": None,
+            "resolved_name": name,
+            "substituted": False,
+            "unit_price": None,
+            "store": None,
+        }
+        if allow_subs and name:
+            sub = find_substitutes(
+                db,
+                query=name,
+                country=country,
+                limit=1,
+                constraints=sub_constraints or None,
+            )
+            orig = sub.get("original")
+            subs = sub.get("substitutes") or []
+            pick = subs[0] if subs else orig
+            if pick:
+                resolved["resolved_product_id"] = pick.get("product_id")
+                resolved["resolved_name"] = pick.get("name")
+                resolved["unit_price"] = pick.get("price")
+                resolved["store"] = pick.get("store")
+                resolved["substituted"] = bool(subs and pick != orig)
+        items_resolved.append(resolved)
+
+    stores = basket.get("stores") or []
+    if not stores:
+        return {
+            "mission": "optimize_purchase",
+            "status": "error",
+            "country": country,
+            "error": "no stores with prices for items",
+            "items_resolved": items_resolved,
+        }
+
+    leader = min(
+        stores,
+        key=lambda s: float(s.get("tco_total") or s.get("total") or 999999),
+    )
+    primary_store = leader.get("store") or leader.get("store_name")
+    for sk, cfg in STORES.items():
+        if cfg.get("name") == leader.get("store_name"):
+            primary_store = sk
+            break
+
+    shelf_total = float(leader.get("total") or 0)
+    tco_total = float(leader.get("tco_total") or shelf_total)
+    currency = leader.get("currency") or "PEN"
+
+    max_budget = constraints.get("max_budget")
+    if max_budget is None and profile:
+        max_budget = profile.get("budget_monthly")
+    budget_headroom = None
+    if max_budget is not None:
+        budget_headroom = round(float(max_budget) - tco_total, 2)
+
+    procurement = compute_procurement_signal(db, country=country) if include_intel else {}
+    affordability = compute_affordability(db, country=country, days=30) if include_intel else {}
+
+    action = "monitor"
+    rationale_parts: list[str] = []
+    if budget_headroom is not None:
+        if budget_headroom < 0:
+            action = "wait"
+            rationale_parts.append(f"presupuesto excedido por {abs(budget_headroom):.2f} {currency}")
+        elif budget_headroom >= 0 and procurement.get("signal") == "buy_now":
+            action = "buy_now"
+            rationale_parts.append("señal de compra favorable")
+        elif procurement.get("signal") == "wait":
+            action = "wait"
+            rationale_parts.append(procurement.get("signal_reason") or "presión de precios elevada")
+    elif procurement.get("signal") == "buy_now":
+        action = "buy_now"
+        rationale_parts.append("condiciones favorables en góndola")
+    elif procurement.get("signal") == "wait":
+        action = "wait"
+        rationale_parts.append(procurement.get("signal_reason") or "esperar")
+
+    if leader.get("store_name"):
+        rationale_parts.append(f"mejor TCO en {leader['store_name']}")
+
+    action_links = build_action_links(
+        db,
+        store=primary_store or "wong",
+        items=items_resolved,
+        country=country,
+        totals={"shelf": shelf_total, "tco": tco_total, "currency": currency},
+    )
+
+    return {
+        "mission": "optimize_purchase",
+        "status": "ok",
+        "country": country,
+        "recommendation": {
+            "action": action,
+            "primary_store": primary_store,
+            "primary_store_name": leader.get("store_name"),
+            "currency": currency,
+            "shelf_total": shelf_total,
+            "tco_total": tco_total,
+            "budget_headroom": budget_headroom,
+            "rationale_es": "; ".join(rationale_parts) or "Comparación completada.",
+        },
+        "items_resolved": items_resolved,
+        "sections": {
+            "compare": basket,
+            "procurement_signal": procurement,
+            "affordability_context": {
+                "score": affordability.get("affordability_score"),
+                "band": affordability.get("affordability_band"),
+                "headline_es": affordability.get("headline_es"),
+            }
+            if affordability
+            else {},
+        },
+        "action_links": action_links,
+    }

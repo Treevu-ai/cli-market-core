@@ -177,6 +177,7 @@ def build_basket_compare(
                 item_total = round(price * qty, 2)
                 if store not in store_totals:
                     store_totals[store] = {
+                        "store": store,
                         "store_name": store_name,
                         "items_found": 0,
                         "total": 0.0,

@@ -206,6 +206,16 @@ def _tool_handlers() -> dict:
             f"/v1/products/substitutes?query={a['query']}&country={a.get('country', 'PE')}"
             f"&store={a.get('store', '')}&limit={a.get('limit', 3)}",
         ),
+        "market_optimize_purchase": lambda a: api(
+            "POST",
+            "/v1/missions/optimize-purchase",
+            {
+                "country": a.get("country", "PE"),
+                "items": a["items"],
+                "constraints": a.get("constraints"),
+                "include_intel": a.get("include_intel", True),
+            },
+        ),
         "market_scores": lambda a: api("GET", f"/v1/intel/scores?country={a.get('country', '')}&line={a.get('line', '')}"),
         "market_price_risk": lambda a: api(
             "GET",
@@ -241,6 +251,12 @@ def _tool_handlers() -> dict:
         "market_price_alerts": _price_alerts_api,
         "market_whoami": lambda a: api("GET", "/auth/whoami"),
         "market_preferences": lambda a: api("GET", "/agent/preferences"),
+        "market_household_get": lambda a: api("GET", "/v1/household"),
+        "market_household_update": lambda a: (
+            api("PATCH", "/v1/household", a["payload"])
+            if a.get("patch")
+            else api("PUT", "/v1/household", a["payload"])
+        ),
         "market_subscription": lambda a: api("GET", "/auth/subscription"),
         "market_export": lambda a: api(
             "POST",

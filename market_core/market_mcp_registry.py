@@ -293,6 +293,33 @@ def _build_tool_specs() -> list[dict[str, Any]]:
             meta=_meta(bundle="shop", order=13, pairs_with=["market_search", "market_compare"]),
         ),
         _tool(
+            "market_optimize_purchase",
+            "[Shop] One-call purchase optimization: basket compare, TCO, substitutes, intel, and action links. "
+            "Replaces fragmented search → compare → intel for agents.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "default": "PE"},
+                    "items": {
+                        "type": "array",
+                        "description": 'Basket items, e.g. [{"name":"leche","qty":2}]',
+                    },
+                    "constraints": {
+                        "type": "object",
+                        "description": "max_budget, preferred_stores, include_tco, allow_substitutes, payment_method",
+                    },
+                    "include_intel": {"type": "boolean", "default": True},
+                },
+                required=["items"],
+            ),
+            meta=_meta(
+                bundle="shop",
+                order=14,
+                min_tier="starter",
+                icp=["builder", "agent"],
+                pairs_with=["market_basket", "market_affordability", "market_substitutes"],
+            ),
+        ),
+        _tool(
             "market_intel_brief",
             "[Intel] One-call intelligence narrative: shelf signals, macro gap vs official CPI, "
             "composite scores, and moat confidence. Replaces indicators + analytics + enrichment reads.",
@@ -579,7 +606,32 @@ def _build_tool_specs() -> list[dict[str, Any]]:
             "market_preferences",
             "[Account] User preferences from purchase history: favorite stores, total spent.",
             _schema_object(),
-            meta=_meta(bundle="account", order=5, requires_auth=True),
+            meta=_meta(bundle="account", order=5, requires_auth=True, replaces="market_household_get"),
+        ),
+        _tool(
+            "market_household_get",
+            "[Account] Household profile: budget, restrictions, staple list, default stores.",
+            _schema_object(),
+            meta=_meta(bundle="account", order=6, min_tier="starter", requires_auth=True),
+        ),
+        _tool(
+            "market_household_update",
+            "[Account] Create or update household profile (budget, restrictions, staples).",
+            _schema_object(
+                {
+                    "payload": {
+                        "type": "object",
+                        "description": "Household schema v1 — size, country, budget_monthly, restrictions, staple_list",
+                    },
+                    "patch": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "When true, merge with existing profile instead of replace",
+                    },
+                },
+                required=["payload"],
+            ),
+            meta=_meta(bundle="account", order=7, min_tier="pro", requires_auth=True, pairs_with=["market_household_get"]),
         ),
         _tool(
             "market_subscription",

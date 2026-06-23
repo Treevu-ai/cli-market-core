@@ -551,6 +551,24 @@ def _migrate_indicator_schema(db) -> None:
             "CREATE INDEX IF NOT EXISTS idx_regulatory_country_at "
             "ON regulatory_events(country, effective_at DESC)"
         )
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS household_profiles (
+                username TEXT PRIMARY KEY,
+                payload_json TEXT NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS shopping_list_exports (
+                token TEXT PRIMARY KEY,
+                payload_json TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_export_expires ON shopping_list_exports(expires_at)"
+        )
     else:
         db.executescript("""
             CREATE TABLE IF NOT EXISTS indicator_definitions (
@@ -604,8 +622,20 @@ def _migrate_indicator_schema(db) -> None:
                 lines_affected_json TEXT DEFAULT '[]',
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
-            CREATE INDEX IF NOT EXISTS idx_regulatory_country_at
-                ON regulatory_events(country, effective_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_regulatory_country_at
+            ON regulatory_events(country, effective_at DESC);
+        CREATE TABLE IF NOT EXISTS household_profiles (
+            username TEXT PRIMARY KEY,
+            payload_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS shopping_list_exports (
+            token TEXT PRIMARY KEY,
+            payload_json TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_export_expires ON shopping_list_exports(expires_at);
         """)
     try:
         from .market_indicators import seed_indicator_definitions

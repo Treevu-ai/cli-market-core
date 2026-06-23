@@ -42,6 +42,9 @@ FEATURE_TIERS: dict[str, frozenset[str]] = {
     "tco_delivery": frozenset({"starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
     "substitutes_3": frozenset({"starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
     "substitutes_1": frozenset({"free", "starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
+    "optimize_purchase": frozenset({"starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
+    "household_read": frozenset({"starter", "pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
+    "household_write": frozenset({"pro", "pro_founding", "pro_annual", "enterprise", "builder"}),
 }
 
 

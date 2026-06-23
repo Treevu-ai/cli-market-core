@@ -44,6 +44,15 @@ _EXACT_ROUTES: dict[tuple[str, str], tuple[str, str]] = {
     ("POST", "/v1/basket/compare"): ("market_compare", "compare"),
     ("POST", "/agent/ask"): ("market_ask", "agent"),
     ("GET", "/agent/preferences"): ("market_preferences", "agent"),
+    ("GET", "/v1/household"): ("market_household_get", "household"),
+    ("GET", "/v1/household/summary"): ("market_household_get", "household"),
+    ("PUT", "/v1/household"): ("market_household_update", "household"),
+    ("PATCH", "/v1/household"): ("market_household_update", "household"),
+    ("POST", "/v1/missions/optimize-purchase"): ("market_optimize_purchase", "mission"),
+    ("GET", "/v1/intel/affordability"): ("market_affordability", "intel"),
+    ("GET", "/v1/intel/regulatory"): ("market_intel_brief", "intel"),
+    ("GET", "/v1/products/substitutes"): ("market_substitutes", "substitutes"),
+    ("GET", "/v1/basket/tco"): ("market_basket", "basket"),
 }
 
 _PREFIX_ROUTES: tuple[tuple[str, str, str], ...] = (
@@ -53,6 +62,7 @@ _PREFIX_ROUTES: tuple[tuple[str, str, str], ...] = (
     ("/intel", "market_intel_brief", "intel"),
     ("/v1/data", "market_export", "data"),
     ("/v1/prices", "market_stats", "data"),
+    ("/v1/export", "market_export", "export"),
     ("/export", "market_export", "data"),
     ("/alerts", "market_price_alerts", "alerts"),
     ("/orders", "market_orders", "orders"),
