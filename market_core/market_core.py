@@ -187,7 +187,7 @@ def normalize_store_id(raw: str) -> str:
     return key
 # ── Session / auth helpers ────────────────────────────────────────────────────
 
-_AUTH_PUBLIC_PATHS = {"/", "/auth/login", "/auth/register", "/auth/refresh"}
+_AUTH_PUBLIC_PATHS = {"/", "/auth/login", "/auth/register", "/auth/verify-email", "/auth/refresh"}
 
 
 def save_session(
@@ -308,7 +308,7 @@ def api(method: str, path: str, json_data: dict | None = None) -> dict:
                 refresh_token=data.get("refresh_token"),
                 expires_at=data.get("expires_at"),
             )
-        elif path == "/auth/register":
+        elif path in ("/auth/register", "/auth/verify-email"):
             key = data.get("api_key") or data.get("key")
             if key:
                 save_session(data.get("username", ""), key)
