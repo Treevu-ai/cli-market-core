@@ -1,0 +1,168 @@
+From 961b65c5a0952969a8f2d7b9d1739cb4480f25a4 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Tue, 23 Jun 2026 22:23:39 +0000
+Subject: [PATCH] chore(release): pin cli-market-core==1.11.0 (PyPI, was
+ @8469854)
+
+Switch requirements-railway.txt and CI from git SHA to PyPI pin.
+Add 1.11.0 publish patch, after_core script, stricter verify_railway_core_pin.
+
+Merge after cli-market-core 1.11.0 is on PyPI.
+---
+ .github/workflows/ci.yml                 |  4 ++--
+ .github/workflows/publish-core-pypi.yml  |  2 +-
+ Dockerfile                               |  2 +-
+ ops/after_core_1.11.0_published.sh       | 28 ++++++++++++++++++++++++
+ ops/patches/cli-market-core-1.11.0.patch | 24 ++++++++++++++++++++
+ ops/verify_railway_core_pin.py           |  8 ++++---
+ requirements-railway.txt                 |  4 ++--
+ 7 files changed, 63 insertions(+), 9 deletions(-)
+ create mode 100755 ops/after_core_1.11.0_published.sh
+ create mode 100644 ops/patches/cli-market-core-1.11.0.patch
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 97e7d67..1c0d859 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -73,7 +73,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@8469854"
++          pip install "cli-market-core==1.11.0"
+           pip install -e ".deps/cli-market-index[postgres]"
+           pip install pytest
+           python -c "from market_core.commerce_capabilities import get_commerce_capabilities; assert get_commerce_capabilities()['checkout']['scope'] == 'cli_market_internal'"
+@@ -155,7 +155,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@8469854"
++          pip install "cli-market-core==1.11.0"
+           pip install -e ".deps/cli-market-index[postgres]"
+           pip install pytest
+           python -c "from market_core.commerce_capabilities import get_commerce_capabilities; assert get_commerce_capabilities()['checkout']['scope'] == 'cli_market_internal'"
+diff --git a/.github/workflows/publish-core-pypi.yml b/.github/workflows/publish-core-pypi.yml
+index 974858e..3409c64 100644
+--- a/.github/workflows/publish-core-pypi.yml
++++ b/.github/workflows/publish-core-pypi.yml
+@@ -12,7 +12,7 @@ on:
+       version:
+         description: "Target core version (must match ops/patches/cli-market-core-{version}.patch)"
+         required: false
+-        default: "1.9.36"
++        default: "1.11.0"
+ 
+ permissions:
+   contents: read
+diff --git a/Dockerfile b/Dockerfile
+index 7e58db3..18c6a80 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -15,7 +15,7 @@ ARG GITHUB_TOKEN
+ ARG GH_PAT
+ 
+ COPY requirements-railway.txt .
+-ARG CACHE_BUST=2026-06-23-core-8469854
++ARG CACHE_BUST=2026-06-23-core-1.11.0
+ RUN set -eux; \
+     TOKEN="${GITHUB_TOKEN:-${GH_PAT:-}}"; \
+     if [ -z "${TOKEN}" ]; then \
+diff --git a/ops/after_core_1.11.0_published.sh b/ops/after_core_1.11.0_published.sh
+new file mode 100755
+index 0000000..b611fc3
+--- /dev/null
++++ b/ops/after_core_1.11.0_published.sh
+@@ -0,0 +1,28 @@
++#!/usr/bin/env bash
++# Run in cli-market-world AFTER cli-market-core 1.11.0 is on PyPI.
++set -euo pipefail
++
++cd "$(dirname "$0")/.."
++
++VER="1.11.0"
++if ! python3 -m pip index versions "cli-market-core" 2>/dev/null | grep -qE "(^|[[:space:]])${VER}([,[:space:]]|$)"; then
++  echo "error: cli-market-core $VER not on PyPI yet — publish first (core Publish PyPI or world publish-core-pypi)" >&2
++  exit 1
++fi
++
++sed -i "s/^version = \".*\"/version = \"$VER\"/" pyproject.toml
++sed -i "s/cli-market-core>=.*/cli-market-core>=$VER\"/" pyproject.toml
++sed -i 's/^cli-market-core @ git+.*/cli-market-core=='"$VER"'/' requirements-railway.txt
++sed -i 's/^cli-market-core==.*/cli-market-core=='"$VER"'/' requirements-railway.txt
++sed -i 's|cli-market-core @ git+https://[^"]*|cli-market-core=='"$VER"'|g' .github/workflows/ci.yml
++sed -i 's/cli-market-core==[0-9.]\+/cli-market-core=='"$VER"'/g' .github/workflows/ci.yml
++
++sed -i "s/^ARG CACHE_BUST=.*/ARG CACHE_BUST=2026-06-23-core-${VER}/" Dockerfile
++
++python3 ops/verify_railway_core_pin.py
++
++git add pyproject.toml requirements-railway.txt .github/workflows/ci.yml Dockerfile
++git commit -m "chore(release): pin cli-market-core==${VER} (PyPI, was @8469854)"
++git push origin main
++
++echo "Pushed world pin ${VER} — Railway redeploy + bump ops/backend-pin.trigger for backend sync."
+diff --git a/ops/patches/cli-market-core-1.11.0.patch b/ops/patches/cli-market-core-1.11.0.patch
+new file mode 100644
+index 0000000..a78427a
+--- /dev/null
++++ b/ops/patches/cli-market-core-1.11.0.patch
+@@ -0,0 +1,24 @@
++diff --git a/market_core/market_stats.py b/market_core/market_stats.py
++--- a/market_core/market_stats.py
+++++ b/market_core/market_stats.py
++@@ -81,7 +81,7 @@ RETAILERS_VERIFIED = 41
++ COUNTRIES = 8
++ LINES = 4
++ 
++-PACKAGE_VERSION = "1.10.0"
+++PACKAGE_VERSION = "1.11.0"
++ 
++ # ── Payments / billing copy ──────────────────────────────────────────────────
++ 
++diff --git a/pyproject.toml b/pyproject.toml
++--- a/pyproject.toml
+++++ b/pyproject.toml
++@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
++ 
++ [project]
++ name = "cli-market-core"
++-version = "1.10.0"
+++version = "1.11.0"
++ 
++ description = "CLI Market intelligence layer — indicators, billing, MCP primitives, and retailer connectors. Dependency of cli-market-world."
++ requires-python = ">=3.10"
+diff --git a/ops/verify_railway_core_pin.py b/ops/verify_railway_core_pin.py
+index 7f35805..ac317fa 100644
+--- a/ops/verify_railway_core_pin.py
++++ b/ops/verify_railway_core_pin.py
+@@ -48,9 +48,11 @@ def _version_on_pypi(version: str) -> bool:
+ def main() -> int:
+     pin = _pinned_version()
+     if pin is None:
+-        # TODO: remove when cli-market-core 1.10.0 is published to PyPI
+-        print("SKIP: requirements-railway.txt uses git commit pin — PyPI publish pending", file=sys.stderr)
+-        return 0
++        print(
++            "ERROR: requirements-railway.txt uses git commit pin — switch to cli-market-core==X.Y.Z after PyPI publish",
++            file=sys.stderr,
++        )
++        return 1
+     if _version_on_pypi(pin):
+         print(f"OK: cli-market-core=={pin} available on PyPI")
+         return 0
+diff --git a/requirements-railway.txt b/requirements-railway.txt
+index 83e689b..59974d3 100644
+--- a/requirements-railway.txt
++++ b/requirements-railway.txt
+@@ -1,5 +1,5 @@
+-# Pinned to git until Cost-of-Living OS waves ship on PyPI.
+-cli-market-core @ git+https://github.com/Treevu-ai/cli-market-core.git@8469854
++# PyPI pin — Cost-of-Living OS Waves 1–4 (equiv. git @8469854).
++cli-market-core==1.11.0
+ 
+ # Semantic moat — Golden Record persistence (SQLite dev / Postgres prod).
+ cli-market-index[postgres] @ git+https://github.com/Treevu-ai/cli-market-index@9d050131e9e5b16381581d1916e386f34d319ca6
+-- 
+2.43.0
+
