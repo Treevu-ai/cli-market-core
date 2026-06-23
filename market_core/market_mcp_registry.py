@@ -38,6 +38,7 @@ _ADVANCED_NAMES = frozenset(
         "market_exchange",
         "market_brands",
         "market_price_history",
+        "market_moat_confidence",
     }
 )
 _ADMIN_NAMES = frozenset(
@@ -61,6 +62,8 @@ _DEFAULT_HIDDEN = frozenset(
         "market_enrichment_subcategories",
         "market_notify",
         "market_alerts",
+        "market_ecosystem_radar",
+        "market_procurement_bulk",
     }
 )
 
@@ -518,15 +521,36 @@ def _build_tool_specs() -> list[dict[str, Any]]:
         _tool(
             "market_ticket",
             "[Advanced] Scan purchase receipt via OCR and compare prices against the data moat. "
-            "Pass a public image URL.",
+            "Pass a public image URL. Set submit_to_crowd to persist moat validation.",
             _schema_object(
                 {
                     "url": {"type": "string", "description": "Receipt image URL (.jpg, .png)"},
                     "country": {"type": "string", "description": "Optional: PE, AR, BR, MX, CO, CL"},
+                    "submit_to_crowd": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Also submit to crowd moat validation pipeline",
+                    },
+                    "line_items": {
+                        "type": "array",
+                        "description": "Optional parsed line items for crowd submit",
+                    },
                 },
                 required=["url"],
             ),
             meta=_meta(bundle="advanced", order=4),
+        ),
+        _tool(
+            "market_moat_confidence",
+            "[Advanced] Crowd-sourced moat confidence from receipt confirmations (7d window).",
+            _schema_object(
+                {
+                    "product_id": {"type": "string"},
+                    "store": {"type": "string"},
+                    "name": {"type": "string"},
+                }
+            ),
+            meta=_meta(bundle="advanced", order=7, min_tier="starter"),
         ),
         _tool(
             "market_voice",
@@ -663,6 +687,42 @@ def _build_tool_specs() -> list[dict[str, Any]]:
                 }
             ),
             meta=_meta(bundle="intel", order=9),
+        ),
+        _tool(
+            "market_ecosystem_radar",
+            "[Intel] Ecosystem launches radar — curated + Product Hunt cache. Signal only, not price data.",
+            _schema_object(
+                {
+                    "topic": {"type": "string", "default": "food"},
+                    "days": {"type": "integer", "default": 7},
+                    "limit": {"type": "integer", "default": 20},
+                }
+            ),
+            meta=_meta(bundle="intel", order=10, min_tier="pro", icp=["ops", "builder"]),
+        ),
+        _tool(
+            "market_procurement_bulk",
+            "[Intel] B2B bulk procurement signals for SKU lists. Enterprise procurement plane.",
+            _schema_object(
+                {
+                    "country": {"type": "string", "default": "PE"},
+                    "organization_id": {"type": "string"},
+                    "lines": {
+                        "type": "array",
+                        "description": '[{"sku_query":"arroz 50kg","qty":10,"unit":"kg"}]',
+                    },
+                    "include_substitutes": {"type": "boolean", "default": True},
+                    "output": {"type": "string", "default": "json"},
+                },
+                required=["lines"],
+            ),
+            meta=_meta(
+                bundle="intel",
+                order=11,
+                min_tier="enterprise",
+                requires_auth=True,
+                icp=["trade", "procurement"],
+            ),
         ),
         _tool(
             "market_scan",

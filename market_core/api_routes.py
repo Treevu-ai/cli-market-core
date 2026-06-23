@@ -34,7 +34,10 @@ from .market_household import (
     patch_household,
     put_household,
 )
+from .market_ecosystem import list_ecosystem_launches
 from .market_missions import run_optimize_purchase
+from .market_procurement_bulk import run_procurement_bulk
+from .market_receipts import compute_moat_confidence, get_receipt, submit_receipt
 from .market_intel_products import (
     compute_affordability,
     compute_inflation_report,
@@ -361,6 +364,108 @@ def export_shopping_list(
             if data is None:
                 raise HTTPException(status_code=404, detail="export not found or expired")
         return _wrap(data, latency_ms=t.elapsed_ms) if enveloped else data
+    finally:
+        db.close()
+
+
+# ── Wave 3: crowd truth, ecosystem, procurement bulk ───────────────────────────
+
+@router.post("/receipts/submit")
+def receipts_submit(
+    payload: dict[str, Any] = Body(...),
+    username: str = Depends(_v1_auth),
+    enveloped: bool = Query(True),
+):
+    """Submit a receipt image URL for crowd moat validation (OCR inline or pending)."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = submit_receipt(
+                db,
+                url=str(payload.get("url") or ""),
+                country=str(payload.get("country") or "PE"),
+                username=username if username != "anonymous" else None,
+                ocr=payload.get("ocr"),
+                line_items=payload.get("line_items"),
+            )
+        conf = "ok" if result.get("status") == "confirmed" else "warn"
+        return _wrap(result, latency_ms=t.elapsed_ms, confidence=conf) if enveloped else result
+    finally:
+        db.close()
+
+
+@router.get("/receipts/{receipt_id}")
+def receipts_get(
+    receipt_id: str,
+    enveloped: bool = Query(True),
+):
+    """Get receipt submission status and moat diff."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = get_receipt(db, receipt_id)
+            if result is None:
+                raise HTTPException(status_code=404, detail="receipt not found")
+        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+    finally:
+        db.close()
+
+
+@router.get("/moat/confidence")
+def moat_confidence_v1(
+    product_id: str | None = Query(None),
+    store: str | None = Query(None),
+    name: str | None = Query(None),
+    enveloped: bool = Query(True),
+):
+    """Crowd-sourced confidence tier from receipt confirmations."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = compute_moat_confidence(db, product_id=product_id, store=store, name=name)
+        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+    finally:
+        db.close()
+
+
+@router.get("/ecosystem/launches")
+def ecosystem_launches_v1(
+    topic: str = Query("food"),
+    days: int = Query(7, ge=1, le=90),
+    limit: int = Query(20, ge=1, le=50),
+    enveloped: bool = Query(True),
+):
+    """Ecosystem radar — curated and cached Product Hunt launches."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = list_ecosystem_launches(db, topic=topic, days=days, limit=limit)
+        return _wrap(result, latency_ms=t.elapsed_ms) if enveloped else result
+    finally:
+        db.close()
+
+
+@router.post("/intel/procurement-bulk")
+def intel_procurement_bulk(
+    payload: dict[str, Any] = Body(...),
+    username: str = Depends(_v1_auth),
+    enveloped: bool = Query(True),
+):
+    """B2B bulk procurement signals for a SKU list."""
+    _require_auth(username)
+    db = get_db()
+    try:
+        with timing() as t:
+            result = run_procurement_bulk(
+                db,
+                country=str(payload.get("country") or "PE"),
+                lines=payload.get("lines") or [],
+                organization_id=payload.get("organization_id"),
+                include_substitutes=bool(payload.get("include_substitutes", True)),
+                output=str(payload.get("output") or "json"),
+            )
+        conf = "ok" if result.get("status") == "ok" else "warn"
+        return _wrap(result, latency_ms=t.elapsed_ms, confidence=conf) if enveloped else result
     finally:
         db.close()
 

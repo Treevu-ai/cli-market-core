@@ -25,13 +25,13 @@ BUNDLE_PREFIXES = ("[Shop]", "[Intel]", "[Account]", "[Advanced]", "[Admin]")
 
 
 def test_registry_has_46_tools():
-    assert len(TOOLS) == 54
+    assert len(TOOLS) == 57
     names = [t["name"] for t in TOOLS]
     assert len(names) == len(set(names))
 
 
 def test_original_43_names_still_registered():
-    assert len(ORIGINAL_TOOL_NAMES) == 48
+    assert len(ORIGINAL_TOOL_NAMES) == 51
     for name in ORIGINAL_TOOL_NAMES:
         assert name in {t["name"] for t in TOOLS}
 
@@ -81,7 +81,7 @@ def test_get_profile_legacy_env(monkeypatch):
 
 
 def test_legacy_profile_lists_all_46():
-    assert len(list_tools("legacy")) == 54
+    assert len(list_tools("legacy")) == 57
 
 
 def test_default_profile_includes_pr2_canonicals():
@@ -190,6 +190,12 @@ def test_handle_tool_accepts_original_43_names(name: str):
             raw = handle_tool(name, {})
         elif name == "market_household_update":
             raw = handle_tool(name, {"payload": {"size": 2, "country": "PE"}})
+        elif name == "market_moat_confidence":
+            raw = handle_tool(name, {"product_id": "p1", "store": "wong"})
+        elif name == "market_ecosystem_radar":
+            raw = handle_tool(name, {"topic": "food"})
+        elif name == "market_procurement_bulk":
+            raw = handle_tool(name, {"lines": [{"sku_query": "leche"}]})
         else:
             raw = handle_tool(name, {})
     data = json.loads(raw)
