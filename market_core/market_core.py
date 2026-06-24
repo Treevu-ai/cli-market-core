@@ -256,7 +256,9 @@ def _refresh_access_token() -> str | None:
 
 def _api_timeout(path: str, method: str) -> float:
     default = float(os.getenv("MARKET_API_TIMEOUT", "45"))
-    if method == "POST" and path in ("/products/search", "/products/compare", "/v1/basket/compare"):
+    if method == "POST" and path == "/v1/basket/compare":
+        return float(os.getenv("MARKET_BASKET_TIMEOUT", "90"))
+    if method == "POST" and path in ("/products/search", "/products/compare"):
         return float(os.getenv("MARKET_SEARCH_TIMEOUT", str(default)))
     return default
 
