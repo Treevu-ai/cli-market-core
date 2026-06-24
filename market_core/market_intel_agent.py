@@ -171,8 +171,20 @@ def _dispatch(name: str, args: dict, db) -> dict:
     """Execute a single tool against the live data."""
     if name == "get_inflation":
         val = compute_internal_inflation_avg(db, args.get("country"), args.get("line"), int(args.get("days", 30) or 30))
-        return {"avg_inflation_pct": val, "country": args.get("country"), "line": args.get("line"),
-                "days": int(args.get("days", 30) or 30), "note": "Inflacion observada online; no reemplaza IPC oficial."}
+        days_used = int(args.get("days", 30) or 30)
+        return {
+            "metric_name": "Retail Price Velocity (RPV)",
+            "retail_price_velocity_pct": val,
+            "avg_inflation_pct": val,  # backward-compat
+            "country": args.get("country"),
+            "line": args.get("line"),
+            "days": days_used,
+            "period_note": (
+                f"Rolling {days_used}-day shelf price signal (online retailers). "
+                "Not equivalent to official CPI — different basket, channel, and period."
+            ),
+            "note": "RPV: Retail Price Velocity. No reemplaza IPC oficial (INEI, INDEC, etc.).",
+        }
     if name == "get_staple_momentum":
         val = compute_staple_price_momentum(db, args.get("country"), int(args.get("days", 7) or 7))
         return {"staple_momentum_pct": val, "country": args.get("country"), "days": int(args.get("days", 7) or 7)}
