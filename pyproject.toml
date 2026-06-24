@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-market-core"
-version = "1.11.2"
+version = "1.11.3"
 
 description = "Cost-of-Living OS for LatAm — intelligence layer for CLI Market. market_optimize_purchase: one-call basket compare, TCO, substitutes, action links. 32 MCP tools (default profile). Dependency of cli-market-world."
 requires-python = ">=3.10"
