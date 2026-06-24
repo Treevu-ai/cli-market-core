@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from .response_envelope import envelope, freshness_from_string
+from .market_food_match import food_search_hint, pick_best_food_match
 from .market_spread import CANASTA_ITEMS, CANASTA_SQL_LIKE, matches_canasta_item
 from .market_units import is_standard_canasta_pack
 
@@ -157,7 +158,7 @@ def build_basket_compare(
             continue
 
         rows = db.execute(
-            """SELECT store, store_name, name, price, currency, product_id
+            """SELECT store, store_name, name, price, currency, product_id, line
                FROM price_snapshots
                WHERE price > 0 AND price < 999999
                  AND LOWER(name) LIKE LOWER(?)
@@ -165,18 +166,30 @@ def build_basket_compare(
             (f"%{query}%",),
         ).fetchall()
 
-        store_best: dict[str, tuple[float, str, str, str | None]] = {}
+        store_best: dict[str, tuple[float, str, str, str | None, str]] = {}
+        rows_by_store: dict[str, list] = {}
         for r in rows:
             store = r["store"]
             if store_filter and store not in store_filter:
                 continue
-            price = float(r["price"])
-            if store not in store_best or price < store_best[store][0]:
-                store_best[store] = (price, r["store_name"], r["currency"], r["product_id"])
+            rows_by_store.setdefault(store, []).append(r)
+
+        for store, store_rows in rows_by_store.items():
+            best = pick_best_food_match(query, store_rows)
+            if not best:
+                continue
+            price = float(best["price"])
+            store_best[store] = (
+                price,
+                best["store_name"],
+                best["currency"],
+                best.get("product_id"),
+                best["name"],
+            )
 
         if store_best:
             items_found += 1
-            for store, (price, store_name, currency, _product_id) in store_best.items():
+            for store, (price, store_name, currency, product_id, resolved_name) in store_best.items():
                 item_total = round(price * qty, 2)
                 if store not in store_totals:
                     store_totals[store] = {
@@ -194,6 +207,8 @@ def build_basket_compare(
                     "qty": qty,
                     "unit_price": price,
                     "item_total": item_total,
+                    "product_id": product_id,
+                    "resolved_name": resolved_name,
                 })
 
     stores = sorted(store_totals.values(), key=lambda x: x["total"])
@@ -205,16 +220,20 @@ def build_basket_compare(
         for s in stores:
             product_id = None
             for br in s.get("breakdown") or []:
+                if br.get("product_id"):
+                    product_id = br["product_id"]
+                    break
                 row = db.execute(
                     """
-                    SELECT product_id FROM price_snapshots
+                    SELECT product_id, name, line FROM price_snapshots
                     WHERE store = ? AND LOWER(name) LIKE LOWER(?)
-                    ORDER BY price ASC LIMIT 1
+                    ORDER BY price ASC LIMIT 20
                     """,
                     (s["store"], f"%{br.get('item', '')}%"),
-                ).fetchone()
-                if row and row["product_id"]:
-                    product_id = row["product_id"]
+                ).fetchall()
+                best = pick_best_food_match(str(br.get("item") or ""), row)
+                if best and best.get("product_id"):
+                    product_id = best["product_id"]
                     break
             delivery = None
             if include_delivery:
@@ -256,6 +275,11 @@ def build_basket_compare(
         product_links = enrich_basket_items_with_urls(
             leader.get("store") or "wong",
             leader.get("breakdown") or [],
+            search_hints={
+                str(row.get("item") or ""): food_search_hint(str(row.get("item") or ""))
+                for row in (leader.get("breakdown") or [])
+                if row.get("item")
+            },
         )
         result["action_links"] = build_action_links(
             db,
@@ -307,15 +331,16 @@ def build_basket_tco(
             continue
         row = db.execute(
             """
-            SELECT product_id, name, price FROM price_snapshots
+            SELECT product_id, name, price, line FROM price_snapshots
             WHERE store = ? AND price > 0 AND LOWER(name) LIKE LOWER(?)
-            ORDER BY price ASC LIMIT 1
+            ORDER BY price ASC LIMIT 20
             """,
             (store, f"%{query}%"),
-        ).fetchone()
-        if not row:
+        ).fetchall()
+        best = pick_best_food_match(query, row)
+        if not best:
             continue
-        unit_price = float(row["price"])
+        unit_price = float(best["price"])
         item_sub = round(unit_price * qty, 2)
         subtotal += item_sub
         line_items.append(
@@ -324,8 +349,9 @@ def build_basket_tco(
                 "qty": qty,
                 "unit_price": unit_price,
                 "subtotal": item_sub,
-                "product_id": row["product_id"],
-                "unit_normalized": price_per_base_unit(unit_price, str(row["name"])),
+                "product_id": best.get("product_id"),
+                "resolved_name": best.get("name"),
+                "unit_normalized": price_per_base_unit(unit_price, str(best.get("name") or "")),
             }
         )
 

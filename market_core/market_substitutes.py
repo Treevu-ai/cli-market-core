@@ -28,6 +28,7 @@ def _off_tradeoff(original: dict | None, candidate: dict | None) -> dict[str, An
 
 def _search_candidates(db, query: str, country: str, store: str | None, limit: int = 20) -> list[dict]:
     from .market_core import STORES
+    from .market_food_match import pick_best_food_match
 
     cc = country.upper()
     stores = [
@@ -43,6 +44,7 @@ def _search_candidates(db, query: str, country: str, store: str | None, limit: i
 
     placeholders = ",".join("?" * len(stores))
     q = f"%{query.strip()}%"
+    sql_limit = max(limit * 3, 30)
     try:
         rows = db.execute(
             f"""
@@ -55,7 +57,7 @@ def _search_candidates(db, query: str, country: str, store: str | None, limit: i
             ORDER BY price ASC
             LIMIT ?
             """,
-            [*stores, q, limit],
+            [*stores, q, sql_limit],
         ).fetchall()
     except Exception:
         rows = db.execute(
@@ -68,9 +70,16 @@ def _search_candidates(db, query: str, country: str, store: str | None, limit: i
             ORDER BY price ASC
             LIMIT ?
             """,
-            [*stores, q, limit],
+            [*stores, q, sql_limit],
         ).fetchall()
-    return [dict(r) for r in rows]
+    candidates = [dict(r) for r in rows]
+    if not candidates:
+        return []
+    best = pick_best_food_match(query, candidates)
+    if best:
+        ordered = [best] + [c for c in candidates if c.get("product_id") != best.get("product_id")]
+        return ordered[:limit]
+    return candidates[:limit]
 
 
 def _passes_constraints(candidate: dict, constraints: dict | None, off: dict | None) -> bool:
