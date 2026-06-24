@@ -58,9 +58,10 @@ def test_substitute_constraints_from_household():
 
 
 def test_retailer_deeplink():
-    link = retailer_deeplink("wong", product_id="12345")
+    link = retailer_deeplink("wong", name="leche gloria")
     assert link is not None
-    assert link["url"].endswith("/12345/p")
+    assert link["link_mode"] == "search"
+    assert link["url"] == "https://www.wong.pe/search?ft=leche%20gloria"
 
 
 def test_shopping_list_export_ttl(isolated_db):

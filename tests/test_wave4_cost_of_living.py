@@ -54,7 +54,7 @@ def test_feature_flags_default_on(monkeypatch):
 def test_affiliate_deeplink_utm(monkeypatch):
     monkeypatch.setenv("AFFILIATE_STORES", "wong")
     monkeypatch.setenv("AFFILIATE_UTM_SOURCE", "climarket")
-    link = retailer_deeplink("wong", product_id="12345")
+    link = retailer_deeplink("wong", name="leche gloria")
     assert link is not None
     assert link["affiliate"] is True
     assert "utm_source=climarket" in link["url"]
@@ -115,9 +115,8 @@ def test_build_action_links_prefers_store_matching_product_id(isolated_db):
         )
         deeplink = next(link for link in links if link["type"] == "retailer_deeplink")
         assert deeplink["store"] == "plazavea"
-        assert deeplink["product_id"] == "20402654"
-        assert deeplink["url"] == "https://www.plazavea.com.pe/20402654/p"
-        assert deeplink["link_mode"] == "product"
+        assert deeplink["link_mode"] == "search"
+        assert deeplink["url"] == "https://www.plazavea.com.pe/search?ft=Leche%20GLORIA%20Ni%C3%B1os%20Lata%20390g"
     finally:
         db.close()
 

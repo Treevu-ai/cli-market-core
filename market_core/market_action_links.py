@@ -107,8 +107,6 @@ def retailer_deeplink(
     if url and str(url).startswith(base):
         resolved_url = str(url)
         link_mode = "canonical"
-    elif platform == "vtex" and product_id:
-        resolved_url = f"{base}/{product_id}/p"
     elif name:
         q = quote(name.strip())
         if platform == "shopify":
@@ -116,6 +114,9 @@ def retailer_deeplink(
         else:
             resolved_url = f"{base}/search?ft={q}"
         link_mode = "search"
+    elif platform != "vtex" and product_id:
+        # LatAm VTEX storefronts require slug URLs (linkText), not bare /{id}/p.
+        resolved_url = f"{base}/{product_id}/p"
 
     if not resolved_url:
         return None
