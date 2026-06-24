@@ -307,6 +307,7 @@ def init_db_pg(db: _DB) -> None:
         "CREATE INDEX IF NOT EXISTS idx_ps_store ON price_snapshots(store)",
         "CREATE INDEX IF NOT EXISTS idx_ps_line ON price_snapshots(line)",
         "CREATE INDEX IF NOT EXISTS idx_ps_queried ON price_snapshots(queried_at)",
+        "CREATE INDEX IF NOT EXISTS idx_ps_category ON price_snapshots(category)",
     ]:
         db.execute(idx_sql)
 
@@ -577,6 +578,7 @@ _SQLITE_DDL = """\
         CREATE INDEX IF NOT EXISTS idx_ps_store ON price_snapshots(store);
         CREATE INDEX IF NOT EXISTS idx_ps_line ON price_snapshots(line);
         CREATE INDEX IF NOT EXISTS idx_ps_queried ON price_snapshots(queried_at);
+        CREATE INDEX IF NOT EXISTS idx_ps_category ON price_snapshots(category);
 
         CREATE TABLE IF NOT EXISTS search_queries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
