@@ -16,11 +16,43 @@ def test_session_roundtrip(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     monkeypatch.setattr(mc, "DATA_DIR", data_dir)
     monkeypatch.setattr(mc, "SESSION_FILE", data_dir / "session.json")
+    monkeypatch.delenv("MARKET_API_TOKEN", raising=False)
+    monkeypatch.delenv("CLI_MARKET_API_KEY", raising=False)
 
     mc.save_session("alice", "tok-abc", refresh_token="ref-1", expires_at="2026-12-31")
     assert mc.get_token() == "tok-abc"
     assert mc.get_session_username() == "alice"
     assert mc.get_refresh_token() == "ref-1"
+
+
+def test_get_token_prefers_market_api_token_env(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr(mc, "DATA_DIR", data_dir)
+    monkeypatch.setattr(mc, "SESSION_FILE", data_dir / "session.json")
+    mc.save_session("alice", "tok-from-file")
+    monkeypatch.setenv("MARKET_API_TOKEN", "sk-from-env")
+    assert mc.get_token() == "sk-from-env"
+
+
+def test_get_token_reads_api_key_field_and_utf8_bom(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    session = data_dir / "session.json"
+    monkeypatch.setattr(mc, "DATA_DIR", data_dir)
+    monkeypatch.setattr(mc, "SESSION_FILE", session)
+    monkeypatch.delenv("MARKET_API_TOKEN", raising=False)
+    monkeypatch.delenv("CLI_MARKET_API_KEY", raising=False)
+    session.write_bytes(
+        b"\xef\xbb\xbf" + b'{"username":"bob","api_key":"sk-bom-key"}',
+    )
+    assert mc.get_token() == "sk-bom-key"
+    assert mc.get_session_username() == "bob"
+
+
+def test_format_api_error_validation_list():
+    detail = [{"loc": ["body", "email"], "msg": "Field required", "type": "missing"}]
+    assert "email" in mc._format_api_error(detail)
+    assert "Field required" in mc._format_api_error(detail)
 
 
 def test_last_search_cache(tmp_path, monkeypatch):

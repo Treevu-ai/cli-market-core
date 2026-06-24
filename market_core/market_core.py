@@ -190,6 +190,53 @@ def normalize_store_id(raw: str) -> str:
 _AUTH_PUBLIC_PATHS = {"/", "/auth/login", "/auth/register", "/auth/verify-email", "/auth/refresh"}
 
 
+def _env_api_token() -> str:
+    """API key from MCP/Cursor env (mcp.json) or CLI_MARKET_API_KEY alias."""
+    for key in ("MARKET_API_TOKEN", "CLI_MARKET_API_KEY"):
+        value = (os.environ.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _load_session_data() -> dict:
+    """Parse session.json; tolerate UTF-8 BOM from Windows PowerShell."""
+    if not SESSION_FILE.exists():
+        return {}
+    raw = SESSION_FILE.read_text(encoding="utf-8-sig")
+    if not raw.strip():
+        return {}
+    data = json.loads(raw)
+    return data if isinstance(data, dict) else {}
+
+
+def _session_api_token(data: dict) -> str:
+    for key in ("token", "api_key", "key"):
+        value = (data.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _format_api_error(detail: object) -> str:
+    """Normalize FastAPI ``detail`` (str or validation list) for CLI/MCP."""
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, list):
+        parts: list[str] = []
+        for item in detail:
+            if isinstance(item, dict):
+                loc = ".".join(str(x) for x in item.get("loc", ()))
+                msg = item.get("msg", "")
+                parts.append(f"{loc}: {msg}".strip(": "))
+            else:
+                parts.append(str(item))
+        return "; ".join(p for p in parts if p) or "Validation error"
+    if detail is None:
+        return "Unknown error"
+    return str(detail)
+
+
 def save_session(
     username: str,
     token: str,
@@ -210,24 +257,22 @@ def save_session(
 
 
 def get_token() -> str:
-    if not SESSION_FILE.exists():
-        return ""
-    data = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
-    return data.get("token", "")
+    env_token = _env_api_token()
+    if env_token:
+        return env_token
+    return _session_api_token(_load_session_data())
 
 
 def get_session_username() -> str:
-    if not SESSION_FILE.exists():
-        return ""
-    data = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
-    return data.get("username", "")
+    data = _load_session_data()
+    if data.get("username"):
+        return str(data["username"])
+    return ""
 
 
 def get_refresh_token() -> str:
-    if not SESSION_FILE.exists():
-        return ""
-    data = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
-    return data.get("refresh_token", "")
+    data = _load_session_data()
+    return str(data.get("refresh_token") or "")
 
 # ── API client (sync — used by CLI and MCP) ───────────────────────────────────
 
@@ -292,7 +337,7 @@ def api(method: str, path: str, json_data: dict | None = None) -> dict:
                 resp = _request(headers)
         if resp.status_code >= 400:
             detail = resp.json().get("detail", resp.text)
-            return {"error": detail, "status": resp.status_code}
+            return {"error": _format_api_error(detail), "status": resp.status_code}
         data = resp.json()
         if path == "/auth/login" and data.get("token"):
             save_session(
