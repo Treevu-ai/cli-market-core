@@ -384,8 +384,14 @@ def handle_tool(name: str, args: dict) -> str:
 
 
 def _is_jsonrpc_notification(request: dict) -> bool:
-    """JSON-RPC notifications omit ``id``; they must not receive a response."""
-    return "id" not in request
+    """JSON-RPC notifications omit ``id`` (or send id=null); no reply allowed.
+
+    MCP clients like Cursor send ``id: null`` for certain internal frames
+    (e.g. reconnect probes). Responding with ``{"id": null, "error": ...}``
+    fails Cursor's Zod validator and kills the connection, so we treat null
+    the same as a missing id.
+    """
+    return request.get("id") is None
 
 
 def _write_rpc(message: dict) -> None:
@@ -442,6 +448,8 @@ def handle_rpc_request(request: dict, profile: str) -> dict | None:
         return {"jsonrpc": "2.0", "id": req_id, "result": {"resources": []}}
     if method == "prompts/list":
         return {"jsonrpc": "2.0", "id": req_id, "result": {"prompts": []}}
+    if method.startswith("notifications/"):
+        return None
 
     return {
         "jsonrpc": "2.0",

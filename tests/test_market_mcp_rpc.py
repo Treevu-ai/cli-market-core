@@ -59,3 +59,15 @@ def test_ping_returns_empty_result():
     request = {"jsonrpc": "2.0", "id": "ping-1", "method": "ping"}
     response = handle_rpc_request(request, "default")
     assert response == {"jsonrpc": "2.0", "id": "ping-1", "result": {}}
+
+
+def test_id_null_returns_no_response():
+    """Cursor sends id=null for internal probe frames; must not reply (avoids Zod crash)."""
+    request = {"jsonrpc": "2.0", "id": None, "method": "nope/probe"}
+    assert handle_rpc_request(request, "default") is None
+
+
+def test_notifications_with_id_returns_no_response():
+    """Some clients send notifications/* with an id by mistake; server must not reply."""
+    request = {"jsonrpc": "2.0", "id": 5, "method": "notifications/initialized"}
+    assert handle_rpc_request(request, "default") is None
