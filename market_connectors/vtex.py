@@ -67,6 +67,24 @@ _STORE_COOKIE_CACHE = {}
 _STORE_LOCKS = defaultdict(asyncio.Lock)
 _COOKIE_CACHE_TTL = 600  # 10 minutes
 
+# Category name cache: {store_key: {category_id_str: "Parent > Child"}}
+# Populated lazily on first _detect_io call per store.
+_category_cache: dict[str, dict[str, str]] = {}
+
+
+def _flatten_category_tree(nodes: list, prefix: str = "") -> dict[str, str]:
+    """Recursively flatten a VTEX category tree into {str(id): 'Parent > Child'} mapping."""
+    result: dict[str, str] = {}
+    for node in nodes:
+        name = str(node.get("name") or "")
+        node_id = str(node.get("id") or "")
+        path = f"{prefix} > {name}" if prefix else name
+        if node_id:
+            result[node_id] = path
+        children = node.get("children") or node.get("Children") or []
+        result.update(_flatten_category_tree(children, path))
+    return result
+
 
 class VtexConnector(BaseConnector):
     platform = "vtex"
@@ -209,6 +227,7 @@ class VtexConnector(BaseConnector):
 
     async def _detect_io(self, store_config: dict) -> str:
         base = store_config["base"]
+        store_key = store_config.get("_store_key", "")
         headers = _client_headers(store_config)
         async with httpx.AsyncClient(timeout=8.0) as c:
             try:
@@ -216,6 +235,11 @@ class VtexConnector(BaseConnector):
                 ct = r.headers.get("content-type", "")
                 if r.status_code == 200 and "json" in ct:
                     store_config["_io_path"] = ""
+                    if store_key and store_key not in _category_cache:
+                        try:
+                            _category_cache[store_key] = _flatten_category_tree(r.json())
+                        except Exception:
+                            pass
                     return ""
             except Exception:
                 pass
@@ -224,6 +248,11 @@ class VtexConnector(BaseConnector):
                 ct = r.headers.get("content-type", "")
                 if r.status_code == 200 and "json" in ct:
                     store_config["_io_path"] = "/io"
+                    if store_key and store_key not in _category_cache:
+                        try:
+                            _category_cache[store_key] = _flatten_category_tree(r.json())
+                        except Exception:
+                            pass
                     return "/io"
             except Exception:
                 pass
@@ -389,7 +418,9 @@ class VtexConnector(BaseConnector):
             "product_id": raw.get("productReference", raw.get("productId", "")),
             "name": clean_name(raw.get("productName", "")),
             "brand": raw.get("brand") or "—",
-            "category": raw.get("categoryId", ""),
+            "category": _category_cache.get(store_key, {}).get(
+                str(raw.get("categoryId", "")), raw.get("categoryId", "")
+            ),
             "price": price,
             "list_price": list_price,
             "discount": discount,
