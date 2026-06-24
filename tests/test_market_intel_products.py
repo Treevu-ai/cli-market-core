@@ -11,6 +11,7 @@ from market_core.market_intel_products import (
     _interpret_inflation_pressure,
     _interpret_price_risk,
     _interpret_procurement,
+    compute_price_deal_alerts,
 )
 from market_core.market_basket import build_basket_compare
 
@@ -69,6 +70,36 @@ def test_interpret_procurement():
 def test_interpret_procurement_staples_rising():
     s, _ = _interpret_procurement(100.0, 1.0, 6.0)
     assert s == "wait"
+
+
+def test_compute_price_deal_alerts(isolated_db):
+    db = get_db()
+    try:
+        ts = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+        db.execute(
+            """INSERT INTO price_snapshots
+               (product_id, store, store_name, name, price, list_price, line, currency, queried_at, confidence)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok')""",
+            ("717238", "metro", "Metro", "Aceite Vegetal Máxima 900ml", 5.4, 5.7, "supermercados", "PEN", ts),
+        )
+        db.execute(
+            """INSERT INTO price_snapshots
+               (product_id, store, store_name, name, price, list_price, line, currency, queried_at, confidence)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok')""",
+            ("959308", "plazavea", "Plaza Vea", "Aceite Vegetal BELL'S 900ml", 5.7, 5.7, "supermercados", "PEN", ts),
+        )
+        db.commit()
+        result = compute_price_deal_alerts(
+            db, product="aceite vegetal", store="metro", threshold_pct=5.0, limit=5
+        )
+        assert result["total"] == 1
+        hit = result["results"][0]
+        assert hit["store"] == "metro"
+        assert hit["discount_pct"] == 5.3
+        empty = compute_price_deal_alerts(db, product="aceite vegetal", store="plazavea", threshold_pct=5.0)
+        assert empty["total"] == 0
+    finally:
+        db.close()
 
 
 # ── intel products (DB schema dependent — skipped in unit test suite) ───────────
