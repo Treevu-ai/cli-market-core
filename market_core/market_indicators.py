@@ -1248,10 +1248,10 @@ def _brief_headline(
     parts: list[str] = []
     if inflation_pct is not None:
         sign = "+" if inflation_pct >= 0 else ""
-        parts.append(f"Shelf inflation {sign}{inflation_pct}% over {days}d")
+        parts.append(f"RPV (shelf price velocity) {sign}{inflation_pct}% over {days}d")
     if gap_pp is not None:
         direction = "above" if gap_pp > 0 else "below"
-        parts.append(f"{abs(gap_pp):.1f} pp {direction} official CPI")
+        parts.append(f"shelf signal {abs(gap_pp):.1f} pp {direction} official CPI (directional)")
     if parts:
         return "; ".join(parts)
     scope = country or "LATAM"
@@ -1347,6 +1347,53 @@ def build_intel_brief(
 
         confidence["stores_active"] = len(get_default_stores())
 
+    # P0.4: coverage table — per-country snapshot counts vs 24h threshold
+    try:
+        from datetime import timezone as _tz
+        _cutoff_24h = (datetime.now(_tz.utc) - timedelta(hours=24)).isoformat()
+        _cutoff_7d = (datetime.now(_tz.utc) - timedelta(days=7)).isoformat()
+        from . import STORES as _STORES
+        _scope_stores = (
+            [k for k, s in _STORES.items() if s.get("country") == country]
+            if country else list(_STORES.keys())
+        )
+        _cov_rows: list[dict[str, Any]] = []
+        _fresh_count = 0
+        for _sk in _scope_stores:
+            _n24 = db.execute(
+                "SELECT COUNT(*) as n FROM price_snapshots WHERE store=? AND queried_at>=?",
+                (_sk, _cutoff_24h),
+            ).fetchone()
+            _n7d = db.execute(
+                "SELECT COUNT(*) as n FROM price_snapshots WHERE store=? AND queried_at>=?",
+                (_sk, _cutoff_7d),
+            ).fetchone()
+            _n24v = int((_n24 or {}).get("n") or 0)
+            _n7dv = int((_n7d or {}).get("n") or 0)
+            if _n7dv > 0:
+                _cov_rows.append({
+                    "store": _sk,
+                    "country": _STORES.get(_sk, {}).get("country", ""),
+                    "snapshots_24h": _n24v,
+                    "snapshots_7d": _n7dv,
+                    "fresh": _n24v > 0,
+                })
+                if _n24v > 0:
+                    _fresh_count += 1
+        _active = len(_cov_rows)
+        _coverage_pct = round(_fresh_count / _active * 100, 1) if _active > 0 else 0.0
+        confidence["coverage"] = {
+            "stores_with_data_7d": _active,
+            "stores_fresh_24h": _fresh_count,
+            "coverage_pct": _coverage_pct,
+            "coverage_threshold_pct": 60,
+            "publishable": _coverage_pct >= 60,
+            "label": "normal" if _coverage_pct >= 60 else "COBERTURA PARCIAL",
+            "rows": _cov_rows,
+        }
+    except Exception:
+        pass
+
     full_scores = _scores_from_latest(latest)
     scores_summary = {
         k: {"score": v["score"], "label": v["label"]}
@@ -1380,7 +1427,12 @@ def build_intel_brief(
         "enrichment": {"indicators": enrichment, "total": len(enrichment)},
         "subcategories": {"subcategories": subcategories, "total": len(subcategories)},
         "analytics": {"indicators": analytics, "total": len(analytics)},
-        "disclaimer": "Shelf signals from online góndola prices. Does not replace official CPI (INEI, INDEC, etc.).",
+        "disclaimer": (
+            "Shelf price signals (RPV, BSI, dispersion) from online góndola — CLI Market collector. "
+            "Not equivalent to official CPI (INEI, INDEC, DANE, INEGI, etc.): "
+            "different basket, channel, and reference period. "
+            "Coverage table in confidence.coverage; publishable=false if coverage_pct<60%."
+        ),
     }
     if include_catalog:
         result["catalog"] = get_indicator_catalog()
