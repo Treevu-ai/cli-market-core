@@ -96,7 +96,8 @@ STORES = {
     "elpalacio_mx": {"name":"El Palacio MX","base":"https://www.elpalaciodehierro.com","country":"MX","currency":"MXN","emoji":"🇲🇽","line":"departamentales","platform":"magento","disabled":True,"disabled_reason":"Magento REST 410 Gone"},
 
     # ── WOOCOMMERCE (Store API public read) ──
-    "xray_pe": {"name":"Xray Chipped PE","base":"https://tienda.xraychipped.com.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"automotriz","platform":"woocommerce"},
+    # xray_pe removed 2026-06-24: 64 consecutive DNS failures, fresh_24h=False, unrecoverable
+
     "nunaorganica_pe": {"name":"Nuna Orgánica","base":"https://nunaorganica.pe","country":"PE","currency":"PEN","emoji":"🇵🇪","line":"supermercados","platform":"woocommerce"},
 
     # ── URUGUAY (UY) — expansión de cobertura ──
