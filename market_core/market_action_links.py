@@ -26,6 +26,54 @@ def _affiliate_enabled_for_store(store: str) -> bool:
     return affiliate_enabled()
 
 
+def _normalize_store_key(store: str) -> str:
+    return (store or "").strip().lower().replace(" ", "")
+
+
+def _item_store_key(item: dict[str, Any]) -> str:
+    raw = item.get("store") or item.get("store_key") or ""
+    return _normalize_store_key(str(raw))
+
+
+def _pick_deeplink_target(
+    items: list[dict[str, Any]],
+    store: str,
+) -> tuple[str | None, str | None, str | None]:
+    """Pick product_id, display name, and optional canonical URL for a store deeplink."""
+    target = _normalize_store_key(store)
+    cfg = STORES.get(store) or {}
+    base = (cfg.get("link_base") or cfg.get("base") or "").rstrip("/")
+
+    for it in items:
+        if _item_store_key(it) != target:
+            continue
+        explicit_url = it.get("url")
+        if explicit_url and (not base or str(explicit_url).startswith(base)):
+            pid = it.get("resolved_product_id") or it.get("product_id")
+            name = it.get("resolved_name") or it.get("name") or it.get("requested")
+            return (str(pid) if pid else None), (str(name) if name else None), str(explicit_url)
+
+    for it in items:
+        pid = it.get("resolved_product_id") or it.get("product_id")
+        if _item_store_key(it) == target and pid:
+            name = it.get("resolved_name") or it.get("name") or it.get("requested")
+            return str(pid), (str(name) if name else None), None
+
+    for it in items:
+        if _item_store_key(it) != target:
+            continue
+        name = it.get("resolved_name") or it.get("name") or it.get("requested")
+        if name:
+            return None, str(name), None
+
+    for it in items:
+        name = it.get("requested") or it.get("name") or it.get("resolved_name")
+        if name:
+            return None, str(name), None
+
+    return None, None, None
+
+
 def _append_affiliate_utm(url: str, *, store: str) -> str:
     """Append UTM params for L3 affiliate tracking."""
     source = (os.getenv("AFFILIATE_UTM_SOURCE") or "climarket").strip()
@@ -44,6 +92,7 @@ def retailer_deeplink(
     *,
     product_id: str | None = None,
     name: str | None = None,
+    url: str | None = None,
     affiliate: bool | None = None,
 ) -> dict[str, Any] | None:
     """Best-effort product/search URL for a retailer (L1/L3)."""
@@ -53,28 +102,34 @@ def retailer_deeplink(
         return None
 
     platform = cfg.get("platform", "vtex")
-    url = None
-    if platform == "vtex" and product_id:
-        url = f"{base}/{product_id}/p"
+    link_mode = "product"
+    resolved_url = None
+    if url and str(url).startswith(base):
+        resolved_url = str(url)
+        link_mode = "canonical"
+    elif platform == "vtex" and product_id:
+        resolved_url = f"{base}/{product_id}/p"
     elif name:
         q = quote(name.strip())
         if platform == "shopify":
-            url = f"{base}/search?q={q}"
+            resolved_url = f"{base}/search?q={q}"
         else:
-            url = f"{base}/search?ft={q}"
+            resolved_url = f"{base}/search?ft={q}"
+        link_mode = "search"
 
-    if not url:
+    if not resolved_url:
         return None
 
     use_affiliate = _affiliate_enabled_for_store(store) if affiliate is None else bool(affiliate)
     if use_affiliate:
-        url = _append_affiliate_utm(url, store=store)
+        resolved_url = _append_affiliate_utm(resolved_url, store=store)
 
     return {
         "type": "retailer_deeplink",
         "store": store,
         "product_id": product_id,
-        "url": url,
+        "url": resolved_url,
+        "link_mode": link_mode,
         "affiliate": use_affiliate,
         "expires_at": None,
     }
@@ -156,18 +211,13 @@ def build_action_links(
     include_handoff: bool = True,
 ) -> list[dict[str, Any]]:
     links: list[dict[str, Any]] = []
-    first_product_id = None
-    first_name = None
-    for it in items:
-        pid = it.get("resolved_product_id") or it.get("product_id")
-        nm = it.get("resolved_name") or it.get("name") or it.get("requested")
-        if pid:
-            first_product_id = pid
-            first_name = nm
-            break
-        if nm and first_name is None:
-            first_name = nm
-    deeplink = retailer_deeplink(store, product_id=first_product_id, name=first_name)
+    product_id, name, explicit_url = _pick_deeplink_target(items, store)
+    deeplink = retailer_deeplink(
+        store,
+        product_id=product_id,
+        name=name,
+        url=explicit_url,
+    )
     if deeplink:
         links.append(deeplink)
 

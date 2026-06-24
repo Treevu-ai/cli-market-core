@@ -89,6 +89,76 @@ def test_build_action_links_includes_handoff_when_enabled(monkeypatch, isolated_
         db.close()
 
 
+def test_build_action_links_prefers_store_matching_product_id(isolated_db):
+    db = get_db()
+    try:
+        links = build_action_links(
+            db,
+            store="plazavea",
+            items=[
+                {
+                    "requested": "arroz extra",
+                    "resolved_product_id": "391212",
+                    "resolved_name": "Arroz Superior Metro 750g",
+                    "store": "metro",
+                },
+                {
+                    "requested": "leche gloria",
+                    "resolved_product_id": "20402654",
+                    "resolved_name": "Leche GLORIA Niños Lata 390g",
+                    "store": "plazavea",
+                },
+            ],
+            country="PE",
+            totals={"shelf": 50.99, "tco": 58.49, "currency": "PEN"},
+            include_handoff=False,
+        )
+        deeplink = next(link for link in links if link["type"] == "retailer_deeplink")
+        assert deeplink["store"] == "plazavea"
+        assert deeplink["product_id"] == "20402654"
+        assert deeplink["url"] == "https://www.plazavea.com.pe/20402654/p"
+        assert deeplink["link_mode"] == "product"
+    finally:
+        db.close()
+
+
+def test_build_action_links_search_fallback_when_no_store_product(isolated_db):
+    db = get_db()
+    try:
+        links = build_action_links(
+            db,
+            store="plazavea",
+            items=[
+                {
+                    "requested": "arroz extra",
+                    "resolved_product_id": "391212",
+                    "resolved_name": "Arroz Superior Metro 750g",
+                    "store": "metro",
+                }
+            ],
+            country="PE",
+            totals={"shelf": 7.0, "tco": 14.5, "currency": "PEN"},
+            include_handoff=False,
+        )
+        deeplink = next(link for link in links if link["type"] == "retailer_deeplink")
+        assert deeplink["product_id"] is None
+        assert deeplink["link_mode"] == "search"
+        assert deeplink["url"] == "https://www.plazavea.com.pe/search?ft=arroz%20extra"
+    finally:
+        db.close()
+
+
+def test_retailer_deeplink_uses_explicit_url():
+    link = retailer_deeplink(
+        "plazavea",
+        product_id="ignored",
+        url="https://www.plazavea.com.pe/arroz-extra-costeno-bolsa-750g/p",
+    )
+    assert link is not None
+    assert link["link_mode"] == "canonical"
+    assert link["url"] == "https://www.plazavea.com.pe/arroz-extra-costeno-bolsa-750g/p"
+
+
 def test_simulate_delivery_defaults():
     quote = simulate_delivery_quote("wong", subtotal=10.0, product_id="p1")
     assert quote["available"] is True
