@@ -62,6 +62,29 @@ def test_intel_regulatory(client):
     assert len(events) >= 3
 
 
+def test_intel_price_deal_alerts(client, isolated_db):
+    from market_core import get_db
+    from datetime import datetime, timezone
+
+    db = get_db()
+    try:
+        ts = datetime.now(timezone.utc).isoformat()
+        db.execute(
+            """INSERT INTO price_snapshots
+               (product_id, store, store_name, name, price, list_price, line, currency, queried_at, confidence)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok')""",
+            ("576341", "metro", "Metro", "Arroz Superior Paisana 1 kg", 4.4, 4.9, "supermercados", "PEN", ts),
+        )
+        db.commit()
+    finally:
+        db.close()
+    r = client.get("/v1/intel/alerts?product=arroz&store=metro&threshold_pct=5&enveloped=false")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] >= 1
+    assert data["results"][0]["store"] == "metro"
+
+
 def test_products_substitutes(client, isolated_db):
     _seed(None, isolated_db)
     r = client.get("/v1/products/substitutes?query=leche&country=PE&limit=2")

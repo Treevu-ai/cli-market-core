@@ -42,6 +42,7 @@ from .market_receipts import compute_moat_confidence, get_receipt, submit_receip
 from .market_intel_products import (
     compute_affordability,
     compute_inflation_report,
+    compute_price_deal_alerts,
     compute_price_risk,
     compute_procurement_signal,
 )
@@ -180,6 +181,37 @@ def intel_procurement_signal(
                 t.elapsed_ms,
                 primary_source="price_snapshots",
                 methodology="procurement_signal_v1",
+            )
+        return result
+    finally:
+        db.close()
+
+
+@router.get("/intel/alerts")
+def intel_price_deal_alerts(
+    product: str = Query(..., min_length=1, description="Product name query"),
+    store: str | None = Query(None, description="Optional store key filter"),
+    threshold_pct: float = Query(5.0, ge=0.1, le=100.0),
+    limit: int = Query(10, ge=1, le=50),
+    enveloped: bool = Query(True),
+):
+    """Price deal alerts — products at or above threshold_pct discount vs list price."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = compute_price_deal_alerts(
+                db,
+                product=product,
+                store=store,
+                threshold_pct=threshold_pct,
+                limit=limit,
+            )
+        if enveloped:
+            return _wrap_provenance(
+                result,
+                t.elapsed_ms,
+                primary_source="price_snapshots",
+                methodology="price_deal_alerts_v1",
             )
         return result
     finally:

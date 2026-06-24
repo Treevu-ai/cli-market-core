@@ -115,6 +115,72 @@ def compute_inflation_report(
     }
 
 
+def compute_price_deal_alerts(
+    db,
+    *,
+    product: str,
+    store: str | None = None,
+    threshold_pct: float = 5.0,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Products matching a query where shelf price is at least threshold_pct below list price."""
+    product = (product or "").strip()
+    if not product:
+        raise ValueError("product required")
+
+    threshold_frac = float(threshold_pct) / 100.0
+    params: list[Any] = [f"%{product}%", threshold_frac]
+    store_clause = ""
+    if store:
+        store_clause = "AND store = ?"
+        params.append(store.strip())
+    params.append(max(1, min(int(limit), 50)))
+
+    rows = db.execute(
+        f"""
+        SELECT product_id, store, store_name, name, price, list_price, currency,
+               url, queried_at,
+               ROUND(((1 - price / NULLIF(list_price, 0)) * 100)::numeric, 1) AS discount_pct
+        FROM price_snapshots
+        WHERE name LIKE ?
+          AND price > 0
+          AND list_price > price
+          AND list_price < 999999
+          AND (1 - price / NULLIF(list_price, 0)) >= ?
+          {store_clause}
+        ORDER BY (1 - price / NULLIF(list_price, 0)) DESC
+        LIMIT ?
+        """,
+        params,
+    ).fetchall()
+
+    results: list[dict[str, Any]] = []
+    for raw in rows:
+        row = dict(raw)
+        results.append(
+            {
+                "product_id": row.get("product_id"),
+                "store": row.get("store"),
+                "store_name": row.get("store_name"),
+                "name": row.get("name"),
+                "price": float(row["price"]) if row.get("price") is not None else None,
+                "list_price": float(row["list_price"]) if row.get("list_price") is not None else None,
+                "currency": row.get("currency"),
+                "url": row.get("url"),
+                "queried_at": row.get("queried_at"),
+                "discount_pct": float(row["discount_pct"]) if row.get("discount_pct") is not None else None,
+            }
+        )
+
+    return {
+        "product": product,
+        "store": store,
+        "threshold_pct": threshold_pct,
+        "total": len(results),
+        "results": results,
+    }
+
+
 def compute_affordability(
     db,
     *,
