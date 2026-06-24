@@ -7,21 +7,21 @@
 
 ## Apply in cli-market-world
 
-Requires **cli-market-core** with `compute_price_deal_alerts` (merge PR first).
+Requires **cli-market-core==1.11.3** on PyPI (merge PR #97 + publish first).
+
+**Recommended:** use the combined patch (pin + intel fix):
 
 ```bash
-cd cli-market-world
-git checkout main && git pull
-git checkout -b cursor/fix-intel-alerts-500-d0e9
-git am ../cli-market-core/ops/ecosystem-patches/cli-market-world-intel-alerts-fix.patch
-# o:
-git apply --3way ../cli-market-core/ops/ecosystem-patches/cli-market-world-intel-alerts-fix.patch
-git add routers/intel.py
-git commit -m "fix(intel): delegate /v1/intel/alerts to core PG-safe query"
-git push -u origin cursor/fix-intel-alerts-500-d0e9
+bash ~/cli-market-core/ops/ecosystem-patches/deploy-world-1.11.3.sh
 ```
 
-PR: https://github.com/Treevu-ai/cli-market-world/compare/main...cursor/fix-intel-alerts-500-d0e9
+See `APPLY-WORLD-PYPI-1.11.3.md`.
+
+Intel-only patch (legacy, superseded by `cli-market-world-1.11.3.patch`):
+
+```bash
+git am ../cli-market-core/ops/ecosystem-patches/cli-market-world-intel-alerts-fix.patch
+```
 
 ## Verify
 
