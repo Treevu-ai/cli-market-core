@@ -250,32 +250,17 @@ def build_basket_compare(
         if shelf_total > 0:
             result["tco_vs_shelf_delta_pct"] = round((tco_total - shelf_total) / shelf_total * 100, 1)
     if include_action_links and stores:
-        from .market_action_links import build_action_links
+        from .market_action_links import build_action_links, enrich_basket_items_with_urls
 
         leader = min(stores, key=lambda x: x.get("tco_total", x.get("total", 999999)))
-        resolved_items: list[dict[str, Any]] = []
-        for entry in items:
-            name = str(entry.get("name", "")).strip()
-            qty = max(1, int(entry.get("qty", 1) or 1))
-            product_id = None
-            for br in leader.get("breakdown") or []:
-                if br.get("item", "").lower() == name.lower():
-                    row = db.execute(
-                        """
-                        SELECT product_id FROM price_snapshots
-                        WHERE store = ? AND LOWER(name) LIKE LOWER(?)
-                        ORDER BY price ASC LIMIT 1
-                        """,
-                        (leader.get("store"), f"%{name}%"),
-                    ).fetchone()
-                    if row:
-                        product_id = row["product_id"]
-                    break
-            resolved_items.append({"name": name, "qty": qty, "product_id": product_id})
+        product_links = enrich_basket_items_with_urls(
+            leader.get("store") or "wong",
+            leader.get("breakdown") or [],
+        )
         result["action_links"] = build_action_links(
             db,
             store=leader.get("store") or "wong",
-            items=resolved_items,
+            items=product_links,
             country=country,
             totals={
                 "shelf": leader.get("total"),
@@ -283,6 +268,7 @@ def build_basket_compare(
                 "currency": leader.get("currency", "PEN"),
             },
         )
+        result["product_links"] = product_links
     if not enveloped:
         return result
     return envelope(

@@ -272,7 +272,7 @@ def run_optimize_purchase(
     from .market_household import get_household, household_summary, substitute_constraints_from_household
     from .market_intel_products import compute_affordability, compute_procurement_signal
     from .market_substitutes import find_substitutes
-    from .market_action_links import build_action_links
+    from .market_action_links import build_action_links, enrich_basket_items_with_urls
     from .market_core import STORES
 
     country = (country or "PE").strip().upper()
@@ -392,11 +392,16 @@ def run_optimize_purchase(
         rationale_parts.append(f"mejor TCO en {leader['store_name']}")
 
     action_links = []
+    product_links: list[dict[str, Any]] = []
     if constraints.get("include_action_links", True):
+        product_links = enrich_basket_items_with_urls(
+            str(primary_store),
+            leader.get("breakdown") or [],
+        )
         action_links = build_action_links(
             db,
             store=primary_store or "wong",
-            items=items_resolved,
+            items=product_links or items_resolved,
             country=country,
             totals={"shelf": shelf_total, "tco": tco_total, "currency": currency},
         )
@@ -416,6 +421,7 @@ def run_optimize_purchase(
             "rationale_es": "; ".join(rationale_parts) or "Comparación completada.",
         },
         "items_resolved": items_resolved,
+        "product_links": product_links,
         "sections": {
             "compare": basket,
             "procurement_signal": procurement,

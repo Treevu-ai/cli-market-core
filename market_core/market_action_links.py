@@ -14,6 +14,17 @@ from .market_feature_flags import affiliate_enabled, external_cart_handoff_enabl
 
 EXPORT_TTL_HOURS = 72
 
+# Smoke-search terms for URL verification by business line.
+SEARCH_QUERY_BY_LINE: dict[str, str] = {
+    "supermercados": "arroz",
+    "farmacias": "paracetamol",
+    "electro": "celular",
+    "hogar": "taladro",
+    "moda": "camisa",
+    "departamentales": "juguete",
+    "automotriz": "aceite motor",
+}
+
 
 def _affiliate_enabled_for_store(store: str) -> bool:
     cfg = STORES.get(store) or {}
@@ -85,6 +96,161 @@ def _append_affiliate_utm(url: str, *, store: str) -> str:
     query.setdefault("utm_medium", medium)
     query.setdefault("utm_campaign", campaign)
     return urlunparse(parsed._replace(query=urlencode(query)))
+
+
+def search_query_for_store(store: str, *, item: str | None = None) -> str:
+    """Pick a catalog search term for a store (basket item or line default)."""
+    if item and str(item).strip():
+        return str(item).strip()
+    cfg = STORES.get(store) or {}
+    line = str(cfg.get("line") or "supermercados")
+    return SEARCH_QUERY_BY_LINE.get(line, "arroz")
+
+
+def verify_product_url(url: str, *, timeout: float = 15.0) -> dict[str, Any]:
+    """HEAD/GET a product URL; returns ok when storefront responds 2xx/3xx."""
+    import httpx
+
+    result = {"url": url, "ok": False, "status_code": None, "final_url": None, "error": None}
+    if not url:
+        result["error"] = "empty url"
+        return result
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            resp = client.head(url)
+            if resp.status_code >= 400 or resp.status_code == 405:
+                resp = client.get(url)
+            result["status_code"] = resp.status_code
+            result["final_url"] = str(resp.url)
+            result["ok"] = resp.status_code < 400
+    except Exception as exc:
+        result["error"] = str(exc)
+    return result
+
+
+def resolve_store_product_link_sync(
+    store: str,
+    query: str,
+    *,
+    target_price: float | None = None,
+    limit: int = 10,
+) -> dict[str, Any] | None:
+    """Live catalog search → normalized product with canonical storefront URL."""
+    import asyncio
+
+    from .market_core import fetch_store, product_from_json
+
+    async def _run() -> dict[str, Any] | None:
+        raw = await fetch_store(store, query, limit=limit)
+        products = [product_from_json(p, store) for p in raw if isinstance(p, dict)]
+        if target_price is not None:
+            for product in products:
+                if abs(float(product.get("price") or 0) - float(target_price)) < 0.01:
+                    return product
+        for product in products:
+            if product.get("url"):
+                return product
+        return products[0] if products else None
+
+    try:
+        return asyncio.run(_run())
+    except Exception:
+        return None
+
+
+def enrich_basket_items_with_urls(
+    store: str,
+    breakdown: list[dict[str, Any]],
+    *,
+    search_hints: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    """Attach live product URLs to basket breakdown rows for one retailer."""
+    hints = search_hints or {}
+    enriched: list[dict[str, Any]] = []
+    for row in breakdown:
+        requested = str(row.get("item") or row.get("name") or "").strip()
+        if not requested:
+            continue
+        qty = max(1, int(row.get("qty", 1) or 1))
+        unit_price = row.get("unit_price")
+        query = hints.get(requested, requested)
+        pick = resolve_store_product_link_sync(
+            store,
+            query,
+            target_price=float(unit_price) if unit_price is not None else None,
+        )
+        url = (pick or {}).get("url")
+        link_mode = "canonical" if url else None
+        if not url:
+            fallback = retailer_deeplink(store, name=query)
+            if fallback:
+                url = fallback["url"]
+                link_mode = fallback.get("link_mode", "search")
+        enriched.append(
+            {
+                "requested": requested,
+                "qty": qty,
+                "unit_price": unit_price,
+                "item_total": row.get("item_total"),
+                "store": store,
+                "resolved_name": (pick or {}).get("name"),
+                "resolved_product_id": (pick or {}).get("product_id"),
+                "url": url,
+                "link_mode": link_mode,
+            }
+        )
+    return enriched
+
+
+def verify_active_retailer_urls(
+    stores: list[str] | None = None,
+    *,
+    timeout: float = 15.0,
+) -> dict[str, Any]:
+    """Smoke-verify canonical product URLs for active retailers."""
+    from .store_credentials import get_default_stores
+
+    targets = stores or get_default_stores()
+    rows: list[dict[str, Any]] = []
+    for store in targets:
+        query = search_query_for_store(store)
+        pick = resolve_store_product_link_sync(store, query, limit=5)
+        url = (pick or {}).get("url")
+        if not url:
+            fallback = retailer_deeplink(store, name=query)
+            url = (fallback or {}).get("url")
+            link_mode = (fallback or {}).get("link_mode")
+            product_name = None
+            ok = bool(url)
+            status_code = None
+        else:
+            link_mode = "canonical"
+            product_name = pick.get("name")
+            check = verify_product_url(url, timeout=timeout)
+            ok = check["ok"]
+            status_code = check["status_code"]
+        rows.append(
+            {
+                "store": store,
+                "store_name": (STORES.get(store) or {}).get("name", store),
+                "platform": (STORES.get(store) or {}).get("platform"),
+                "line": (STORES.get(store) or {}).get("line"),
+                "query": query,
+                "product_name": product_name,
+                "url": url,
+                "link_mode": link_mode,
+                "ok": ok,
+                "status_code": status_code,
+            }
+        )
+    ok_count = sum(1 for row in rows if row["ok"])
+    return {
+        "stores_checked": len(rows),
+        "stores_ok": ok_count,
+        "stores_failed": len(rows) - ok_count,
+        "coverage_pct": round(ok_count / len(rows) * 100, 1) if rows else 0.0,
+        "stores": rows,
+    }
 
 
 def retailer_deeplink(
@@ -228,12 +394,14 @@ def build_action_links(
             links.append(handoff)
 
     if include_export:
+        product_links = [it for it in items if it.get("url")]
         export_payload = {
             "title": "Lista optimizada CLI MARKET",
             "country": country.upper(),
             "store": store,
             "currency": totals.get("currency", "PEN"),
             "items": items,
+            "product_links": product_links,
             "totals": totals,
             "format": "json",
             "disclaimer": "Precios observados online; verificar en tienda.",

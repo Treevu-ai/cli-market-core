@@ -11,6 +11,7 @@ import pytest
 from market_core import get_db
 from market_core.market_action_links import (
     build_action_links,
+    enrich_basket_items_with_urls,
     external_cart_handoff,
     retailer_deeplink,
 )
@@ -156,6 +157,29 @@ def test_retailer_deeplink_uses_explicit_url():
     assert link is not None
     assert link["link_mode"] == "canonical"
     assert link["url"] == "https://www.plazavea.com.pe/arroz-extra-costeno-bolsa-750g/p"
+
+
+def test_enrich_basket_items_with_urls(monkeypatch):
+    def _fake_resolve(store, query, *, target_price=None, limit=10):
+        return {
+            "name": f"{query} product",
+            "product_id": "abc123",
+            "price": target_price or 1.0,
+            "url": f"https://www.metro.pe/{query.replace(' ', '-')}-abc123/p",
+            "store": store,
+        }
+
+    monkeypatch.setattr(
+        "market_core.market_action_links.resolve_store_product_link_sync",
+        _fake_resolve,
+    )
+    rows = enrich_basket_items_with_urls(
+        "metro",
+        [{"item": "arroz extra", "qty": 2, "unit_price": 3.5}],
+    )
+    assert len(rows) == 1
+    assert rows[0]["url"].startswith("https://www.metro.pe/")
+    assert rows[0]["link_mode"] == "canonical"
 
 
 def test_simulate_delivery_defaults():
