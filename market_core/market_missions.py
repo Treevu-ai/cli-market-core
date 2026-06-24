@@ -273,6 +273,7 @@ def run_optimize_purchase(
     from .market_intel_products import compute_affordability, compute_procurement_signal
     from .market_substitutes import find_substitutes
     from .market_action_links import build_action_links, enrich_basket_items_with_urls
+    from .market_food_match import food_search_hint
     from .market_core import STORES
 
     country = (country or "PE").strip().upper()
@@ -397,6 +398,11 @@ def run_optimize_purchase(
         product_links = enrich_basket_items_with_urls(
             str(primary_store),
             leader.get("breakdown") or [],
+            search_hints={
+                str(row.get("item") or ""): food_search_hint(str(row.get("item") or ""))
+                for row in (leader.get("breakdown") or [])
+                if row.get("item")
+            },
         )
         action_links = build_action_links(
             db,

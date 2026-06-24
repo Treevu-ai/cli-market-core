@@ -105,10 +105,10 @@ def test_basket_compare_with_items(isolated_db):
     db = get_db()
     try:
         _seed_snapshots(db, [
-            ("a", "wong_pe", "Wong", "Leche 1L", 5.0, "s", "PEN", 1),
-            ("b", "wong_pe", "Wong", "Arroz 1kg", 4.0, "s", "PEN", 1),
-            ("c", "metro_pe", "Metro", "Leche 1L", 5.5, "s", "PEN", 1),
-            ("d", "metro_pe", "Metro", "Arroz 1kg", 3.5, "s", "PEN", 1),
+            ("a", "wong_pe", "Wong", "Leche entera 1L", 5.0, "supermercados", "PEN", 1),
+            ("b", "wong_pe", "Wong", "Arroz extra 1kg", 4.0, "supermercados", "PEN", 1),
+            ("c", "metro_pe", "Metro", "Leche entera 1L", 5.5, "supermercados", "PEN", 1),
+            ("d", "metro_pe", "Metro", "Arroz extra 1kg", 3.5, "supermercados", "PEN", 1),
         ])
         result = build_basket_compare(db, items=[{"name": "leche", "qty": 2}, {"name": "arroz", "qty": 1}])
         assert result["items_searched"] == 2
@@ -126,8 +126,8 @@ def test_basket_compare_store_filter(isolated_db):
     db = get_db()
     try:
         _seed_snapshots(db, [
-            ("a", "wong_pe", "Wong", "Leche 1L", 5.0, "s", "PEN", 1),
-            ("b", "metro_pe", "Metro", "Leche 1L", 5.5, "s", "PEN", 1),
+            ("a", "wong_pe", "Wong", "Leche entera 1L", 5.0, "supermercados", "PEN", 1),
+            ("b", "metro_pe", "Metro", "Leche entera 1L", 5.5, "supermercados", "PEN", 1),
         ])
         result = build_basket_compare(db, items=[{"name": "leche"}], store_filter={"wong_pe"})
         assert len(result["stores"]) == 1
@@ -136,10 +136,32 @@ def test_basket_compare_store_filter(isolated_db):
         db.close()
 
 
+def test_basket_compare_filters_food_artifacts(isolated_db):
+    db = get_db()
+    try:
+        _seed_snapshots(db, [
+            ("bat", "metro_pe", "Metro", "Batidor de Huevos Krea", 3.0, "supermercados", "PEN", 1),
+            ("egg", "metro_pe", "Metro", "Huevos Pardos Metro Bandeja 8 Unid", 6.49, "supermercados", "PEN", 1),
+            ("fish", "metro_pe", "Metro", "Filete de Atún en Aceite Vegetal 170g", 3.7, "supermercados", "PEN", 1),
+            ("oil", "metro_pe", "Metro", "Aceite Vegetal Primor 900ml", 9.5, "supermercados", "PEN", 1),
+        ])
+        result = build_basket_compare(
+            db,
+            items=[{"name": "huevos", "qty": 1}, {"name": "aceite vegetal", "qty": 1}],
+            store_filter={"metro_pe"},
+        )
+        assert result["items_found"] == 2
+        breakdown = {b["item"]: b for b in result["stores"][0]["breakdown"]}
+        assert "Bandeja" in breakdown["huevos"]["resolved_name"]
+        assert "Primor" in breakdown["aceite vegetal"]["resolved_name"]
+    finally:
+        db.close()
+
+
 def test_basket_compare_enveloped(isolated_db):
     db = get_db()
     try:
-        _seed_snapshots(db, [("a", "wong_pe", "Wong", "Leche 1L", 5.0, "s", "PEN", 1)])
+        _seed_snapshots(db, [("a", "wong_pe", "Wong", "Leche entera 1L", 5.0, "supermercados", "PEN", 1)])
         result = build_basket_compare(db, items=[{"name": "leche"}], enveloped=True)
         assert "data" in result
         assert "meta" in result

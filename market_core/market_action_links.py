@@ -139,18 +139,30 @@ def resolve_store_product_link_sync(
     import asyncio
 
     from .market_core import fetch_store, product_from_json
+    from .market_food_match import matches_food_basket_query, pick_best_food_match
 
     async def _run() -> dict[str, Any] | None:
         raw = await fetch_store(store, query, limit=limit)
         products = [product_from_json(p, store) for p in raw if isinstance(p, dict)]
+        cfg = STORES.get(store) or {}
+        line = str(cfg.get("line") or "supermercados")
+        filtered = [
+            p
+            for p in products
+            if matches_food_basket_query(query, {"name": p.get("name"), "line": line})
+        ]
+        pool = filtered or products
         if target_price is not None:
-            for product in products:
+            for product in pool:
                 if abs(float(product.get("price") or 0) - float(target_price)) < 0.01:
                     return product
-        for product in products:
+        best = pick_best_food_match(query, [{"name": p.get("name"), "price": p.get("price"), **p} for p in pool])
+        if best and best.get("url"):
+            return best
+        for product in pool:
             if product.get("url"):
                 return product
-        return products[0] if products else None
+        return pool[0] if pool else None
 
     try:
         return asyncio.run(_run())

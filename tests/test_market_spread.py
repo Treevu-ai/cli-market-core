@@ -64,6 +64,7 @@ def test_matches_canasta_item_filters_false_positives():
     assert matches_canasta_item(_super_row("Leche entera 1L"), "leche") is True
     assert matches_canasta_item(_super_row("Leche condensada Nestle"), "leche") is False
     assert matches_canasta_item(_super_row("Apollo 11 DVD"), "pollo") is False
+    assert matches_canasta_item(_super_row("Batidor de Huevos Krea"), "huevos") is False
     assert matches_canasta_item({**_super_row("Leche 1L"), "line": "farmacias"}, "leche") is False
 
 

@@ -50,7 +50,10 @@ _CANASTA_EXCLUDE: dict[str, frozenset[str]] = {
     }),
     "jabon": frozenset({"dispensador", "jabonera", "porta"}),
     "aceite": frozenset({"atun", "atún", "filete", "conserva", "esencial", "corporal", "motor"}),
-    "huevos": frozenset({"chocolate", "kinder", "pascua", "organizador", "pintar"}),
+    "huevos": frozenset({
+        "chocolate", "kinder", "pascua", "organizador", "pintar",
+        "batidor", "batidora", "espumador", "molde", "recipiente",
+    }),
     "cafe": frozenset({"cafetera", "saborizante", "licor", "filtro"}),
     "azucar": frozenset({"sin azucar", "sin azúcar", "edulcorante", "splenda", "stevia"}),
     "arroz": frozenset({
