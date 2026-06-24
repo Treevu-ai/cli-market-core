@@ -1299,20 +1299,39 @@ def build_intel_brief(
         return entry.get("value") if entry else None
 
     shelf: dict[str, Any] = {}
-    for key in ("promo_intensity", "price_dispersion", "basket_stress_index"):
+    for key in ("promo_intensity", "price_dispersion"):
         v = _val(key)
         if v is not None:
             shelf[key] = v
+    bsi_raw = _val("basket_stress_index")
+    if bsi_raw is not None:
+        shelf["basket_stress_index"] = bsi_raw
+        shelf["basket_stress_index_scale"] = (
+            "0–1+: <0.15 stable · 0.15–0.50 moderate pressure · >0.50 critical"
+        )
     if staple_mom is not None:
-        shelf["staple_momentum_7d_pct"] = staple_mom
+        # P0.1: renamed from shelf_inflation_avg_pct / staple_momentum_7d_pct
+        shelf["retail_price_velocity_7d_pct"] = staple_mom
+        shelf["retail_price_velocity_note"] = (
+            "7-day shelf price momentum for canasta staples (online retailers ≥3 snapshots). "
+            "Not equivalent to official CPI — different basket, period, and methodology."
+        )
     if inflation_pct is not None:
-        shelf["shelf_inflation_avg_pct"] = inflation_pct
+        # Broader rolling average across all lines
+        shelf["shelf_price_avg_delta_pct"] = inflation_pct
 
     macro_gap: dict[str, Any] = {}
     gap = _val("collector_vs_official_gap")
     food_spread = _val("food_inflation_spread")
     if gap is not None:
-        macro_gap["collector_vs_official_gap_pp"] = gap
+        macro_gap["shelf_vs_cpi_gap_pp"] = gap
+        # P0.2: always surface the temporal mismatch caveat
+        macro_gap["period_caveat"] = (
+            "Shelf signal = 30-day rolling average of online prices. "
+            "Official CPI = annual YoY from World Bank (household-survey basket). "
+            "These are directionally comparable but methodologically distinct — "
+            "do not report as equivalent measures or compute arithmetic spread as a policy claim."
+        )
     if food_spread is not None:
         macro_gap["food_inflation_spread_pp"] = food_spread
 

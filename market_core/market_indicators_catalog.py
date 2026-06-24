@@ -31,13 +31,18 @@ INDICATOR_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "key": "basket_stress_index",
-        "name": "Basket Stress Index",
+        "name": "Basket Stress Index (BSI)",
         "category": "affordability",
         "source": "internal:price_snapshots",
         "unit": "index",
         "refresh_hours": 8,
-        "description": "Minimum canasta básica total (10 staples) vs rolling baseline in price_history.",
+        "description": (
+            "Minimum canasta básica total (10 staples) vs 30-day rolling baseline. "
+            "Normalized score (0–1+): <0.15 stable, 0.15–0.50 moderate pressure, >0.50 critical. "
+            "Raw index: current_min_basket / baseline_min_basket * 100 (100 = baseline parity)."
+        ),
         "formula": "min_canasta_total / baseline_canasta_total * 100",
+        "scale_note": "Normalized 0–1+: <0.15 stable · 0.15–0.50 moderate · >0.50 critical. Raw index ~100 = baseline parity.",
     },
     {
         "key": "search_momentum",
@@ -101,13 +106,23 @@ INDICATOR_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "key": "collector_vs_official_gap",
-        "name": "Collector vs Official Gap",
+        "name": "Shelf Signal vs Official CPI Gap",
         "category": "composite",
         "source": "computed",
         "unit": "pp",
         "refresh_hours": 24,
-        "description": "Difference between internal shelf inflation signal and official CPI YoY.",
-        "formula": "internal_inflation_avg_pct - cpi_official_yoy",
+        "description": (
+            "Difference (pp) between CLI Market 30-day rolling shelf price signal and the "
+            "World Bank annual CPI YoY for the same country. "
+            "IMPORTANT: these are methodologically distinct — shelf signal uses online prices "
+            "over 30 days; CPI is an annual figure from a national household-survey basket. "
+            "Do not interpret as equivalent measures. Use for directional context only."
+        ),
+        "formula": "internal_inflation_avg_30d_pct - cpi_official_yoy_annual",
+        "period_caveat": (
+            "Temporal mismatch: internal signal = 30-day rolling; official CPI = annual YoY. "
+            "Comparison is directional, not equivalent."
+        ),
     },
     {
         "key": "off_match_rate",
@@ -201,13 +216,23 @@ INDICATOR_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "key": "staple_price_momentum",
-        "name": "Staple Price Momentum",
+        "name": "Retail Price Velocity (RPV)",
         "category": "affordability",
         "source": "internal:price_history",
         "unit": "pct",
         "refresh_hours": 8,
-        "description": "Avg price change over 7d for canasta staple SKUs in price_history.",
-        "formula": "mean((last-first)/first*100) for staple products",
+        "description": (
+            "Average % price change for canasta staple SKUs over the last 7 days, "
+            "computed from paired price_history observations per (store, product_id). "
+            "Measures short-term shelf price momentum — NOT equivalent to official CPI. "
+            "Only includes retailers with ≥3 snapshots in the period."
+        ),
+        "formula": "mean((price_last - price_first) / price_first * 100) for staple SKUs with ≥2 observations in window",
+        "methodology_note": (
+            "CLI Market RPV ≠ CPI. RPV captures online-channel price velocity over a 7-day window. "
+            "Official inflation (INEI, INDEC, etc.) uses annual or monthly household-survey baskets. "
+            "Do not annualize RPV or compare directly against official CPI figures."
+        ),
     },
     {
         "key": "off_ecoscore_avg",
