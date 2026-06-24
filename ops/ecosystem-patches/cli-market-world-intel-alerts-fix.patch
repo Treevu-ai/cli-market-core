@@ -1,3 +1,12 @@
+From 0d78ca220bfa899c85d527c784c04d098a07925e Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Wed, 24 Jun 2026 20:54:59 +0000
+Subject: [PATCH] fix(intel): delegate /v1/intel/alerts to core PG-safe query
+
+---
+ routers/intel.py | 35 ++++++++---------------------------
+ 1 file changed, 8 insertions(+), 27 deletions(-)
+
 diff --git a/routers/intel.py b/routers/intel.py
 index f640fb6..6a85445 100644
 --- a/routers/intel.py
@@ -51,3 +60,6 @@ index f640fb6..6a85445 100644
      finally:
          db.close()
  
+-- 
+2.43.0
+

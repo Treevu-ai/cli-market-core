@@ -50,6 +50,7 @@ Cada `.patch` es **solo para un repo**. Si aplicas el patch equivocado (ej. back
 | `cli-market-world-mount-api-routes.patch` | **cli-market-world** | Mount `api_routes` on `market_server.py` for production Wave 4 |
 | `cli-market-world-pypi-1.11.0.patch` | **cli-market-world** | Pin `cli-market-core==1.11.0` after PyPI publish |
 | `cli-market-world-1.11.3.patch` | **cli-market-world** | Pin `cli-market-core==1.11.3` + intel alerts PG fix |
+| `cli-market-world-intel-alerts-fix.patch` | **cli-market-world** | `routers/intel.py` only — after pin 1.11.3 |
 | `BUMP-CORE-1.11.3.md` | — | Release checklist for 1.11.3 |
 | `cli-market-content.patch` | **cli-market-content** | `outbound/procure-sequences.md`, `commercial/procure-copilot-feature-matrix.md`, … |
 | `procure-copilot.patch` | **procure-copilot** | `app/checkout/success`, `app/checkout/cancel`, `lib/market-stats.ts` |
