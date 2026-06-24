@@ -1,0 +1,153 @@
+From ab32041716e1f48a2df846e0d4a85c70a1b4b950 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Wed, 24 Jun 2026 19:34:36 +0000
+Subject: [PATCH] chore(release): pin cli-market-core==1.11.1 (product URL
+ deeplink fix)
+
+---
+ .github/workflows/ci.yml                |  4 ++--
+ .github/workflows/morning-ops-chain.yml | 12 ++++++------
+ Dockerfile                              |  2 +-
+ ops/after_core_1.11.1_published.sh      | 25 +++++++++++++++++++++++++
+ requirements-railway.txt                |  2 +-
+ 5 files changed, 35 insertions(+), 10 deletions(-)
+ create mode 100755 ops/after_core_1.11.1_published.sh
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 067f299..0cb4b5e 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -76,7 +76,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core==1.11.0"
++          pip install "cli-market-core==1.11.1"
+           pip install -e ".deps/cli-market-index[postgres]"
+           pip install pytest
+           python -c "from market_core.commerce_capabilities import get_commerce_capabilities; assert get_commerce_capabilities()['checkout']['scope'] == 'cli_market_internal'"
+@@ -158,7 +158,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core==1.11.0"
++          pip install "cli-market-core==1.11.1"
+           pip install -e ".deps/cli-market-index[postgres]"
+           pip install pytest
+           python -c "from market_core.commerce_capabilities import get_commerce_capabilities; assert get_commerce_capabilities()['checkout']['scope'] == 'cli_market_internal'"
+diff --git a/.github/workflows/morning-ops-chain.yml b/.github/workflows/morning-ops-chain.yml
+index a55b1a6..ac963c6 100644
+--- a/.github/workflows/morning-ops-chain.yml
++++ b/.github/workflows/morning-ops-chain.yml
+@@ -121,7 +121,7 @@ jobs:
+           MARKET_SKIP_LIVE: "1"
+         run: |
+           pip install pytest httpx fastapi uvicorn pydantic python-multipart psycopg2-binary asyncpg
+-          pip install "cli-market-core==1.11.0"
++          pip install "cli-market-core==1.11.1"
+           pip install -e ".deps/cli-market-index[postgres]"
+           pip install -e .
+           pytest tests/test_funnel.py::test_pam_journey_synthetic -q
+@@ -211,7 +211,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core==1.11.0" httpx
++          pip install "cli-market-core==1.11.1" httpx
+           python3 -c "from market_core import market_stats"
+           if [ -f "${{ env.CLI_MARKET_CONTENT_DIR }}/requirements.txt" ]; then
+             pip install -r "${{ env.CLI_MARKET_CONTENT_DIR }}/requirements.txt"
+@@ -252,7 +252,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core==1.11.0" httpx
++          pip install "cli-market-core==1.11.1" httpx
+           python3 -c "from market_core import market_stats; print('market_core OK')"
+ 
+       - name: Product briefing + Slack bitácora
+@@ -308,7 +308,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core==1.11.0" httpx
++          pip install "cli-market-core==1.11.1" httpx
+           python3 -c "from market_core import market_stats; print('market_core OK')"
+ 
+       - name: Verify content checkout
+@@ -399,7 +399,7 @@ jobs:
+           python-version: "3.12"
+ 
+       - name: Install dependencies
+-        run: pip install "cli-market-core==1.11.0" httpx
++        run: pip install "cli-market-core==1.11.1" httpx
+ 
+       - name: Post del día → #command-control-cli-market
+         env:
+@@ -478,7 +478,7 @@ jobs:
+ 
+       - name: Install dependencies
+         run: |
+-          pip install "cli-market-core==1.11.0" httpx
++          pip install "cli-market-core==1.11.1" httpx
+ 
+       - name: CEO / Founder / PO daily metrics → #ceo-metrics
+         env:
+diff --git a/Dockerfile b/Dockerfile
+index 18c6a80..c0a52dc 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -15,7 +15,7 @@ ARG GITHUB_TOKEN
+ ARG GH_PAT
+ 
+ COPY requirements-railway.txt .
+-ARG CACHE_BUST=2026-06-23-core-1.11.0
++ARG CACHE_BUST=2026-06-24-core-1.11.1
+ RUN set -eux; \
+     TOKEN="${GITHUB_TOKEN:-${GH_PAT:-}}"; \
+     if [ -z "${TOKEN}" ]; then \
+diff --git a/ops/after_core_1.11.1_published.sh b/ops/after_core_1.11.1_published.sh
+new file mode 100755
+index 0000000..c3baa8d
+--- /dev/null
++++ b/ops/after_core_1.11.1_published.sh
+@@ -0,0 +1,25 @@
++#!/usr/bin/env bash
++# Run in cli-market-world AFTER cli-market-core 1.11.1 is on PyPI.
++set -euo pipefail
++
++cd "$(dirname "$0")/.."
++
++VER="1.11.1"
++if ! python3 -m pip index versions "cli-market-core" 2>/dev/null | grep -qE "(^|[[:space:]])${VER}([,[:space:]]|$)"; then
++  echo "error: cli-market-core $VER not on PyPI yet — publish first" >&2
++  exit 1
++fi
++
++sed -i 's/^cli-market-core @ git+.*/cli-market-core=='"$VER"'/' requirements-railway.txt
++sed -i 's/^cli-market-core==.*/cli-market-core=='"$VER"'/' requirements-railway.txt
++sed -i 's/cli-market-core==[0-9.]\+/cli-market-core=='"$VER"'/g' .github/workflows/ci.yml
++sed -i 's/cli-market-core==[0-9.]\+/cli-market-core=='"$VER"'/g' .github/workflows/morning-ops-chain.yml
++sed -i "s/^ARG CACHE_BUST=.*/ARG CACHE_BUST=2026-06-24-core-${VER}/" Dockerfile
++
++python3 ops/verify_railway_core_pin.py
++
++git add requirements-railway.txt .github/workflows/ci.yml .github/workflows/morning-ops-chain.yml Dockerfile ops/after_core_1.11.1_published.sh
++git commit -m "chore(release): pin cli-market-core==${VER} (product URL deeplink fix)"
++git push -u origin HEAD
++
++echo "Pushed world pin ${VER} — Railway redeploy."
+diff --git a/requirements-railway.txt b/requirements-railway.txt
+index 59974d3..069be8f 100644
+--- a/requirements-railway.txt
++++ b/requirements-railway.txt
+@@ -1,5 +1,5 @@
+ # PyPI pin — Cost-of-Living OS Waves 1–4 (equiv. git @8469854).
+-cli-market-core==1.11.0
++cli-market-core==1.11.1
+ 
+ # Semantic moat — Golden Record persistence (SQLite dev / Postgres prod).
+ cli-market-index[postgres] @ git+https://github.com/Treevu-ai/cli-market-index@9d050131e9e5b16381581d1916e386f34d319ca6
+-- 
+2.43.0
+
