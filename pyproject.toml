@@ -6,12 +6,12 @@ build-backend = "setuptools.build_meta"
 name = "cli-market-core"
 version = "1.11.0"
 
-description = "CLI Market intelligence layer — indicators, billing, MCP primitives, and retailer connectors. Dependency of cli-market-world."
+description = "Cost-of-Living OS for LatAm — intelligence layer for CLI Market. market_optimize_purchase: one-call basket compare, TCO, substitutes, action links. 32 MCP tools (default profile). Dependency of cli-market-world."
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{name = "CLI Market", email = "hello@cli-market.dev"}]
 readme = "README.md"
-keywords = ["vtex", "mcp", "ai-agents", "ecommerce", "cli", "retail", "commerce"]
+keywords = ["vtex", "mcp", "ai-agents", "ecommerce", "cli", "retail", "commerce", "latam", "cost-of-living", "procurement", "price-optimization", "mcp-server"]
 dependencies = [
     "httpx>=0.27",
     "rich>=13.0",
