@@ -13,6 +13,15 @@ Uso:
 
 import json
 import sys
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    _SERVER_VERSION = version("cli-market-core")
+except PackageNotFoundError:
+    _SERVER_VERSION = "1.11.0"
+
+# Newest first — Cursor and other modern clients send 2025-03-26.
+_SUPPORTED_PROTOCOL_VERSIONS = ("2025-03-26", "2024-11-05")
 
 # Re-exports kept for backwards compat — tests/test_server.py verifies these
 # are reachable through market_mcp. Ruff would otherwise drop the unused ones.
@@ -384,6 +393,13 @@ def _write_rpc(message: dict) -> None:
     sys.stdout.flush()
 
 
+def _negotiate_protocol_version(requested: str | None) -> str:
+    """Echo the client's version when supported; otherwise return our latest."""
+    if requested in _SUPPORTED_PROTOCOL_VERSIONS:
+        return requested
+    return _SUPPORTED_PROTOCOL_VERSIONS[0]
+
+
 def handle_rpc_request(request: dict, profile: str) -> dict | None:
     """Build one JSON-RPC response, or ``None`` when no reply is allowed (notifications)."""
     method = request.get("method", "")
@@ -395,13 +411,14 @@ def handle_rpc_request(request: dict, profile: str) -> dict | None:
     params = request.get("params") or {}
 
     if method == "initialize":
+        negotiated = _negotiate_protocol_version(params.get("protocolVersion"))
         return {
             "jsonrpc": "2.0",
             "id": req_id,
             "result": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {}},
-                "serverInfo": {"name": "cli-market", "version": "1.9.31"},
+                "protocolVersion": negotiated,
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {"name": "cli-market", "version": _SERVER_VERSION},
             },
         }
     if method == "ping":
