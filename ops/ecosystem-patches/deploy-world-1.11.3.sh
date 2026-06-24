@@ -14,7 +14,13 @@ VER="1.11.3"
 [[ -f "$PATCH" ]] || { echo "Missing patch: $PATCH"; exit 1; }
 [[ -d "$REPO" ]] || { echo "Missing repo: $REPO (set CLI_MARKET_WORLD=)"; exit 1; }
 
-if ! python3 -m pip index versions "cli-market-core" 2>/dev/null | grep -qE "(^|[[:space:]])${VER}([,[:space:]]|$)"; then
+if ! python3 - <<PY
+import json, urllib.request, sys
+ver = "${VER}"
+data = json.load(urllib.request.urlopen("https://pypi.org/pypi/cli-market-core/json", timeout=20))
+sys.exit(0 if ver in data.get("releases", {}) else 1)
+PY
+then
   echo "error: cli-market-core $VER not on PyPI yet — merge core PR and publish first" >&2
   exit 1
 fi
