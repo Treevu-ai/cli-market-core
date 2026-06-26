@@ -203,6 +203,37 @@ TIERS = {
         "alerts": -1,
         "export": True,
     },
+    # Procure Copilot tiers — Pro+ includes CLI Market checkout infrastructure
+    "procure_starter": {
+        "req_min": 120,
+        "req_day": 5_000,
+        "api_keys": 3,
+        "checkout": False,
+        "agent_queries_month": 50,
+        "history_days": 30,
+        "alerts": 3,
+        "export": True,
+    },
+    "procure_pro": {
+        "req_min": 300,
+        "req_day": 10_000,
+        "api_keys": 10,
+        "checkout": True,
+        "agent_queries_month": -1,
+        "history_days": 365,
+        "alerts": 10,
+        "export": True,
+    },
+    "procure_builder": {
+        "req_min": 600,
+        "req_day": 50_000,
+        "api_keys": 25,
+        "checkout": True,
+        "agent_queries_month": -1,
+        "history_days": -1,
+        "alerts": -1,
+        "export": True,
+    },
 }
 
 
