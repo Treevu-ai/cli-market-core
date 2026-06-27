@@ -123,6 +123,7 @@ def test_default_profile_hides_admin_and_advanced():
     names = {t["name"] for t in list_tools("default")}
     assert "market_scan" not in names
     assert "market_intel_refresh" not in names
+    assert "market_preferences" not in names
     # P2-7: market_ticket and market_barcode promoted to default
     assert "market_ticket" in names
     assert "market_barcode" in names
@@ -262,6 +263,18 @@ def test_alerts_and_notify_route_to_price_alerts():
 def test_deprecation_notice_on_direct_deprecated_tool():
     notice = get_deprecation("market_lines")
     assert notice == {"deprecated": "market_lines", "use": "market_discover"}
+    assert get_deprecation("market_preferences") == {
+        "deprecated": "market_preferences",
+        "use": "market_household_get",
+    }
+
+
+def test_preferences_alias_routes_to_household():
+    with patch("market_core.market_mcp.api", return_value={"profile": {}}) as mock_api:
+        raw = handle_tool("market_preferences", {})
+    assert mock_api.call_args[0] == ("GET", "/v1/household")
+    data = json.loads(raw)
+    assert data["_deprecation"]["use"] == "market_household_get"
 
 
 @pytest.mark.parametrize(

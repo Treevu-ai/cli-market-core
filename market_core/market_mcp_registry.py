@@ -62,6 +62,7 @@ _DEFAULT_HIDDEN = frozenset(
         "market_enrichment_subcategories",
         "market_notify",
         "market_alerts",
+        "market_preferences",
         "market_ecosystem_radar",
         "market_procurement_bulk",
     }
@@ -81,6 +82,7 @@ ALIASES: dict[str, str] = {
     "market_analytics_indicators": "market_intel_brief",
     "market_enrichment": "market_intel_brief",
     "market_enrichment_subcategories": "market_intel_brief",
+    "market_preferences": "market_household_get",
 }
 
 
