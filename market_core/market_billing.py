@@ -51,8 +51,12 @@ FEATURE_TIERS: dict[str, frozenset[str]] = {
 }
 
 
-def feature_allowed(tier: str | None, feature_slug: str) -> bool:
+def feature_allowed(tier: str | None, feature_slug: str, *, username: str | None = None) -> bool:
     """Return whether *tier* may use *feature_slug*."""
+    from .platform_admin import is_platform_admin
+
+    if username and is_platform_admin(username):
+        return True
     allowed = FEATURE_TIERS.get(feature_slug)
     if not allowed:
         return True
@@ -382,13 +386,35 @@ def _is_expired(expires_at) -> bool:
         return False
 
 
+def _enterprise_subscription_row() -> dict:
+    tier_cfg = TIERS["enterprise"]
+    return {
+        "tier": "enterprise",
+        "req_limit_day": tier_cfg["req_day"],
+        "req_limit_min": tier_cfg["req_min"],
+        "agent_queries_month": tier_cfg["agent_queries_month"],
+        "history_days": tier_cfg["history_days"],
+        "alerts": tier_cfg["alerts"],
+        "export": tier_cfg["export"],
+        "platform_admin": True,
+    }
+
+
 def db_get_subscription(username: str) -> dict:
     """Get user subscription. Falls back to free tier defaults.
 
     A subscription whose expires_at has passed (e.g. a referral-granted
     free Pro month) is treated as expired back to free, without needing a
     separate cron to downgrade the row.
+
+    Platform admins (``MARKET_API_TOKEN``, ``MARKET_ADMIN_USERS``) always
+    receive effective enterprise capabilities without mutating the DB row.
     """
+    from .platform_admin import is_platform_admin
+
+    if is_platform_admin(username):
+        return _enterprise_subscription_row()
+
     db = market_core.get_db()
     row = db.execute(
         "SELECT tier, req_limit_day, req_limit_min, expires_at FROM subscriptions WHERE username=?",
@@ -705,6 +731,10 @@ def apply_referral_activation(ref_code: str, new_username: str) -> dict | None:
 
 def user_can_checkout(username: str) -> bool:
     """True if user tier allows checkout or legacy bypass is enabled."""
+    from .platform_admin import is_platform_admin
+
+    if is_platform_admin(username):
+        return True
     if os.getenv("MARKET_LEGACY_CHECKOUT", "").lower() in ("1", "true", "yes"):
         return True
     sub = db_get_subscription(username)
