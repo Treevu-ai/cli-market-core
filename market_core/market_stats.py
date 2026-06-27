@@ -82,7 +82,7 @@ def _live_golden_linkage_pct(fallback: float = 0.0) -> float:
 
 GOLDEN_LINKAGE_PCT = _live_golden_linkage_pct()
 PYPI_PACKAGE_NAME = "cli-market-world"
-PACKAGE_VERSION = "1.11.0"
+PACKAGE_VERSION = "1.11.4"
 LICENSE = "MIT"
 PYPI_URL = f"https://pypi.org/project/{PYPI_PACKAGE_NAME}/"
 PEPY_PROJECT_URL = f"https://pepy.tech/projects/{PYPI_PACKAGE_NAME}"
