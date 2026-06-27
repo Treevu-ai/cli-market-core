@@ -31,6 +31,8 @@ _MINIMUM_WAGE_LOCAL: dict[str, float] = {
     "BR": 1518.0,
     "CO": 1423500.0,
     "CL": 500000.0,
+    "BO": 2750.0,
+    "EC": 482.0,
 }
 
 _CURRENCY_BY_COUNTRY: dict[str, str] = {
@@ -40,7 +42,17 @@ _CURRENCY_BY_COUNTRY: dict[str, str] = {
     "BR": "BRL",
     "CO": "COP",
     "CL": "CLP",
+    "BO": "BOB",
+    "EC": "USD",
 }
+
+_ANDEAN_PANEL_COUNTRIES: tuple[str, ...] = ("PE", "BO", "EC")
+
+_CANASTA_BAND_CONFIDENCE_NOTE_ES = (
+    "Banda de canastas por salario mínimo: high = mejor retailer observado, "
+    "point = promedio entre retailers, low = peor retailer (mismo momento). "
+    "Canal online moderno; no incluye tiendas de barrio ni gasto no alimentario."
+)
 
 
 def compute_price_risk(
@@ -232,12 +244,28 @@ def compute_affordability(
     gtrends = latest_map.get("gtrends_search_momentum", {}).get("value")
 
     canasta_min, canasta_stores, canasta_method = _canasta_min_total(db, cc)
-    currency = _CURRENCY_BY_COUNTRY.get(cc, "USD")
+    totals = _canasta_totals_by_store(db, cc)
+    canasta_best = totals.get("best")
+    canasta_avg = totals.get("average")
+    canasta_worst = totals.get("worst")
+    currency = totals.get("currency") or _CURRENCY_BY_COUNTRY.get(cc, "USD")
     min_wage = _MINIMUM_WAGE_LOCAL.get(cc)
 
     canastas_per_wage = None
     if min_wage and canasta_min and canasta_min > 0:
         canastas_per_wage = round(min_wage / canasta_min, 2)
+
+    wage_band = _canastas_per_wage_band(
+        min_wage,
+        best_total=canasta_best,
+        avg_total=canasta_avg,
+        worst_total=canasta_worst,
+    )
+    band_spread_pct = _canasta_band_spread_pct(canasta_best, canasta_worst)
+    band_confidence = _canasta_band_confidence(
+        stores_compared=totals.get("stores") or canasta_stores,
+        spread_pct=band_spread_pct,
+    )
 
     score, band, band_es, data_quality = _affordability_score(
         basket_stress=basket_stress,
@@ -265,11 +293,21 @@ def compute_affordability(
         "headline_es": headline,
         "components": {
             "canasta_min": canasta_min,
+            "canasta_best": canasta_best,
+            "canasta_average": canasta_avg,
+            "canasta_worst": canasta_worst,
             "canasta_currency": currency,
-            "canasta_stores_compared": canasta_stores,
-            "canasta_method": canasta_method,
+            "canasta_stores_compared": totals.get("stores") or canasta_stores,
+            "canasta_method": totals.get("method") or canasta_method,
             "minimum_wage_local": min_wage,
             "canastas_per_minimum_wage": canastas_per_wage,
+            "canastas_per_minimum_wage_best": wage_band.get("high"),
+            "canastas_per_minimum_wage_average": wage_band.get("point"),
+            "canastas_per_minimum_wage_worst": wage_band.get("low"),
+            "canastas_per_minimum_wage_band": wage_band,
+            "canasta_band_spread_pct": band_spread_pct,
+            "canasta_band_confidence": band_confidence,
+            "canasta_confidence_note": _CANASTA_BAND_CONFIDENCE_NOTE_ES,
             "real_wage_basket_ratio": real_wage_ratio,
             "basket_stress_index": basket_stress,
             "internal_inflation_pct": inflation,
@@ -479,3 +517,161 @@ def _affordability_headline(
     elif inflation is not None:
         parts.append(f"inflación góndola {inflation:+.1f}%")
     return "; ".join(parts) if parts else f"Señales de affordability para {cc} con datos limitados en el moat."
+
+
+def _canasta_totals_by_store(db, country: str) -> dict[str, Any]:
+    """Min / average / max canasta totals across retailers (same moment)."""
+    from . import STORES
+    from .market_basket import build_canasta_snapshot
+
+    cc = country.strip().upper()
+    stores = [k for k, v in STORES.items() if v.get("country") == cc and not v.get("disabled")]
+    if not stores:
+        return {"stores": 0, "method": "no_stores"}
+
+    snap = build_canasta_snapshot(db, min_items=3, store_filter=set(stores))
+    rows = snap.get("stores") or []
+    totals = [float(r["total"]) for r in rows if r.get("total") and float(r["total"]) > 0]
+    if not totals:
+        return {"stores": 0, "method": "snapshot_empty"}
+
+    return {
+        "best": round(min(totals), 2),
+        "average": round(sum(totals) / len(totals), 2),
+        "worst": round(max(totals), 2),
+        "stores": len(totals),
+        "method": "canasta_snapshot",
+        "currency": _CURRENCY_BY_COUNTRY.get(cc, rows[0].get("currency", "")),
+    }
+
+
+def _canastas_per_wage_band(
+    min_wage: float | None,
+    *,
+    best_total: float | None,
+    avg_total: float | None,
+    worst_total: float | None,
+) -> dict[str, float | None]:
+    """BM-style band: low=fewest canastas (expensive basket), high=most (cheapest)."""
+    if not min_wage or min_wage <= 0:
+        return {"low": None, "point": None, "high": None}
+
+    def _ratio(total: float | None) -> float | None:
+        if total and total > 0:
+            return round(min_wage / total, 2)
+        return None
+
+    return {
+        "low": _ratio(worst_total),
+        "point": _ratio(avg_total),
+        "high": _ratio(best_total),
+    }
+
+
+def _canasta_band_spread_pct(best: float | None, worst: float | None) -> float | None:
+    if best and worst and best > 0:
+        return round((worst - best) / best * 100, 1)
+    return None
+
+
+def _canasta_band_confidence(*, stores_compared: int, spread_pct: float | None) -> str:
+    if stores_compared < 2:
+        return "low"
+    if stores_compared < 3:
+        return "moderate"
+    if spread_pct is not None and spread_pct > 50:
+        return "moderate"
+    return "ok"
+
+
+def _country_has_retail_channel(country: str) -> bool:
+    from . import STORES
+
+    cc = country.strip().upper()
+    return any(v.get("country") == cc and not v.get("disabled") for v in STORES.values())
+
+
+def _andean_country_snapshot(
+    db,
+    country: str,
+    *,
+    line: str = "supermercados",
+    days: int = 30,
+) -> dict[str, Any]:
+    """Single-country row for CAF Andean food-affordability panel."""
+    cc = country.strip().upper()
+    has_retail = _country_has_retail_channel(cc)
+    latest = get_latest_values(db, country=cc, line=line, limit=50)
+    latest_map = {v["key"]: v for v in latest}
+    food_cpi = latest_map.get("food_cpi_yoy", {}).get("value")
+
+    snapshot: dict[str, Any] = {
+        "country": cc,
+        "currency": _CURRENCY_BY_COUNTRY.get(cc),
+        "minimum_wage_local": _MINIMUM_WAGE_LOCAL.get(cc),
+        "data_status": "retail_and_macro" if has_retail else "macro_only",
+        "channel": "online_modern_retail" if has_retail else None,
+        "official_food_cpi_yoy_pct": food_cpi,
+        "official_food_cpi_source": "World Bank FP.CPI.FOOD.ZG",
+    }
+
+    if has_retail:
+        aff = compute_affordability(db, country=cc, line=line, days=days)
+        components = aff.get("components") or {}
+        snapshot.update(
+            {
+                "retail_price_velocity_7d_pct": components.get("staple_momentum_7d_pct"),
+                "retail_price_velocity_promo_adjusted_7d_pct": components.get(
+                    "staple_momentum_promo_adjusted_7d_pct"
+                ),
+                "shelf_vs_official_food_cpi_gap_pp": components.get("shelf_vs_official_food_cpi_gap_pp"),
+                "canasta": {
+                    "best": components.get("canasta_best"),
+                    "average": components.get("canasta_average"),
+                    "worst": components.get("canasta_worst"),
+                    "currency": components.get("canasta_currency"),
+                    "stores_compared": components.get("canasta_stores_compared"),
+                },
+                "canastas_per_minimum_wage_band": components.get("canastas_per_minimum_wage_band"),
+                "canasta_band_confidence": components.get("canasta_band_confidence"),
+                "affordability_score": aff.get("affordability_score"),
+                "affordability_band": aff.get("affordability_band"),
+            }
+        )
+    else:
+        snapshot["note"] = (
+            "Sin canal retail indexado en CLI Market; solo benchmark macro "
+            "(World Bank FP.CPI.FOOD.ZG). No comparable con canasta/SM de Perú."
+        )
+        staple_mom = compute_staple_price_momentum(db, cc, days=7, price_mode="list")
+        if staple_mom is not None:
+            snapshot["retail_price_velocity_promo_adjusted_7d_pct"] = staple_mom
+        if food_cpi is not None and staple_mom is not None:
+            snapshot["shelf_vs_official_food_cpi_gap_pp"] = round(staple_mom - food_cpi, 2)
+
+    return snapshot
+
+
+def build_andean_panel(
+    db,
+    *,
+    line: str = "supermercados",
+    days: int = 30,
+) -> dict[str, Any]:
+    """CAF Andean panel — PE (retail+macro), BO/EC (macro-only until retail indexed)."""
+    countries = [_andean_country_snapshot(db, cc, line=line, days=days) for cc in _ANDEAN_PANEL_COUNTRIES]
+    retail_count = sum(1 for c in countries if c.get("data_status") == "retail_and_macro")
+    return {
+        "panel": "CAF_andean_food_affordability",
+        "countries": countries,
+        "retail_coverage_countries": retail_count,
+        "macro_only_countries": [c["country"] for c in countries if c.get("data_status") == "macro_only"],
+        "line": line,
+        "days": days,
+        "disclaimer_es": (
+            "Panel comparativo CAF Andino: alimentos y salario mínimo. Perú incluye canasta "
+            "online observada; Bolivia y Ecuador solo IPC alimentario oficial hasta indexar retail. "
+            "No usar para ranking político sin revisar cobertura por país."
+        ),
+        "methodology": "andean_panel_v1",
+    }

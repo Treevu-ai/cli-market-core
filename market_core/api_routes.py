@@ -40,6 +40,7 @@ from .market_missions import run_optimize_purchase
 from .market_procurement_bulk import run_procurement_bulk
 from .market_receipts import compute_moat_confidence, get_receipt, submit_receipt
 from .market_intel_products import (
+    build_andean_panel,
     compute_affordability,
     compute_inflation_report,
     compute_price_deal_alerts,
@@ -220,7 +221,7 @@ def intel_price_deal_alerts(
 
 @router.get("/intel/affordability")
 def intel_affordability(
-    country: str = Query(..., description="PE, AR, MX, BR, CO, CL"),
+    country: str = Query(..., description="PE, AR, MX, BR, CO, CL, BO, EC"),
     line: str = Query("supermercados"),
     days: int = Query(30, ge=1, le=365),
     enveloped: bool = Query(True),
@@ -230,8 +231,35 @@ def intel_affordability(
     try:
         with timing() as t:
             result = compute_affordability(db, country=country, line=line, days=days)
-        confidence = "ok" if result.get("components", {}).get("canasta_min") else "low"
+        components = result.get("components") or {}
+        confidence = components.get("canasta_band_confidence") or (
+            "ok" if components.get("canasta_min") else "low"
+        )
         prov = build_provenance(primary_source="price_snapshots", methodology="affordability_os_v1")
+        if enveloped:
+            return _wrap(result, latency_ms=t.elapsed_ms, confidence=confidence, provenance=prov)
+        return result
+    finally:
+        db.close()
+
+
+@router.get("/intel/andean-panel")
+def intel_andean_panel(
+    line: str = Query("supermercados"),
+    days: int = Query(30, ge=1, le=365),
+    enveloped: bool = Query(True),
+):
+    """CAF Andean food-affordability panel — PE retail+macro, BO/EC macro-only."""
+    db = get_db()
+    try:
+        with timing() as t:
+            result = build_andean_panel(db, line=line, days=days)
+        retail_count = int(result.get("retail_coverage_countries") or 0)
+        confidence = "ok" if retail_count >= 1 else "low"
+        prov = build_provenance(
+            primary_source="price_snapshots",
+            methodology=result.get("methodology", "andean_panel_v1"),
+        )
         if enveloped:
             return _wrap(result, latency_ms=t.elapsed_ms, confidence=confidence, provenance=prov)
         return result

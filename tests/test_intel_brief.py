@@ -25,6 +25,9 @@ def test_build_intel_brief_shape():
     assert brief["line"] == "supermercados"
     assert brief["days"] == 7
     assert "stores_active" in brief["confidence"]
+    aff = brief.get("affordability") or {}
+    if aff:
+        assert "canastas_per_minimum_wage_band" in aff or aff.get("canasta_min") is not None
 
 
 def test_build_intel_brief_include_catalog():
