@@ -327,7 +327,10 @@ def fetch_weather_logistics_stress(country: str) -> float | None:
 
 
 def fetch_food_cpi_yoy(country: str) -> float | None:
-    wb_map = {"PE": "PE", "AR": "AR", "MX": "MX", "CO": "CO", "CL": "CL", "BR": "BR", "IT": "IT", "FR": "FR", "US": "US"}
+    wb_map = {
+        "PE": "PE", "AR": "AR", "MX": "MX", "CO": "CO", "CL": "CL", "BR": "BR",
+        "BO": "BO", "EC": "EC", "IT": "IT", "FR": "FR", "US": "US",
+    }
     wb = wb_map.get(country.upper())
     if not wb:
         return None
@@ -471,7 +474,10 @@ def _fetch_bcb_series(series_id: str) -> float | None:
 
 
 def fetch_wb_unemployment_rate(country: str) -> float | None:
-    wb_map = {"PE": "PE", "AR": "AR", "MX": "MX", "CO": "CO", "CL": "CL", "BR": "BR", "IT": "IT", "FR": "FR", "US": "US"}
+    wb_map = {
+        "PE": "PE", "AR": "AR", "MX": "MX", "CO": "CO", "CL": "CL", "BR": "BR",
+        "BO": "BO", "EC": "EC", "IT": "IT", "FR": "FR", "US": "US",
+    }
     wb = wb_map.get(country.upper())
     if not wb:
         return None
@@ -493,7 +499,10 @@ def fetch_wb_unemployment_rate(country: str) -> float | None:
 
 
 def fetch_wb_gdp_growth_yoy(country: str) -> float | None:
-    wb_map = {"PE": "PE", "AR": "AR", "MX": "MX", "CO": "CO", "CL": "CL", "BR": "BR", "IT": "IT", "FR": "FR", "US": "US"}
+    wb_map = {
+        "PE": "PE", "AR": "AR", "MX": "MX", "CO": "CO", "CL": "CL", "BR": "BR",
+        "BO": "BO", "EC": "EC", "IT": "IT", "FR": "FR", "US": "US",
+    }
     wb = wb_map.get(country.upper())
     if not wb:
         return None
