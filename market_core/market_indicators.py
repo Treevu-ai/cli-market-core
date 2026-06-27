@@ -285,11 +285,22 @@ def compute_internal_inflation_avg(db, country: str | None, line: str | None, da
     return round(sum(deltas) / len(deltas), 2)
 
 
-def compute_staple_price_momentum(db, country: str | None, days: int = 7) -> float | None:
-    """Average % price change for canasta staples over the last N days."""
+def compute_staple_price_momentum(
+    db,
+    country: str | None,
+    days: int = 7,
+    *,
+    price_mode: str = "shelf",
+) -> float | None:
+    """Average % price change for canasta staples over the last N days.
+
+    price_mode:
+      - shelf: paid shelf price (may include promos)
+      - list: list price when available (promo-adjusted RPV proxy)
+    """
     from .golden_taxonomy import staple_price_deltas_golden
 
-    golden_deltas = staple_price_deltas_golden(db, country, days=days)
+    golden_deltas = staple_price_deltas_golden(db, country, days=days, price_mode=price_mode)
     if golden_deltas:
         return round(sum(golden_deltas) / len(golden_deltas), 2)
 
@@ -301,7 +312,7 @@ def compute_staple_price_momentum(db, country: str | None, days: int = 7) -> flo
     like_clauses = " OR ".join(["LOWER(ps.name) LIKE ?"] * len(CANASTA_ITEMS))
     rows = db.execute(
         f"""
-        SELECT ph.product_id, ph.store, ph.price, ph.recorded_at
+        SELECT ph.product_id, ph.store, ph.price, ph.list_price, ph.recorded_at
         FROM price_history ph
         INNER JOIN price_snapshots ps ON ps.product_id = ph.product_id AND ps.store = ph.store
         WHERE ph.store IN ({ph}) AND ph.price > 0 AND ph.recorded_at >= ?
@@ -309,10 +320,15 @@ def compute_staple_price_momentum(db, country: str | None, days: int = 7) -> flo
         """,
         [*stores, since, *[f"%{item}%" for item in CANASTA_ITEMS]],
     ).fetchall()
+    from .golden_taxonomy import _history_price_value
+
     series: dict[str, list[tuple[str, float]]] = {}
     for r in rows:
+        val = _history_price_value(r, price_mode)
+        if val is None:
+            continue
         k = f"{r['store']}|{r['product_id']}"
-        series.setdefault(k, []).append((r["recorded_at"], float(r["price"])))
+        series.setdefault(k, []).append((r["recorded_at"], val))
     deltas: list[float] = []
     for pts in series.values():
         if len(pts) < 2:
@@ -737,8 +753,10 @@ def refresh_enrichment_indicators(db, country: str | None = None) -> int:
             n += 1
 
     staple_hours = defs.get("staple_price_momentum", {}).get("refresh_hours", 8)
+    staple_list_mom: float | None = None
     if _indicator_is_stale(db, "staple_price_momentum", scope, staple_hours):
-        staple_mom = compute_staple_price_momentum(db, cc)
+        staple_mom = compute_staple_price_momentum(db, cc, price_mode="shelf")
+        staple_list_mom = compute_staple_price_momentum(db, cc, price_mode="list")
         if staple_mom is not None:
             _upsert_indicator_value(
                 db,
@@ -746,9 +764,35 @@ def refresh_enrichment_indicators(db, country: str | None = None) -> int:
                 scope=scope,
                 value=staple_mom,
                 country=cc,
-                metadata={"window_days": 7, "staples": CANASTA_ITEMS[:5]},
+                metadata={"window_days": 7, "staples": CANASTA_ITEMS[:5], "price_mode": "shelf"},
             )
             n += 1
+        if staple_list_mom is not None:
+            _upsert_indicator_value(
+                db,
+                indicator_key="staple_list_price_momentum",
+                scope=scope,
+                value=staple_list_mom,
+                country=cc,
+                metadata={
+                    "window_days": 7,
+                    "staples": CANASTA_ITEMS[:5],
+                    "price_mode": "list",
+                    "promo_adjusted": True,
+                },
+            )
+            n += 1
+    else:
+        row = db.execute(
+            """
+            SELECT value FROM indicator_values
+            WHERE indicator_key = 'staple_list_price_momentum' AND scope = ?
+            ORDER BY recorded_at DESC LIMIT 1
+            """,
+            (scope,),
+        ).fetchone()
+        if row and row["value"] is not None:
+            staple_list_mom = float(row["value"])
 
     weather_hours = defs.get("weather_logistics_stress", {}).get("refresh_hours", 12)
     if _indicator_is_stale(db, "weather_logistics_stress", scope, weather_hours):
@@ -803,6 +847,27 @@ def refresh_enrichment_indicators(db, country: str | None = None) -> int:
                 metadata={"food_cpi_yoy": food_cpi_val, "cpi_official_yoy": float(cpi_row["value"])},
             )
             n += 1
+
+    shelf_food_hours = defs.get("shelf_vs_food_cpi_gap", {}).get("refresh_hours", 168)
+    if (
+        _indicator_is_stale(db, "shelf_vs_food_cpi_gap", scope, shelf_food_hours)
+        and food_cpi_val is not None
+        and staple_list_mom is not None
+    ):
+        shelf_food_gap = round(staple_list_mom - food_cpi_val, 2)
+        _upsert_indicator_value(
+            db,
+            indicator_key="shelf_vs_food_cpi_gap",
+            scope=scope,
+            value=shelf_food_gap,
+            country=cc,
+            metadata={
+                "rpv_promo_adjusted_7d_pct": staple_list_mom,
+                "official_food_cpi_yoy_pct": food_cpi_val,
+                "benchmark": "World Bank FP.CPI.FOOD.ZG (INEI food sub-index proxy)",
+            },
+        )
+        n += 1
 
     n += _refresh_tier2_indicators(db, cc, scope, defs)
 
@@ -1292,13 +1357,14 @@ def build_intel_brief(
     latest = {v["key"]: v for v in latest_list}
 
     inflation_pct = compute_internal_inflation_avg(db, country, line, days=days)
-    staple_mom = compute_staple_price_momentum(db, country, days=days)
+    staple_mom_shelf = compute_staple_price_momentum(db, country, days=days, price_mode="shelf")
+    staple_mom_list = compute_staple_price_momentum(db, country, days=days, price_mode="list")
 
     def _val(key: str) -> Any:
         entry = latest.get(key)
         return entry.get("value") if entry else None
 
-    shelf: dict[str, Any] = {}
+    shelf: dict[str, Any] = {"channel": "online_modern_retail"}
     for key in ("promo_intensity", "price_dispersion"):
         v = _val(key)
         if v is not None:
@@ -1309,13 +1375,18 @@ def build_intel_brief(
         shelf["basket_stress_index_scale"] = (
             "0–1+: <0.15 stable · 0.15–0.50 moderate pressure · >0.50 critical"
         )
-    if staple_mom is not None:
-        # P0.1: renamed from shelf_inflation_avg_pct / staple_momentum_7d_pct
-        shelf["retail_price_velocity_7d_pct"] = staple_mom
+    if staple_mom_shelf is not None:
+        shelf["retail_price_velocity_shelf_7d_pct"] = staple_mom_shelf
+        shelf["retail_price_velocity_7d_pct"] = staple_mom_shelf
         shelf["retail_price_velocity_note"] = (
             "7-day shelf price momentum for canasta staples (online retailers ≥3 snapshots). "
             "Not equivalent to official CPI — different basket, period, and methodology."
         )
+    if staple_mom_list is not None:
+        shelf["retail_price_velocity_list_price_7d_pct"] = staple_mom_list
+        shelf["retail_price_velocity_promo_adjusted_7d_pct"] = staple_mom_list
+    if staple_mom_shelf is not None and staple_mom_list is not None:
+        shelf["promo_adjustment_pp"] = round(staple_mom_shelf - staple_mom_list, 2)
     if inflation_pct is not None:
         # Broader rolling average across all lines
         shelf["shelf_price_avg_delta_pct"] = inflation_pct
@@ -1323,9 +1394,10 @@ def build_intel_brief(
     macro_gap: dict[str, Any] = {}
     gap = _val("collector_vs_official_gap")
     food_spread = _val("food_inflation_spread")
+    food_cpi = _val("food_cpi_yoy")
+    shelf_food_gap = _val("shelf_vs_food_cpi_gap")
     if gap is not None:
         macro_gap["shelf_vs_cpi_gap_pp"] = gap
-        # P0.2: always surface the temporal mismatch caveat
         macro_gap["period_caveat"] = (
             "Shelf signal = 30-day rolling average of online prices. "
             "Official CPI = annual YoY from World Bank (household-survey basket). "
@@ -1334,6 +1406,27 @@ def build_intel_brief(
         )
     if food_spread is not None:
         macro_gap["food_inflation_spread_pp"] = food_spread
+    if food_cpi is not None:
+        macro_gap["official_food_cpi_yoy_pct"] = food_cpi
+        macro_gap["official_food_cpi_source"] = (
+            "World Bank FP.CPI.FOOD.ZG — proxy for INEI food sub-index (annual YoY)"
+        )
+    if shelf_food_gap is not None:
+        macro_gap["shelf_vs_official_food_cpi_gap_pp"] = shelf_food_gap
+        macro_gap["food_benchmark_caveat"] = (
+            "RPV promo-adjusted (7d list-price staples) vs official food CPI YoY. "
+            "Different period and basket — directional benchmark only, not policy input."
+        )
+    elif staple_mom_list is not None and food_cpi is not None:
+        macro_gap["shelf_vs_official_food_cpi_gap_pp"] = round(staple_mom_list - food_cpi, 2)
+        macro_gap["official_food_cpi_yoy_pct"] = food_cpi
+        macro_gap["official_food_cpi_source"] = (
+            "World Bank FP.CPI.FOOD.ZG — proxy for INEI food sub-index (annual YoY)"
+        )
+        macro_gap["food_benchmark_caveat"] = (
+            "RPV promo-adjusted (7d list-price staples) vs official food CPI YoY. "
+            "Different period and basket — directional benchmark only, not policy input."
+        )
 
     confidence: dict[str, Any] = {}
     freshness = _val("moat_freshness")
@@ -1428,7 +1521,7 @@ def build_intel_brief(
         "subcategories": {"subcategories": subcategories, "total": len(subcategories)},
         "analytics": {"indicators": analytics, "total": len(analytics)},
         "disclaimer": (
-            "Shelf price signals (RPV, BSI, dispersion) from online góndola — CLI Market collector. "
+            "Online modern retail channel — shelf price signals (RPV, BSI, dispersion) from CLI Market collector. "
             "Not equivalent to official CPI (INEI, INDEC, DANE, INEGI, etc.): "
             "different basket, channel, and reference period. "
             "Coverage table in confidence.coverage; publishable=false if coverage_pct<60%."
