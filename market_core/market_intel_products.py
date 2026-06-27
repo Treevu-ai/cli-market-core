@@ -90,14 +90,19 @@ def compute_inflation_report(
     Internal shelf-price inflation, staple momentum, and macro CPI gap.
     """
     inflation = compute_internal_inflation_avg(db, country, line, days)
-    staple_mom = compute_staple_price_momentum(db, country, days)
+    staple_mom_shelf = compute_staple_price_momentum(db, country, days, price_mode="shelf")
+    staple_mom_list = compute_staple_price_momentum(db, country, days, price_mode="list")
 
     latest = get_latest_values(db, country=country, line=line, limit=50)
     latest_map = {v["key"]: v for v in latest}
     gap = latest_map.get("collector_vs_official_gap", {}).get("value")
     food_spread = latest_map.get("food_inflation_spread", {}).get("value")
+    food_cpi = latest_map.get("food_cpi_yoy", {}).get("value")
+    shelf_food_gap = latest_map.get("shelf_vs_food_cpi_gap", {}).get("value")
+    if shelf_food_gap is None and staple_mom_list is not None and food_cpi is not None:
+        shelf_food_gap = round(staple_mom_list - food_cpi, 2)
 
-    pressure = _interpret_inflation_pressure(inflation, staple_mom, gap)
+    pressure = _interpret_inflation_pressure(inflation, staple_mom_shelf, gap)
 
     return {
         "question": "Where is price pressure increasing?",
@@ -107,9 +112,17 @@ def compute_inflation_report(
         "pressure": pressure,
         "signals": {
             "internal_inflation_pct": inflation,
-            "staple_momentum_pct": staple_mom,
+            "staple_momentum_pct": staple_mom_shelf,
+            "staple_momentum_promo_adjusted_pct": staple_mom_list,
+            "promo_adjustment_pp": (
+                round(staple_mom_shelf - staple_mom_list, 2)
+                if staple_mom_shelf is not None and staple_mom_list is not None
+                else None
+            ),
             "vs_official_cpi_gap_pp": gap,
             "food_inflation_spread": food_spread,
+            "official_food_cpi_yoy_pct": food_cpi,
+            "shelf_vs_official_food_cpi_gap_pp": shelf_food_gap,
         },
         "regulatory_headlines": regulatory_headlines(db, country, limit=3),
     }
@@ -195,7 +208,8 @@ def compute_affordability(
 
     basket_stress = compute_basket_stress(db, country=cc)
     inflation = compute_internal_inflation_avg(db, cc, line, days)
-    staple_mom = compute_staple_price_momentum(db, cc, days)
+    staple_mom_shelf = compute_staple_price_momentum(db, cc, days, price_mode="shelf")
+    staple_mom_list = compute_staple_price_momentum(db, cc, days, price_mode="list")
     try:
         dispersion = compute_price_dispersion(db, cc, line)
     except Exception:
@@ -210,6 +224,10 @@ def compute_affordability(
     latest_map = {v["key"]: v for v in latest}
     gap = latest_map.get("collector_vs_official_gap", {}).get("value")
     food_spread = latest_map.get("food_inflation_spread", {}).get("value")
+    food_cpi = latest_map.get("food_cpi_yoy", {}).get("value")
+    shelf_food_gap = latest_map.get("shelf_vs_food_cpi_gap", {}).get("value")
+    if shelf_food_gap is None and staple_mom_list is not None and food_cpi is not None:
+        shelf_food_gap = round(staple_mom_list - food_cpi, 2)
     real_wage_ratio = latest_map.get("real_wage_basket_ratio", {}).get("value")
     gtrends = latest_map.get("gtrends_search_momentum", {}).get("value")
 
@@ -255,9 +273,17 @@ def compute_affordability(
             "real_wage_basket_ratio": real_wage_ratio,
             "basket_stress_index": basket_stress,
             "internal_inflation_pct": inflation,
-            "staple_momentum_7d_pct": staple_mom,
+            "staple_momentum_7d_pct": staple_mom_shelf,
+            "staple_momentum_promo_adjusted_7d_pct": staple_mom_list,
+            "promo_adjustment_pp": (
+                round(staple_mom_shelf - staple_mom_list, 2)
+                if staple_mom_shelf is not None and staple_mom_list is not None
+                else None
+            ),
             "vs_official_cpi_gap_pp": gap,
             "food_inflation_spread": food_spread,
+            "official_food_cpi_yoy_pct": food_cpi,
+            "shelf_vs_official_food_cpi_gap_pp": shelf_food_gap,
         },
         "signals": {
             "price_dispersion_pct": dispersion,

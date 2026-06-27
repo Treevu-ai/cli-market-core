@@ -195,6 +195,31 @@ INDICATOR_DEFINITIONS: list[dict[str, Any]] = [
         "formula": "count(nova_group=4) / matched * 100",
     },
     {
+        "key": "staple_list_price_momentum",
+        "name": "Retail Price Velocity — List Price (Promo-Adjusted)",
+        "category": "affordability",
+        "source": "internal:price_history",
+        "unit": "pct",
+        "refresh_hours": 8,
+        "description": (
+            "7-day % change using list_price when available — strips promo-driven shelf dips. "
+            "Use alongside shelf RPV for FMI-style surveillance."
+        ),
+        "formula": "mean delta on list_price (fallback price) for staple SKUs",
+    },
+    {
+        "key": "shelf_vs_food_cpi_gap",
+        "name": "Shelf vs Official Food CPI Gap",
+        "category": "composite",
+        "source": "computed",
+        "unit": "pp",
+        "refresh_hours": 168,
+        "description": (
+            "RPV promo-adjusted (7d) minus World Bank food CPI YoY — directional benchmark vs INEI food sub-index proxy."
+        ),
+        "formula": "staple_list_price_momentum - food_cpi_yoy",
+    },
+    {
         "key": "food_inflation_spread",
         "name": "Food vs Headline CPI Spread",
         "category": "composite",
@@ -488,6 +513,8 @@ ENRICHMENT_INDICATOR_KEYS: tuple[str, ...] = (
     "food_cpi_yoy",
     "food_inflation_spread",
     "staple_price_momentum",
+    "staple_list_price_momentum",
+    "shelf_vs_food_cpi_gap",
     "imf_inflation_yoy",
     "eurostat_food_hicp_yoy",
     "bcb_food_inflation_mom",

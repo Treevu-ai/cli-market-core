@@ -122,3 +122,53 @@ def test_canonical_dispersion_and_staple_momentum(isolated_db, monkeypatch):
     assert len(deltas) >= 1
     mom = compute_staple_price_momentum(db, "PE", days=365)
     assert mom is not None
+
+
+def test_staple_momentum_list_price_promo_adjusted(isolated_db, monkeypatch):
+    from market_core import market_core as mc
+
+    monkeypatch.setattr(mc, "STORES", {"wong_pe": {"country": "PE", "disabled": False}})
+    db = get_db()
+    try:
+        db.execute("ALTER TABLE price_snapshots ADD COLUMN canonical_product_id TEXT")
+    except Exception:
+        pass
+    try:
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS price_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id TEXT, store TEXT, price REAL, list_price REAL, recorded_at TEXT
+            )
+            """
+        )
+    except Exception:
+        pass
+
+    set_taxonomy_registry(db, {"prod_leche": {"canasta_item": "leche"}}, registry_size=1)
+    db.execute(
+        """
+        INSERT INTO price_snapshots (product_id, store, name, price, canonical_product_id)
+        VALUES ('a', 'wong_pe', 'Leche', 4.0, 'prod_leche')
+        """
+    )
+    # Shelf price fell (promo) but list price rose
+    db.execute(
+        """
+        INSERT INTO price_history (product_id, store, price, list_price, recorded_at)
+        VALUES ('a', 'wong_pe', 10.0, 10.0, '2026-01-01 00:00:00'),
+               ('a', 'wong_pe', 8.0, 12.0, '2026-06-10 00:00:00')
+        """
+    )
+    db.execute(
+        """
+        UPDATE price_snapshots SET canonical_product_id = 'prod_leche'
+        WHERE product_id = 'a' AND store = 'wong_pe'
+        """
+    )
+    db.commit()
+
+    shelf = compute_staple_price_momentum(db, "PE", days=365, price_mode="shelf")
+    listing = compute_staple_price_momentum(db, "PE", days=365, price_mode="list")
+    assert shelf == -20.0
+    assert listing == 20.0

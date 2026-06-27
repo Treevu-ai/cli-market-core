@@ -178,7 +178,26 @@ def equivalent_products(
     return out[:limit]
 
 
-def staple_price_deltas_golden(db, country: str | None, days: int = 7) -> list[float]:
+def _history_price_value(row, price_mode: str) -> float | None:
+    """Shelf paid price or list price (promo-adjusted proxy)."""
+    try:
+        price = row["price"]
+    except (KeyError, IndexError, TypeError):
+        price = None
+    price_f = float(price) if price is not None else None
+    if price_mode == "list":
+        try:
+            list_price = row["list_price"]
+        except (KeyError, IndexError, TypeError):
+            list_price = None
+        if list_price is not None and float(list_price) > 0:
+            return float(list_price)
+    return price_f if price_f and price_f > 0 else None
+
+
+def staple_price_deltas_golden(
+    db, country: str | None, days: int = 7, *, price_mode: str = "shelf"
+) -> list[float]:
     """% price changes for canasta staples linked via Golden Record IDs."""
     from datetime import datetime, timedelta, timezone
 
@@ -199,7 +218,7 @@ def staple_price_deltas_golden(db, country: str | None, days: int = 7) -> list[f
     prod_ph = ",".join("?" * len(prod_ids))
     rows = db.execute(
         f"""
-        SELECT ph.product_id, ph.store, ph.price, ph.recorded_at
+        SELECT ph.product_id, ph.store, ph.price, ph.list_price, ph.recorded_at
         FROM price_history ph
         INNER JOIN price_snapshots ps
           ON ps.product_id = ph.product_id AND ps.store = ph.store
@@ -213,7 +232,10 @@ def staple_price_deltas_golden(db, country: str | None, days: int = 7) -> list[f
     series: dict[str, list[tuple[str, float]]] = {}
     for row in rows:
         key = f"{row['store']}|{row['product_id']}"
-        series.setdefault(key, []).append((row["recorded_at"], float(row["price"])))
+        val = _history_price_value(row, price_mode)
+        if val is None:
+            continue
+        series.setdefault(key, []).append((row["recorded_at"], val))
 
     deltas: list[float] = []
     for pts in series.values():
